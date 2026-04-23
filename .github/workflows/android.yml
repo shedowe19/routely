@@ -49,14 +49,39 @@ jobs:
       env:
         BUILD_TOOLS_VERSION: "34.0.0"
 
+    - name: Prepare APK for Release
+      run: |
+        mv ${{ steps.sign_app.outputs.signedReleaseFile }} app/build/outputs/apk/release/traewelling-v${{ github.event.inputs.version_name }}.apk
+        echo "RELEASE_APK_PATH=app/build/outputs/apk/release/traewelling-v${{ github.event.inputs.version_name }}.apk" >> $GITHUB_ENV
+
+    - name: Generate Changelog
+      id: changelog
+      run: |
+        # Get the last tag if it exists
+        LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+        if [ -z "$LAST_TAG" ]; then
+          # No tags yet, get all commits
+          LOG=$(git log --pretty=format:"* %s (%h)")
+        else
+          # Commits since last tag
+          LOG=$(git log $LAST_TAG..HEAD --pretty=format:"* %s (%h)")
+        fi
+        
+        # Escape for multiline output
+        echo "body<<EOF" >> $GITHUB_OUTPUT
+        echo "### Änderungen in dieser Version" >> $GITHUB_OUTPUT
+        echo "$LOG" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
     - name: Create Release
       if: github.event_name == 'workflow_dispatch'
       uses: softprops/action-gh-release@v2
       with:
         tag_name: v${{ github.event.inputs.version_name }}
         name: Release v${{ github.event.inputs.version_name }}
-        files: ${{ steps.sign_app.outputs.signedReleaseFile }}
-        generate_release_notes: true
+        body: ${{ steps.changelog.outputs.body }}
+        files: ${{ env.RELEASE_APK_PATH }}
+        generate_release_notes: false
         draft: false
         prerelease: false
       env:
@@ -66,4 +91,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: release-apk
-        path: ${{ steps.sign_app.outputs.signedReleaseFile || 'app/build/outputs/apk/release/*.apk' }}
+        path: ${{ env.RELEASE_APK_PATH }}
