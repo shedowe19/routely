@@ -85,6 +85,9 @@ dependencies {
     implementation(libs.browser)
     implementation(libs.coroutines.android)
     implementation(libs.gson)
+    implementation(libs.androidx.work.runtime)
+    implementation(libs.androidx.security.crypto)
+
 
     debugImplementation(libs.androidx.ui.tooling)
 }

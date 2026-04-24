@@ -202,6 +202,14 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             repo.checkIn(request)
                 .onSuccess { result ->
                     _uiState.update { it.copy(isLoading = false, checkInResult = result, step = CheckInStep.SUCCESS) }
+                    
+                    // Start Trip Monitoring
+                    result?.status?.id?.let { statusId ->
+                        viewModelScope.launch {
+                            prefs.saveActiveCheckinId(statusId.toString())
+                            de.traewelling.app.util.WorkManagerHelper.startTripMonitoring(getApplication())
+                        }
+                    }
                 }
                 .onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, error = "Check-in fehlgeschlagen: ${e.message}") }
