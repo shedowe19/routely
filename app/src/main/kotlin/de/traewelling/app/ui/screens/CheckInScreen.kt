@@ -16,6 +16,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.traewelling.app.data.model.*
+import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.viewmodel.CheckInStep
 import de.traewelling.app.viewmodel.CheckInUiState
 import de.traewelling.app.viewmodel.CheckInViewModel
@@ -26,13 +27,39 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun CheckInScreen(viewModel: CheckInViewModel) {
     val uiState by viewModel.uiState.collectAsState()
-    Box(Modifier.statusBarsPadding()) {
-        when (uiState.step) {
-            CheckInStep.STATION     -> StationSearchStep(viewModel, uiState)
-            CheckInStep.DEPARTURES  -> DeparturesStep(viewModel, uiState)
-            CheckInStep.DESTINATION -> DestinationStep(viewModel, uiState)
-            CheckInStep.CONFIRM     -> ConfirmStep(viewModel, uiState)
-            CheckInStep.SUCCESS     -> SuccessStep(viewModel, uiState)
+    
+    val title = when (uiState.step) {
+        CheckInStep.STATION -> "Check-in"
+        CheckInStep.DEPARTURES -> "Abfahrten — ${uiState.selectedStation?.name ?: ""}"
+        CheckInStep.DESTINATION -> "Ziel wählen — ${uiState.selectedDeparture?.line?.name ?: ""}"
+        CheckInStep.CONFIRM -> "Details bestätigen"
+        CheckInStep.SUCCESS -> "Eingecheckt!"
+    }
+    
+    val showBack = uiState.step != CheckInStep.STATION && uiState.step != CheckInStep.SUCCESS
+
+    Scaffold(
+        topBar = {
+            TraewellingTopAppBar(
+                title = title,
+                navigationIcon = {
+                    if (showBack) {
+                        IconButton(onClick = viewModel::goBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
+                        }
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Box(Modifier.padding(innerPadding).fillMaxSize()) {
+            when (uiState.step) {
+                CheckInStep.STATION     -> StationSearchStep(viewModel, uiState)
+                CheckInStep.DEPARTURES  -> DeparturesStep(viewModel, uiState)
+                CheckInStep.DESTINATION -> DestinationStep(viewModel, uiState)
+                CheckInStep.CONFIRM     -> ConfirmStep(viewModel, uiState)
+                CheckInStep.SUCCESS     -> SuccessStep(viewModel, uiState)
+            }
         }
     }
 }
@@ -45,11 +72,7 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
     LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     Column(Modifier.fillMaxSize()) {
-        Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
-            Text("Check-in", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("Bahnhof eingeben", style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-        }
+        Spacer(Modifier.height(16.dp))
 
         OutlinedTextField(
             value = uiState.stationQuery,
@@ -123,7 +146,6 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
 @Composable
 private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     Column(Modifier.fillMaxSize()) {
-        StepHeader("Abfahrten — ${uiState.selectedStation?.name ?: ""}", viewModel::goBack)
 
         when {
             uiState.isLoading ->
@@ -231,7 +253,6 @@ private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState
     val lineName  = uiState.selectedDeparture?.line?.name ?: ""
 
     Column(Modifier.fillMaxSize()) {
-        StepHeader("Ziel wählen — $lineName", viewModel::goBack)
 
         when {
             uiState.isLoading ->
@@ -276,7 +297,6 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     val depTime = formatLocalTime(dep?.plannedWhen ?: "")
 
     Column(Modifier.fillMaxSize()) {
-        StepHeader("Check-in bestätigen", viewModel::goBack)
         Column(Modifier.fillMaxSize().padding(16.dp)) {
             Card(modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(16.dp)) {
@@ -373,21 +393,7 @@ private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-@Composable
-private fun StepHeader(title: String, onBack: () -> Unit) {
-    Column {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
-            }
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-        }
-        HorizontalDivider()
-    }
-}
+
 
 @Composable
 private fun ErrorBox(message: String, onBack: () -> Unit) {

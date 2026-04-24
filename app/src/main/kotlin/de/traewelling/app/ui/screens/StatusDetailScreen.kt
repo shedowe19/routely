@@ -6,6 +6,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.Status
+import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
 import de.traewelling.app.viewmodel.StatusDetailUiState
@@ -95,254 +97,250 @@ fun StatusDetailScreen(
 
     Scaffold(
         topBar = {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        Brush.horizontalGradient(
-                            colors = listOf(DeepIndigo, Color(0xFF283593))
-                        )
-                    )
-            ) {
-                TopAppBar(
-                    title = {
-                        Text(
-                            "Fahrt-Details",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 0.5.sp
-                        )
-                    },
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
-                        }
-                    },
-                    actions = {
-                        val isToday = remember(uiState.status) {
-                            val createdAt = uiState.status?.createdAt
-                            if (createdAt != null) {
-                                try {
-                                    val zdt = ZonedDateTime.parse(createdAt)
-                                    val tripDate = zdt.toLocalDate()
-                                    val today = ZonedDateTime.now().toLocalDate()
-                                    tripDate == today
-                                } catch (e: Exception) { false }
-                            } else false
-                        }
+            TraewellingTopAppBar(
+                title = "Fahrt-Details",
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
+                    }
+                },
+                actions = {
+                    val isToday = remember(uiState.status) {
+                        val createdAt = uiState.status?.createdAt
+                        if (createdAt != null) {
+                            try {
+                                val zdt = ZonedDateTime.parse(createdAt)
+                                val tripDate = zdt.toLocalDate()
+                                val today = ZonedDateTime.now().toLocalDate()
+                                tripDate == today
+                            } catch (e: Exception) { false }
+                        } else false
+                    }
 
-                        if (uiState.lastUpdated > 0 && isToday) {
-                            val pulseAnim = rememberInfiniteTransition(label = "live")
-                            val pulseAlpha by pulseAnim.animateFloat(
-                                initialValue = 1f, targetValue = 0.3f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(800, easing = EaseInOutCubic),
-                                    repeatMode = RepeatMode.Reverse
-                                ), label = "pulse"
-                            )
-                            Surface(
-                                color = Color(0xFF00E676).copy(alpha = 0.2f),
-                                shape = RoundedCornerShape(12.dp),
-                                modifier = Modifier.padding(end = 8.dp)
+                    if (uiState.lastUpdated > 0 && isToday) {
+                        val pulseAnim = rememberInfiniteTransition(label = "live")
+                        val pulseAlpha by pulseAnim.animateFloat(
+                            initialValue = 1f, targetValue = 0.3f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(800, easing = EaseInOutCubic),
+                                repeatMode = RepeatMode.Reverse
+                            ), label = "pulse"
+                        )
+                        Surface(
+                            color = Color(0xFF00E676).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.padding(end = 8.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                                ) {
-                                    Box(
-                                        Modifier
-                                            .size(8.dp)
-                                            .alpha(pulseAlpha)
-                                            .background(Color(0xFF00E676), CircleShape)
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        "LIVE",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = Color(0xFF00E676),
-                                        fontWeight = FontWeight.Bold,
-                                        letterSpacing = 1.sp
-                                    )
-                                }
-                            }
-                        }
-
-                        if (uiState.isOwnStatus) {
-                            if (uiState.isDeleting || uiState.isUpdating) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp).padding(4.dp),
-                                    color = Color.White,
-                                    strokeWidth = 2.dp
+                                Box(
+                                    Modifier
+                                        .size(8.dp)
+                                        .alpha(pulseAlpha)
+                                        .background(Color(0xFF00E676), CircleShape)
                                 )
-                            } else {
-                                IconButton(onClick = { viewModel.startEditing() }) {
-                                    Icon(Icons.Default.Edit, "Bearbeiten")
-                                }
-                                IconButton(onClick = { showDeleteDialog = true }) {
-                                    Icon(Icons.Default.Delete, "Löschen")
-                                }
+                                Spacer(Modifier.width(6.dp))
+                                Text(
+                                    "LIVE",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = Color(0xFF00E676),
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
                             }
                         }
-                    },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = Color.Transparent,
-                        titleContentColor = Color.White,
-                        navigationIconContentColor = Color.White,
-                        actionIconContentColor = Color.White
-                    )
-                )
-            }
+                    }
+
+                    if (uiState.isOwnStatus) {
+                        if (uiState.isDeleting || uiState.isUpdating) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp).padding(4.dp),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                strokeWidth = 2.dp
+                            )
+                        } else {
+                            IconButton(onClick = { viewModel.startEditing() }) {
+                                Icon(Icons.Default.Edit, "Bearbeiten")
+                            }
+                            IconButton(onClick = { showDeleteDialog = true }) {
+                                Icon(Icons.Default.Delete, "Löschen")
+                            }
+                        }
+                    }
+                }
+            )
         }
     ) { innerPadding ->
         Column(Modifier.fillMaxSize().padding(innerPadding)) {
-
-        when {
-            uiState.isLoading && uiState.status == null -> {
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(12.dp))
-                        Text("Lade Fahrt-Details…",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    }
-                }
-            }
-            uiState.error != null && uiState.status == null -> {
-                Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.ErrorOutline, null,
-                            modifier = Modifier.size(48.dp),
-                            tint = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.height(12.dp))
-                        Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
-                        Spacer(Modifier.height(16.dp))
-                        Button(onClick = { viewModel.refresh() }) { Text("Erneut versuchen") }
-                    }
-                }
-            }
-            else -> {
-                val status = uiState.status
-                if (status != null) {
-                val checkin = status.checkin
-                val stopovers = uiState.stopovers
-                
-                // Real-time ticking for smooth progress bar updates
-                var now by remember { mutableStateOf(ZonedDateTime.now()) }
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        delay(1000)
-                        now = ZonedDateTime.now()
-                    }
-                }
-
-                val firstRealStopIndex = remember(stopovers) {
-                    stopovers.indexOfFirst { it.cancelled != true }
-                }
-                val lastRealStopIndex = remember(stopovers) {
-                    stopovers.indexOfLast { it.cancelled != true }
-                }
-
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 80.dp)
-                ) {
-                    // Status header card
-                    item {
-                        StatusHeaderCard(status, onUserClick)
-                    }
-
-                    // Trip info card
-                    if (checkin != null) {
-                        item {
-                            TripInfoCard(status)
-                        }
-                    }
-
-                    // Stopovers header
-                    if (stopovers.isNotEmpty()) {
-                        item {
-                            Spacer(Modifier.height(8.dp))
-                            Row(
-                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    Icons.Default.Timeline, null,
-                                    modifier = Modifier.size(18.dp),
-                                    tint = DeepIndigo.copy(alpha = 0.5f)
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(
-                                    "Haltestellenverlauf",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    fontWeight = FontWeight.Bold,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                Surface(
-                                    color = DeepIndigo.copy(alpha = 0.08f),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Text(
-                                        "${stopovers.size} Halte",
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = DeepIndigo.copy(alpha = 0.6f),
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                }
-                            }
-                        }
-
-                        // Stopovers list
-                        itemsIndexed(stopovers) { index, stop ->
-                            val originId = checkin?.origin?.id
-                            val destinationId = checkin?.destination?.id
-                            
-                            val originIdx = remember(stopovers, originId) { 
-                                stopovers.indexOfFirst { it.id == originId } 
-                            }
-                            val destinationIdx = remember(stopovers, destinationId) { 
-                                stopovers.indexOfFirst { it.id == destinationId } 
-                            }
-
-                            val isOrigin = stop.id == originId
-                            val isDestination = stop.id == destinationId
-                            val isInRange = isStopInRange(stopovers, index, originId, destinationId)
-
-                            val prevStop = stopovers.getOrNull(index - 1)
-                            val nextStop = stopovers.getOrNull(index + 1)
-
-                            StopoverItem(
-                                stop = stop,
-                                prevStop = prevStop,
-                                nextStop = nextStop,
-                                now = now,
-                                index = index,
-                                originIndex = originIdx,
-                                destinationIndex = destinationIdx,
-                                isFirst = index == firstRealStopIndex,
-                                isActualFirst = index == 0,
-                                isLast = index == lastRealStopIndex,
-                                isActualLast = index == stopovers.lastIndex,
-                                isOrigin = isOrigin,
-                                isDestination = isDestination,
-                                isInRange = isInRange
-                            )
-                        }
-                    } else if (uiState.isLoading) {
-                        item {
-                            Box(Modifier.fillMaxWidth().padding(32.dp),
-                                contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                            }
+            when {
+                uiState.isLoading && uiState.status == null -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            CircularProgressIndicator()
+                            Spacer(Modifier.height(12.dp))
+                            Text("Lade Fahrt-Details…",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
                         }
                     }
                 }
+                uiState.error != null && uiState.status == null -> {
+                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Icon(Icons.Default.ErrorOutline, null,
+                                modifier = Modifier.size(48.dp),
+                                tint = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.height(12.dp))
+                            Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
+                            Spacer(Modifier.height(16.dp))
+                            Button(onClick = { viewModel.refresh() }) { Text("Erneut versuchen") }
+                        }
+                    }
+                }
+                else -> {
+                    StatusDetailContent(
+                        uiState = uiState,
+                        onUserClick = onUserClick,
+                        onRefresh = viewModel::refresh
+                    )
                 }
             }
         }
     }
 }
+
+@Composable
+private fun StatusDetailContent(
+    uiState: StatusDetailUiState,
+    onUserClick: (String) -> Unit,
+    onRefresh: () -> Unit
+) {
+    val status = uiState.status ?: return
+    val checkin = status.checkin
+    val stopovers = uiState.stopovers
+
+    // Real-time ticking for smooth progress bar updates
+    var now by remember { mutableStateOf(ZonedDateTime.now()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(1000)
+            now = ZonedDateTime.now()
+        }
+    }
+
+    val firstRealStopIndex = remember(stopovers) {
+        stopovers.indexOfFirst { it.cancelled != true }
+    }
+    val lastRealStopIndex = remember(stopovers) {
+        stopovers.indexOfLast { it.cancelled != true }
+    }
+
+    val originId = checkin?.origin?.id
+    val destinationId = checkin?.destination?.id
+
+    val originIdx = remember(stopovers, originId) {
+        stopovers.indexOfFirst { it.id == originId }
+    }
+    val destinationIdx = remember(stopovers, destinationId) {
+        stopovers.indexOfFirst { it.id == destinationId }
+    }
+
+    val isLoading = uiState.isLoading
+    val hasStopovers = stopovers.isNotEmpty()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(bottom = 80.dp)
+    ) {
+        // Status header card
+        item {
+            StatusHeaderCard(status, onUserClick)
+        }
+
+        // Trip info card
+        if (checkin != null) {
+            item {
+                TripInfoCard(status)
+            }
+        }
+
+        // Stopovers header
+        if (hasStopovers) {
+            item {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Icon(
+                        Icons.Default.Timeline, null,
+                        modifier = Modifier.size(18.dp),
+                        tint = DeepIndigo.copy(alpha = 0.5f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    Text(
+                        "Haltestellenverlauf",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Surface(
+                        color = DeepIndigo.copy(alpha = 0.08f),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text(
+                            "${stopovers.size} Halte",
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = DeepIndigo.copy(alpha = 0.6f),
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+                }
+            }
+
+            // Stopovers list
+            items(stopovers.size) { index ->
+                val stop = stopovers[index]
+                val isOrigin = stop.id == originId
+                val isDestination = stop.id == destinationId
+                val isInRange = isStopInRange(stopovers, index, originId, destinationId)
+
+                val prevStop = stopovers.getOrNull(index - 1)
+                val nextStop = stopovers.getOrNull(index + 1)
+
+                StopoverItem(
+                    stop = stop,
+                    prevStop = prevStop,
+                    nextStop = nextStop,
+                    now = now,
+                    index = index,
+                    originIndex = originIdx,
+                    destinationIndex = destinationIdx,
+                    isFirst = index == firstRealStopIndex,
+                    isActualFirst = index == 0,
+                    isLast = index == lastRealStopIndex,
+                    isActualLast = index == stopovers.lastIndex,
+                    isOrigin = isOrigin,
+                    isDestination = isDestination,
+                    isInRange = isInRange
+                )
+            }
+        }
+        if (isLoading && !hasStopovers) {
+            item {
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(32.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
+                }
+            }
+        }
+    }
 }
 
 @Composable

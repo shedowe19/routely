@@ -1,5 +1,7 @@
 package de.traewelling.app.ui.screens
 
+import androidx.compose.ui.unit.sp
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -19,6 +21,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.traewelling.app.data.model.Notification
+import de.traewelling.app.ui.components.TraewellingTopAppBar
+import de.traewelling.app.ui.theme.DeepIndigo
+import de.traewelling.app.ui.theme.TealDark
 import de.traewelling.app.viewmodel.NotificationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -61,19 +66,8 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = { 
-                    Column {
-                        Text("Meldungen", fontWeight = FontWeight.Bold)
-                        if (uiState.unreadCount > 0) {
-                            Text(
-                                "${uiState.unreadCount} ungelesen",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
-                            )
-                        }
-                    }
-                },
+            TraewellingTopAppBar(
+                title = "Meldungen",
                 actions = {
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, "Aktualisieren")
@@ -85,18 +79,11 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
                             Text("Alle gelesen")
                         }
                     }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                    titleContentColor = MaterialTheme.colorScheme.onPrimary,
-                    actionIconContentColor = MaterialTheme.colorScheme.onPrimary
-                )
+                }
             )
         }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-        HorizontalDivider()
-
         Box(modifier = Modifier.nestedScroll(pullRefreshState.nestedScrollConnection).fillMaxSize()) {
             when {
                 uiState.isLoading && uiState.notifications.isEmpty() -> {
@@ -172,58 +159,59 @@ private fun NotificationItem(notification: Notification, onClick: () -> Unit) {
         else -> MaterialTheme.colorScheme.primary
     }
 
-    val bgColor = if (isUnread) {
-        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)
-    } else {
-        MaterialTheme.colorScheme.surface
-    }
+    val bgColor = if (isUnread) DeepIndigo.copy(alpha = 0.05f) else androidx.compose.ui.graphics.Color.White
 
-    ListItem(
-        headlineContent = {
-            Text(
-                notification.lead ?: "",
-                fontWeight = if (isUnread) FontWeight.SemiBold else FontWeight.Normal,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
-        },
-        supportingContent = {
-            Column {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 6.dp)
+            .clickable { onClick() },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(if (isUnread) 3.dp else 1.dp),
+        colors = CardDefaults.cardColors(containerColor = bgColor)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.Top
+        ) {
+            Surface(
+                color = iconTint.copy(alpha = 0.1f),
+                shape = androidx.compose.foundation.shape.CircleShape
+            ) {
+                Icon(icon, null, tint = iconTint, modifier = Modifier.padding(10.dp).size(24.dp))
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    notification.lead ?: "",
+                    fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = if (isUnread) DeepIndigo else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                )
                 if (!notification.notice.isNullOrBlank()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(
                         notification.notice,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
+                        lineHeight = 16.sp
                     )
                 }
-                Spacer(Modifier.height(2.dp))
+                Spacer(Modifier.height(8.dp))
                 Text(
                     notification.createdAtForHumans ?: "",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                 )
             }
-        },
-        leadingContent = {
-            Icon(icon, null, tint = iconTint, modifier = Modifier.size(24.dp))
-        },
-        trailingContent = {
             if (isUnread) {
                 Box(
                     modifier = Modifier
+                        .padding(top = 4.dp)
                         .size(10.dp)
-                        .background(
-                            MaterialTheme.colorScheme.primary,
-                            shape = MaterialTheme.shapes.small
-                        )
+                        .background(TealDark, shape = androidx.compose.foundation.shape.CircleShape)
                 )
             }
-        },
-        modifier = Modifier
-            .background(bgColor)
-            .clickable { onClick() }
-    )
-    HorizontalDivider()
+        }
+    }
 }
