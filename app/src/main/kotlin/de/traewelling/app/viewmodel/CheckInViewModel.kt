@@ -149,21 +149,11 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     // ─── Step 4: User picks destination stopover (flat StopStation) ───────────
 
     fun selectDestination(stopStation: StopStation) {
-        val state = _uiState.value
-        val origin = state.selectedStation
-        val originStop = state.selectedTripDetails?.stopovers?.find { stop ->
-            val words = origin?.name?.lowercase()?.split(Regex("\\W+"))?.filter { it.length > 2 } ?: emptyList()
-            stop.id == origin?.id || (stop.name != null && words.isNotEmpty() && words.all { stop.name.lowercase().contains(it) })
-        }
-        
-        val depTime = originStop?.departurePlanned ?: originStop?.departure ?: state.selectedDeparture?.plannedWhen ?: ""
-        val arrTime = stopStation.arrivalPlanned ?: stopStation.arrival ?: ""
-
         _uiState.update { 
             it.copy(
                 selectedDestination = stopStation, 
-                manualDeparture = depTime,
-                manualArrival = arrTime,
+                manualDeparture = "",
+                manualArrival = "",
                 step = CheckInStep.CONFIRM 
             ) 
         }

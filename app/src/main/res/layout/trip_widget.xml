@@ -26,9 +26,9 @@
             android:paddingHorizontal="6dp"
             android:paddingVertical="2dp" />
 
-        <Space
+        <View
             android:layout_width="0dp"
-            android:layout_height="wrap_content"
+            android:layout_height="0dp"
             android:layout_weight="1" />
 
         <TextView
