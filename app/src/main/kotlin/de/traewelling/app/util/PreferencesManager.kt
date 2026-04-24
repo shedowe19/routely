@@ -22,6 +22,10 @@ class PreferencesManager(private val context: Context) {
         val KEY_CLIENT_SECRET = stringPreferencesKey("client_secret")
         val KEY_USERNAME      = stringPreferencesKey("username")
         val KEY_ACTIVE_STATUS_ID = stringPreferencesKey("active_status_id")
+        val KEY_TTS_ENABLED   = androidx.datastore.preferences.core.booleanPreferencesKey("tts_enabled")
+        val KEY_TTS_ENGINE    = stringPreferencesKey("tts_engine")
+        val KEY_TTS_LANGUAGE  = stringPreferencesKey("tts_language")
+        val KEY_TTS_VOICE     = stringPreferencesKey("tts_voice")
 
         const val DEFAULT_SERVER_URL = "https://traewelling.de"
         const val REDIRECT_URI = "traewelling://oauth-callback"
@@ -60,6 +64,14 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull()
     }
 
+    val isTtsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_TTS_ENABLED] ?: false
+    }
+
+    val ttsEngine: Flow<String?> = context.dataStore.data.map { prefs -> prefs[KEY_TTS_ENGINE] }
+    val ttsLanguage: Flow<String?> = context.dataStore.data.map { prefs -> prefs[KEY_TTS_LANGUAGE] }
+    val ttsVoice: Flow<String?> = context.dataStore.data.map { prefs -> prefs[KEY_TTS_VOICE] }
+
     suspend fun saveServerConfig(serverUrl: String, clientId: String, clientSecret: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SERVER_URL]    = serverUrl.trimEnd('/')
@@ -93,6 +105,20 @@ class PreferencesManager(private val context: Context) {
         }
     }
 
+    suspend fun setTtsEnabled(enabled: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_TTS_ENABLED] = enabled
+        }
+    }
+
+    suspend fun saveTtsSettings(engine: String?, language: String?, voice: String?) {
+        context.dataStore.edit { prefs ->
+            if (engine != null) prefs[KEY_TTS_ENGINE] = engine else prefs.remove(KEY_TTS_ENGINE)
+            if (language != null) prefs[KEY_TTS_LANGUAGE] = language else prefs.remove(KEY_TTS_LANGUAGE)
+            if (voice != null) prefs[KEY_TTS_VOICE] = voice else prefs.remove(KEY_TTS_VOICE)
+        }
+    }
+
     suspend fun clearSession() {
         context.dataStore.edit { prefs ->
             prefs.remove(KEY_ACCESS_TOKEN)
@@ -123,4 +149,11 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun getUsername(): String? =
         context.dataStore.data.map { it[KEY_USERNAME] }.first()
+
+    suspend fun getTtsEnabled(): Boolean =
+        context.dataStore.data.map { it[KEY_TTS_ENABLED] ?: false }.first()
+
+    suspend fun getTtsEngine(): String? = context.dataStore.data.map { it[KEY_TTS_ENGINE] }.first()
+    suspend fun getTtsLanguage(): String? = context.dataStore.data.map { it[KEY_TTS_LANGUAGE] }.first()
+    suspend fun getTtsVoice(): String? = context.dataStore.data.map { it[KEY_TTS_VOICE] }.first()
 }

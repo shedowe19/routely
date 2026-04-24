@@ -24,8 +24,10 @@ import kotlinx.coroutines.launch
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import android.speech.tts.TextToSpeech
+import java.util.Locale
 
-class TripTrackingService : Service() {
+class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private val CHANNEL_ID = "TripTrackingChannel"
     private val NOTIFICATION_ID = 1001
@@ -38,11 +40,45 @@ class TripTrackingService : Service() {
     private var trackingJob: Job? = null
     private var currentStatusId: Int? = null
 
+    private var tts: TextToSpeech? = null
+    private var isTtsInitialized = false
+    private var lastAnnouncedStopId: Int? = null
+
     override fun onCreate() {
         super.onCreate()
         prefs = PreferencesManager(applicationContext)
         repo = TraewellingRepository(prefs)
         createNotificationChannel()
+
+        serviceScope.launch {
+            val engine = prefs.getTtsEngine()
+            tts = if (engine != null) TextToSpeech(this@TripTrackingService, this@TripTrackingService, engine)
+                  else TextToSpeech(this@TripTrackingService, this@TripTrackingService)
+        }
+    }
+
+    override fun onInit(status: Int) {
+        if (status == TextToSpeech.SUCCESS) {
+            serviceScope.launch {
+                val langTag = prefs.getTtsLanguage()
+                val locale = if (langTag != null) Locale.forLanguageTag(langTag) else Locale.GERMAN
+                val result = tts?.setLanguage(locale)
+
+                if (result != TextToSpeech.LANG_MISSING_DATA && result != TextToSpeech.LANG_NOT_SUPPORTED) {
+                    val voiceName = prefs.getTtsVoice()
+                    if (voiceName != null) {
+                        try {
+                            val availableVoices = tts?.voices
+                            val selectedVoice = availableVoices?.find { it.name == voiceName }
+                            if (selectedVoice != null) {
+                                tts?.voice = selectedVoice
+                            }
+                        } catch (e: Exception) {}
+                    }
+                    isTtsInitialized = true
+                }
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -177,6 +213,28 @@ class TripTrackingService : Service() {
 
         updateNotification(title, content)
 
+        // Handle TTS Announcement
+        if (isTtsInitialized && prefs.getTtsEnabled() && nextStop != null) {
+            val stopId = nextStop.id
+            if (stopId != null && stopId != lastAnnouncedStopId) {
+                if (timeStr.isNotBlank()) {
+                    try {
+                        val arrTime = ZonedDateTime.parse(timeStr)
+                        val durationToArrival = java.time.Duration.between(now, arrTime)
+                        // Announce if arrival is within the next 3 minutes
+                        if (durationToArrival.toMinutes() in 0..3) {
+                            val platformAnnouncement = if (!platform.isNullOrBlank()) " auf Gleis $platform" else ""
+                            val announcement = "Nächste Haltestelle in Kürze, $nextStopName$platformAnnouncement"
+                            tts?.speak(announcement, TextToSpeech.QUEUE_ADD, null, "TTS_ANNOUNCEMENT")
+                            lastAnnouncedStopId = stopId
+                        }
+                    } catch (e: Exception) {
+                        // ignore parse errors
+                    }
+                }
+            }
+        }
+
         // Send broadcast to update widget
         val widgetIntent = Intent(this@TripTrackingService, de.traewelling.app.widget.TripWidgetProvider::class.java).apply {
             action = "de.traewelling.app.ACTION_UPDATE_WIDGET"
@@ -259,6 +317,8 @@ class TripTrackingService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         serviceJob.cancel()
+        tts?.stop()
+        tts?.shutdown()
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
