@@ -4,7 +4,10 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.*
+import android.content.Intent
+import androidx.core.content.ContextCompat
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -202,6 +205,17 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             repo.checkIn(request)
                 .onSuccess { result ->
                     _uiState.update { it.copy(isLoading = false, checkInResult = result, step = CheckInStep.SUCCESS) }
+
+                    // Start TripTrackingService
+                    result?.status?.id?.let { statusId ->
+                        launch {
+                            prefs.saveActiveStatusId(statusId)
+                            val serviceIntent = Intent(getApplication(), TripTrackingService::class.java).apply {
+                                putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
+                            }
+                            ContextCompat.startForegroundService(getApplication(), serviceIntent)
+                        }
+                    }
                 }
                 .onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, error = "Check-in fehlgeschlagen: ${e.message}") }

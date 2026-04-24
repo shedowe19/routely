@@ -21,6 +21,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_CLIENT_ID     = stringPreferencesKey("client_id")
         val KEY_CLIENT_SECRET = stringPreferencesKey("client_secret")
         val KEY_USERNAME      = stringPreferencesKey("username")
+        val KEY_ACTIVE_STATUS_ID = stringPreferencesKey("active_status_id")
 
         const val DEFAULT_SERVER_URL = "https://traewelling.de"
         const val REDIRECT_URI = "traewelling://oauth-callback"
@@ -55,6 +56,10 @@ class PreferencesManager(private val context: Context) {
         prefs[KEY_ACCESS_TOKEN] != null
     }
 
+    val activeStatusId: Flow<Int?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull()
+    }
+
     suspend fun saveServerConfig(serverUrl: String, clientId: String, clientSecret: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SERVER_URL]    = serverUrl.trimEnd('/')
@@ -75,6 +80,16 @@ class PreferencesManager(private val context: Context) {
     suspend fun saveUsername(username: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_USERNAME] = username
+        }
+    }
+
+    suspend fun saveActiveStatusId(statusId: Int?) {
+        context.dataStore.edit { prefs ->
+            if (statusId == null) {
+                prefs.remove(KEY_ACTIVE_STATUS_ID)
+            } else {
+                prefs[KEY_ACTIVE_STATUS_ID] = statusId.toString()
+            }
         }
     }
 
