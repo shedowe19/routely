@@ -114,17 +114,34 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                     val origin = _uiState.value.selectedStation
                     val stopovers = tripDetails.stopovers ?: emptyList()
                     
-                    // Find the origin station in the trip stopovers to filter the destination list
-                    // Use a robust word-based matching to handle name variations (e.g., "Spornitz Schule" vs "Schule, Spornitz")
-                    val originWords = origin?.name?.lowercase()?.split(Regex("\\W+"))?.filter { it.length > 2 } ?: emptyList()
-                    val originIdx = stopovers.indexOfFirst { stop ->
-                        stop.id == origin?.id || (stop.name != null && originWords.isNotEmpty() && 
-                        originWords.all { stop.name.lowercase().contains(it) })
+                    val timeMatchIdx = stopovers.indexOfFirst { stop ->
+                        departure.plannedWhen != null &&
+                        (stop.departurePlanned == departure.plannedWhen ||
+                         stop.departure == departure.plannedWhen ||
+                         stop.departureReal == departure.plannedWhen)
                     }
                     
+                    val initialOriginIdx = if (timeMatchIdx != -1) {
+                        timeMatchIdx
+                    } else {
+                        stopovers.indexOfFirst { stop ->
+                            val idMatch = origin != null && stop.id == origin.id
+                            val evaMatch = origin?.ibnr != null && stop.evaIdentifier?.toLongOrNull() == origin.ibnr
+                            idMatch || evaMatch
+                        }
+                    }
+
+                    val finalOriginIdx = if (initialOriginIdx == -1) {
+                        val originWords = origin?.name?.lowercase()?.split(Regex("\\W+"))?.filter { it.length > 2 } ?: emptyList()
+                        stopovers.indexOfFirst { stop ->
+                            stop.name != null && originWords.isNotEmpty() &&
+                            originWords.all { stop.name.lowercase().contains(it) }
+                        }
+                    } else { initialOriginIdx }
+
                     // Only show stations AFTER the origin as possible destinations
-                    val filteredStopovers = if (originIdx != -1) {
-                        stopovers.drop(originIdx + 1)
+                    val filteredStopovers = if (finalOriginIdx != -1) {
+                        stopovers.drop(finalOriginIdx + 1)
                     } else {
                         stopovers
                     }
