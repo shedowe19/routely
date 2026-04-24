@@ -1,5 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">Träwelling</string>
-    <style name="Theme.TraewellingApp" parent="android:Theme.Material.Light.NoActionBar"/>
-</resources>
