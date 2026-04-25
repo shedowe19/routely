@@ -137,6 +137,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun startTracking(statusId: Int) {
+        if (currentStatusId != statusId) {
+            lastAnnouncedStopId = null
+            currentStatusId = statusId
+        }
         trackingJob?.cancel()
         trackingJob = serviceScope.launch {
             while (isActive) {
