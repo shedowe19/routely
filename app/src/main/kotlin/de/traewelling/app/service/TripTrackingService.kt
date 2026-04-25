@@ -152,12 +152,24 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
         val status = statusResult.getOrNull() ?: return
         val checkin = status.checkin ?: return
-        val tripId = checkin.trip ?: return
+        val tripId = checkin.trip
+        val hafasTripId = checkin.hafasId
+        val lineNameFromCheckin = checkin.lineName ?: ""
 
-        val stopoversResult = repo.getStopovers(tripId)
-        if (stopoversResult.isFailure) return
+        var stopovers: List<de.traewelling.app.data.model.StopStation>? = null
 
-        val stopovers = stopoversResult.getOrNull() ?: return
+        if (tripId != null) {
+            val stopoversResult = repo.getStopovers(tripId)
+            stopovers = stopoversResult.getOrNull()
+        }
+
+        // Fallback to Hafas if stopovers are empty or tripId is missing
+        if ((stopovers == null || stopovers.isEmpty()) && hafasTripId != null) {
+            val tripResult = repo.getTrip(hafasTripId, lineNameFromCheckin)
+            stopovers = tripResult.getOrNull()?.stopovers
+        }
+
+        if (stopovers == null || stopovers.isEmpty()) return
 
 val origin = checkin.origin
         val destination = checkin.destination
