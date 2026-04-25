@@ -263,13 +263,24 @@ val origin = checkin.origin
 
                             val platformAnnouncement = if (!platform.isNullOrBlank()) " auf Gleis $platform" else ""
                             val isDestination = nextStop.id == destination?.id
-                            val announcement = if (isDestination) {
-                                "Bitte aussteigen, Endhaltestelle $nextStopName$platformAnnouncement erreicht."
-                            } else if (lastAnnouncedStopId == null) {
-                                "Bitte einsteigen, nächste Haltestelle $nextStopName$platformAnnouncement."
+                            val isOrigin = lastAnnouncedStopId == null
+
+                            val mode = checkin.lineName ?: "Zug"
+                            val rawOperator = checkin.operator?.name ?: ""
+                            val operatorName = if (rawOperator.startsWith("Betreiber:")) {
+                                rawOperator.substringAfter("Betreiber:").trim()
+                            } else {
+                                rawOperator
+                            }
+
+                            val announcement = if (isOrigin) {
+                                "Der $mode erreicht in kürze deine Anfangshaltestelle $nextStopName bitte einsteigen"
+                            } else if (isDestination) {
+                                "Du erreichst nun in kürze deine Ausstiegshaltestelle $nextStopName ich danke dir mit der Fahrt mit $operatorName"
                             } else {
                                 "Nächste Haltestelle in Kürze, $nextStopName$platformAnnouncement."
                             }
+
                             requestAudioFocus()
                             tts?.speak(announcement, TextToSpeech.QUEUE_ADD, null, "TTS_ANNOUNCEMENT")
                             lastAnnouncedStopId = stopId
