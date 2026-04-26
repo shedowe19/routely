@@ -31,7 +31,7 @@ interface TraewellingApiService {
     @DELETE("api/v1/status/{id}")
     suspend fun deleteStatus(@Path("id") id: Int): Response<Unit>
     
-    @POST("api/v1/status/{id}")
+    @PUT("api/v1/status/{id}")
     suspend fun updateStatus(
         @Path("id") id: Int,
         @Body request: UpdateStatusRequest
