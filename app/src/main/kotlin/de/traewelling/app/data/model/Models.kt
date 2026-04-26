@@ -282,6 +282,46 @@ data class StopoversResponse(
         data?.values?.flatten() ?: emptyList()
 }
 
+/**
+ * Deduplicates a list of stops. The API sometimes returns duplicate consecutive stops
+ * (e.g. "Nettetal Kaldenkirchen Bf" and "Kaldenkirchen" with the same times).
+ * This function merges consecutive stops with matching planned times, preferring the
+ * entry that has platform information or a shorter name.
+ */
+fun List<StopStation>.deduplicate(): List<StopStation> {
+    if (isEmpty()) return this
+
+    val result = mutableListOf<StopStation>()
+    for (stop in this) {
+        val last = result.lastOrNull()
+
+        // Only merge if both stops have some planned times and they match exactly
+        val hasTimes = stop.arrivalPlanned != null || stop.departurePlanned != null
+        val arrivalMatch = last?.arrivalPlanned == stop.arrivalPlanned
+        val departureMatch = last?.departurePlanned == stop.departurePlanned
+
+        if (last != null && hasTimes && arrivalMatch && departureMatch) {
+            val lastHasPlatform = last.platform != null || last.arrivalPlatformPlanned != null || last.departurePlatformPlanned != null
+            val stopHasPlatform = stop.platform != null || stop.arrivalPlatformPlanned != null || stop.departurePlatformPlanned != null
+
+            if (!lastHasPlatform && stopHasPlatform) {
+                // Replace with the one that has a platform
+                result[result.size - 1] = stop
+            } else if (lastHasPlatform == stopHasPlatform) {
+                // If both or neither have platform, prefer the shorter name
+                val lastNameLen = last.name?.length ?: Int.MAX_VALUE
+                val stopNameLen = stop.name?.length ?: Int.MAX_VALUE
+                if (stopNameLen < lastNameLen) {
+                    result[result.size - 1] = stop
+                }
+            }
+        } else {
+            result.add(stop)
+        }
+    }
+    return result
+}
+
 // ─── Notifications ────────────────────────────────────────────────────────────
 
 data class NotificationListResponse(

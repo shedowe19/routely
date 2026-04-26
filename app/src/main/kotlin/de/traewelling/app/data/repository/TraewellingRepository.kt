@@ -73,7 +73,8 @@ class TraewellingRepository(private val prefs: PreferencesManager) {
     /** Full trip with stopovers — needed to let the user pick their destination. */
     suspend fun getTrip(hafasTripId: String, lineName: String): Result<TripDetails> = runCatching {
         val r = api().getTrip(hafasTripId, lineName)
-        r.body()?.data ?: error("Trip nicht gefunden (${r.code()})")
+        val data = r.body()?.data ?: error("Trip nicht gefunden (${r.code()})")
+        data.copy(stopovers = data.stopovers?.deduplicate())
     }
 
     suspend fun checkIn(request: CheckInRequest): Result<CheckInResult?> = runCatching {
@@ -115,7 +116,7 @@ class TraewellingRepository(private val prefs: PreferencesManager) {
 
     suspend fun getStopovers(tripId: Int): Result<List<StopStation>> = runCatching {
         val r = api().getStopovers(tripId)
-        r.body()?.allStopovers() ?: error("Keine Halte gefunden (${r.code()})")
+        r.body()?.allStopovers()?.deduplicate() ?: error("Keine Halte gefunden (${r.code()})")
     }
 
     // ─── Follow / Unfollow ────────────────────────────────────────────────────
