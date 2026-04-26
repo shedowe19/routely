@@ -62,15 +62,15 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             .onSuccess { stops ->
                                 // Enrich stopovers with manual times from the checkin origin/destination
                                 val checkin = status.checkin
-                    val origin = checkin?.origin?.let {
+                    val origin = checkin.origin?.let {
                                     it.copy(departureReal = checkin.manualDeparture ?: it.departureReal)
                                 }
-                                val destination = checkin?.destination?.let {
+                                val destination = checkin.destination?.let {
                                     it.copy(arrivalReal = checkin.manualArrival ?: it.arrivalReal)
                                 }
                                 
                                 val enrichedStatus = status.copy(
-                                    checkin = checkin?.copy(
+                                    checkin = checkin.copy(
                                         origin = origin,
                                         destination = destination
                                     )
@@ -132,15 +132,15 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             if (tripId != null) {
                 repo.getStopovers(tripId).onSuccess { stops ->
                     val checkin = status.checkin
-                    val origin = checkin?.origin?.let {
+                    val origin = checkin.origin?.let {
                         it.copy(departureReal = checkin.manualDeparture ?: it.departureReal)
                     }
-                    val destination = checkin?.destination?.let {
+                    val destination = checkin.destination?.let {
                         it.copy(arrivalReal = checkin.manualArrival ?: it.arrivalReal)
                     }
                     
                     val enrichedStatus = status.copy(
-                        checkin = checkin?.copy(
+                        checkin = checkin.copy(
                             origin = origin,
                             destination = destination
                         )

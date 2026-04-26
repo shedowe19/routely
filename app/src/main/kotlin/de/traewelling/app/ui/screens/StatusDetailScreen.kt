@@ -345,6 +345,7 @@ private fun StatusDetailContent(
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun StatusHeaderCard(status: Status, _onUserClick: (String) -> Unit) {
     val user = status.user
 
@@ -534,6 +535,7 @@ private fun StatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
 }
 
 @Composable
+@Suppress("UNUSED_PARAMETER")
 private fun TimeRow(label: String, planned: String?, real: String?, _isDelayed: Boolean?) {
     val plannedTime = formatTimeFromIso(planned)
     val realTimeVal = real ?: planned
