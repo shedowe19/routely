@@ -214,7 +214,7 @@ fun StatusDetailScreen(
 private fun StatusDetailContent(
     uiState: StatusDetailUiState,
     onUserClick: (String) -> Unit,
-    onRefresh: () -> Unit
+    _onRefresh: () -> Unit
 ) {
     val status = uiState.status ?: return
     val checkin = status.checkin
@@ -344,7 +344,7 @@ private fun StatusDetailContent(
 }
 
 @Composable
-private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
+private fun StatusHeaderCard(status: Status, _onUserClick: (String) -> Unit) {
     val user = status.user
 
     Card(
@@ -533,7 +533,7 @@ private fun StatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
 }
 
 @Composable
-private fun TimeRow(label: String, planned: String?, real: String?, isDelayed: Boolean?) {
+private fun TimeRow(label: String, planned: String?, real: String?, _isDelayed: Boolean?) {
     val plannedTime = formatTimeFromIso(planned)
     val realTimeVal = real ?: planned
     val realTime = formatTimeFromIso(realTimeVal)
@@ -633,7 +633,6 @@ private fun StopoverItem(
 
     val isPast = stopZdt?.isBefore(now) ?: false
     val trainIsHere = stopZdt != null && now.isAfter(stopZdt.minusMinutes(1)) && now.isBefore(stopZdt.plusMinutes(1))
-    val isCurrentSegment = outgoingProgress > 0f && outgoingProgress < 1f
 
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     val activeLineColor = TealAccent
@@ -654,7 +653,6 @@ private fun StopoverItem(
         else -> 0.45f
     }
     
-    val isDelayed = stop.isArrivalDelayed == true || stop.isDepartureDelayed == true
     val isCancelled = stop.cancelled == true
 
     // Journeys range logic for lines

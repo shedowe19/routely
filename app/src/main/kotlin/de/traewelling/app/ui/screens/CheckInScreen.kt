@@ -159,7 +159,7 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
                     }
                 }
             uiState.error != null ->
-                ErrorBox(uiState.error!!, viewModel::goBack)
+                ErrorBox(uiState.error, viewModel::goBack)
             uiState.departures.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Keine Abfahrten gefunden")
@@ -251,7 +251,6 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
 @Composable
 private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     val stopovers = uiState.filteredDestinations
-    val lineName  = uiState.selectedDeparture?.line?.name ?: ""
 
     Column(Modifier.fillMaxSize()) {
 
