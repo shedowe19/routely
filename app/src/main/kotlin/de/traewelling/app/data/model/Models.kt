@@ -220,12 +220,12 @@ data class CheckInResponse(
 )
 
 data class UpdateStatusRequest(
-    @SerializedName("body")            val body: String? = null,
-    @SerializedName("visibility")      val visibility: Int? = null,
-    @SerializedName("business")        val business: Int? = null,
-    @SerializedName("destinationId")   val destination: Int? = null,
-    @SerializedName("manualDeparture") val departure: String? = null,
-    @SerializedName("manualArrival")   val arrival: String? = null
+    val body: String? = null,
+    val visibility: Int? = null,
+    val business: Int? = null,
+    val destination: Int? = null,
+    val departure: String? = null,
+    val arrival: String? = null
 )
 
 data class CheckInResult(

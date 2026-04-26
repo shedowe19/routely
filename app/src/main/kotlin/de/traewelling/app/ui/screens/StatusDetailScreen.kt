@@ -201,8 +201,7 @@ fun StatusDetailScreen(
                 else -> {
                     StatusDetailContent(
                         uiState = uiState,
-                        onUserClick = onUserClick,
-                        onRefresh = viewModel::refresh
+                        onUserClick = onUserClick
                     )
                 }
             }
@@ -211,11 +210,9 @@ fun StatusDetailScreen(
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
 private fun StatusDetailContent(
     uiState: StatusDetailUiState,
-    onUserClick: (String) -> Unit,
-    onRefresh: () -> Unit
+    onUserClick: (String) -> Unit
 ) {
     val status = uiState.status ?: return
     val checkin = status.checkin
@@ -345,8 +342,7 @@ private fun StatusDetailContent(
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
-private fun StatusHeaderCard(status: Status, _onUserClick: (String) -> Unit) {
+private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
     val user = status.user
 
     Card(
@@ -535,8 +531,7 @@ private fun StatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
-private fun TimeRow(label: String, planned: String?, real: String?, _isDelayed: Boolean?) {
+private fun TimeRow(label: String, planned: String?, real: String?, isDelayed: Boolean?) {
     val plannedTime = formatTimeFromIso(planned)
     val realTimeVal = real ?: planned
     val realTime = formatTimeFromIso(realTimeVal)
@@ -636,6 +631,7 @@ private fun StopoverItem(
 
     val isPast = stopZdt?.isBefore(now) ?: false
     val trainIsHere = stopZdt != null && now.isAfter(stopZdt.minusMinutes(1)) && now.isBefore(stopZdt.plusMinutes(1))
+    val isCurrentSegment = outgoingProgress > 0f && outgoingProgress < 1f
 
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     val activeLineColor = TealAccent
@@ -656,6 +652,7 @@ private fun StopoverItem(
         else -> 0.45f
     }
     
+    val isDelayed = stop.isArrivalDelayed == true || stop.isDepartureDelayed == true
     val isCancelled = stop.cancelled == true
 
     // Journeys range logic for lines
@@ -836,12 +833,7 @@ private fun StopoverItem(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 2.dp)
             ) {
-                val rawPlat = stop.platform ?: stop.departurePlatformReal ?: stop.arrivalPlatformReal
-                // Strip HAFAS sector prefix "9": "91"→"1", "911"→"11", "99"→"9"
-                // Some DB stations encode tracks as sector(9) + number internally
-                val plat = rawPlat?.let { p ->
-                    if (p.length > 1 && p.startsWith("9") && p.drop(1).all { it.isDigit() }) p.drop(1) else p
-                }
+                val plat = stop.platform ?: stop.departurePlatformReal ?: stop.arrivalPlatformReal
                 if (plat != null) {
                     val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
                     Surface(
@@ -1110,44 +1102,20 @@ private fun EditStatusDialog(
 
                 // Times
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(
-                            value = uiState.editDeparture,
-                            onValueChange = onUpdateDeparture,
-                            label = { Text("Abfahrt real") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        TextButton(
-                            onClick = {
-                                val now = java.time.ZonedDateTime.now()
-                                val iso = now.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-                                onUpdateDeparture(iso)
-                            },
-                            modifier = Modifier.align(Alignment.Start)
-                        ) {
-                            Text("Abfahrt jetzt")
-                        }
-                    }
-                    Column(modifier = Modifier.weight(1f)) {
-                        OutlinedTextField(
-                            value = uiState.editArrival,
-                            onValueChange = onUpdateArrival,
-                            label = { Text("Ankunft real") },
-                            modifier = Modifier.fillMaxWidth(),
-                            singleLine = true
-                        )
-                        TextButton(
-                            onClick = {
-                                val now = java.time.ZonedDateTime.now()
-                                val iso = now.format(java.time.format.DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-                                onUpdateArrival(iso)
-                            },
-                            modifier = Modifier.align(Alignment.End)
-                        ) {
-                            Text("Ankunft jetzt")
-                        }
-                    }
+                    OutlinedTextField(
+                        value = uiState.editDeparture,
+                        onValueChange = onUpdateDeparture,
+                        label = { Text("Abfahrt real") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
+                    OutlinedTextField(
+                        value = uiState.editArrival,
+                        onValueChange = onUpdateArrival,
+                        label = { Text("Ankunft real") },
+                        modifier = Modifier.weight(1f),
+                        singleLine = true
+                    )
                 }
 
                 // Status text

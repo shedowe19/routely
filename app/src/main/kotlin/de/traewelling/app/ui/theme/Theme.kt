@@ -71,8 +71,7 @@ object TransportColors {
         else              -> Default
     }
 
-    @Suppress("UNUSED_PARAMETER")
-fun textForCategory(_category: String?): Color = Color.White
+    fun textForCategory(category: String?): Color = Color.White
 }
 
 // ─── Light Color Scheme ──────────────────────────────────────────────────────

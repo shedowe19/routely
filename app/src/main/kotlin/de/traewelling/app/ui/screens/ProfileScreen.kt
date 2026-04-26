@@ -292,8 +292,7 @@ private fun StatChip(label: String, value: String) {
 }
 
 @Composable
-@Suppress("UNUSED_PARAMETER")
-private fun StatisticsSection(_user: User?, stats: StatisticsData) {
+private fun StatisticsSection(user: User?, stats: StatisticsData) {
     val categories = stats.categories ?: emptyList()
     if (categories.isEmpty()) return
 
