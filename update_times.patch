@@ -1,0 +1,199 @@
+<<<<<<< SEARCH
+                val plannedDeparture = stop.departurePlanned ?: stop.departure
+                val realDeparture = stop.departureReal ?: plannedDeparture
+                val plannedArrival = stop.arrivalPlanned ?: stop.arrival
+                val realArrival = stop.arrivalReal ?: plannedArrival
+
+                val timeToShowPlanned = if (isOrigin || (plannedDeparture != null && !isDestination)) plannedDeparture else plannedArrival
+                val timeToShowReal = if (isOrigin || (realDeparture != null && !isDestination)) realDeparture else realArrival
+
+                val plannedTimeStr = formatTimeFromIso(timeToShowPlanned)
+                val realTimeStr = formatTimeFromIso(timeToShowReal)
+
+                val delayMin = computeDelayMinutes(timeToShowPlanned, timeToShowReal)
+                val timeDiffers = plannedTimeStr != realTimeStr && plannedTimeStr != "–"
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (!isCancelled) {
+                        if (timeDiffers) {
+                            Text(
+                                plannedTimeStr,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                            )
+                            Spacer(Modifier.width(6.dp))
+
+                            if (delayMin != 0) {
+                                val badgeColor = if (delayMin > 0) WarningOrange else SuccessGreen
+                                val containerColor = if (delayMin > 0) WarningOrangeLight else SuccessGreenLight
+
+                                Surface(
+                                    color = containerColor,
+                                    shape = RoundedCornerShape(10.dp)
+                                ) {
+                                    val prefix = if (delayMin > 0) "+" else ""
+                                    Text(
+                                        "$prefix$delayMin",
+                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                        style = MaterialTheme.typography.labelMedium,
+                                        color = badgeColor,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Spacer(Modifier.width(6.dp))
+                            }
+
+                            Text(
+                                realTimeStr,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = if (delayMin > 0) WarningOrange else SuccessGreen,
+                                fontWeight = FontWeight.Bold
+                            )
+                        } else {
+                            Text(
+                                text = plannedTimeStr,
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha)
+                            )
+                        }
+                    }
+                }
+=======
+                val plannedDeparture = stop.departurePlanned ?: stop.departure
+                val realDeparture = stop.departureReal ?: plannedDeparture
+                val plannedArrival = stop.arrivalPlanned ?: stop.arrival
+                val realArrival = stop.arrivalReal ?: plannedArrival
+
+                val timeToShowPlanned = if (isOrigin) plannedDeparture ?: plannedArrival else if (isDestination) plannedArrival ?: plannedDeparture else null
+                val timeToShowReal = if (isOrigin) realDeparture ?: realArrival else if (isDestination) realArrival ?: realDeparture else null
+
+                if (isOrigin || isDestination) {
+                    val plannedTimeStr = formatTimeFromIso(timeToShowPlanned)
+                    val realTimeStr = formatTimeFromIso(timeToShowReal)
+
+                    val delayMin = computeDelayMinutes(timeToShowPlanned, timeToShowReal)
+                    val timeDiffers = plannedTimeStr != realTimeStr && plannedTimeStr != "–"
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        if (!isCancelled) {
+                            if (timeDiffers) {
+                                Text(
+                                    plannedTimeStr,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                    textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                )
+                                Spacer(Modifier.width(6.dp))
+
+                                if (delayMin != 0) {
+                                    val badgeColor = if (delayMin > 0) WarningOrange else SuccessGreen
+                                    val containerColor = if (delayMin > 0) WarningOrangeLight else SuccessGreenLight
+
+                                    Surface(
+                                        color = containerColor,
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        val prefix = if (delayMin > 0) "+" else ""
+                                        Text(
+                                            "$prefix$delayMin",
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = badgeColor,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                }
+
+                                Text(
+                                    realTimeStr,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (delayMin > 0) WarningOrange else SuccessGreen,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            } else {
+                                Text(
+                                    text = plannedTimeStr,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha)
+                                )
+                            }
+                        }
+                    }
+                } else {
+                    // For stops in between, show arrival and departure
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (plannedArrival != null || realArrival != null) {
+                            val plannedArrStr = formatTimeFromIso(plannedArrival)
+                            val realArrStr = formatTimeFromIso(realArrival)
+                            val delayArrMin = computeDelayMinutes(plannedArrival, realArrival)
+                            val arrDiffers = plannedArrStr != realArrStr && plannedArrStr != "–"
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("An: ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                if (!isCancelled) {
+                                    if (arrDiffers) {
+                                        Text(
+                                            plannedArrStr,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                            textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            realArrStr,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (delayArrMin > 0) WarningOrange else SuccessGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else {
+                                        Text(
+                                            text = plannedArrStr,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        if (plannedDeparture != null || realDeparture != null) {
+                            val plannedDepStr = formatTimeFromIso(plannedDeparture)
+                            val realDepStr = formatTimeFromIso(realDeparture)
+                            val delayDepMin = computeDelayMinutes(plannedDeparture, realDeparture)
+                            val depDiffers = plannedDepStr != realDepStr && plannedDepStr != "–"
+
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("Ab: ", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                                if (!isCancelled) {
+                                    if (depDiffers) {
+                                        Text(
+                                            plannedDepStr,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                                            textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                        )
+                                        Spacer(Modifier.width(4.dp))
+                                        Text(
+                                            realDepStr,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = if (delayDepMin > 0) WarningOrange else SuccessGreen,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    } else {
+                                        Text(
+                                            text = plannedDepStr,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Medium,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+>>>>>>> REPLACE
