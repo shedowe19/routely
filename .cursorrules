@@ -1,0 +1,80 @@
+# Project Rules: Träwelling Android
+
+## Project Overview
+
+A mobile client for the Träwelling platform, optimized for precise transit tracking, manual time corrections, and an excellent user interface.
+
+## Tech Stack
+
+- Language: Kotlin
+- UI Framework: Jetpack Compose (Material 3)
+- Architecture: MVVM with StateFlow
+- Networking: Retrofit & OkHttp
+- Image Loading: Coil
+- Build Tool: Gradle
+
+## Architecture
+
+### File Structure
+
+- `app/src/main/kotlin/de/traewelling/app/` - Root of the application source code.
+- `ui/screens/` - Contains the Jetpack Compose screens.
+- `ui/components/` - Reusable Compose UI components.
+- `viewmodel/` - ViewModels managing state for the screens.
+- `data/` - Data layer including API services, models, and repositories.
+- `service/` & `widget/` - Background services and App Widgets.
+
+### Component Responsibilities
+
+- **ViewModels**: Manage and expose UI state using `StateFlow`. Handle business logic and API calls.
+- **Repositories**: Abstract data sources (network vs local preferences).
+- **Screens**: Consume state from ViewModels and pass it down to components. Handle navigation.
+- **Components**: Stateless Compose functions that display data and emit events via callbacks.
+
+## Coding Standards
+
+### Naming Conventions
+
+- Variables, functions, and standard properties: `camelCase`
+- Classes, interfaces, and Compose functions: `PascalCase`
+- Constants: `SCREAMING_SNAKE_CASE`
+- Files: Match the primary class or composable name (`PascalCase.kt`)
+
+### UI and Compose Rules
+
+- ✅ **Do:** Use `ViewModel` with `StateFlow` to expose UI state. Avoid exposing `MutableStateFlow`.
+- ✅ **Do:** Use `remember` and `derivedStateOf` to minimize unnecessary calculations during recomposition.
+- ✅ **Do:** Mark data classes used in UI state as `@Immutable` or `@Stable` if they contain `List` or other unstable types.
+- ✅ **Do:** Use `LaunchedEffect` for one-off side effects (like showing a Snackbar) triggered by state changes.
+- ❌ **Don't:** Perform expensive operations directly inside the Composable function body without `remember`.
+- ❌ **Don't:** Pass `ViewModel` instances down to child components. Pass only the data (state) and lambda callbacks (events).
+- ❌ **Don't:** Use un-deduplicated API-provided IDs as explicit `key` parameters in Jetpack Compose `LazyColumn`s to prevent duplicate key crashes.
+
+### Coroutines and Async Patterns
+
+- ✅ **Do:** Use `coroutineScope` or `supervisorScope` to group concurrent tasks (Structured Concurrency).
+- ✅ **Do:** Use `Dispatchers.IO` for blocking I/O operations.
+- ✅ **Do:** Use `StateFlow` for state that needs to be retained, and `SharedFlow` for events.
+- ❌ **Don't:** Use `GlobalScope`. It breaks structured concurrency and can lead to leaks.
+- ❌ **Don't:** Catch `CancellationException` unless you rethrow it.
+
+### Error Handling
+
+- Use `CoroutineExceptionHandler` for top-level scopes, but rely on `try-catch` within suspending functions for granular control.
+
+## Critical Rules
+
+1. ❌ **Do not upload or commit test materials** (such as test JWT tokens or app codes) provided by the user.
+2. ✅ Data models MUST use `@SerializedName` (Gson) to ensure correct field mapping with the Traewelling API.
+3. ✅ The Traewelling API frequently returns duplicate items during pagination (e.g., departures, stations). Deduplicate API results by ID or relevant fields (like arrival/departure times) before displaying them.
+4. ✅ Internal platform IDs prefixed with '9' (e.g., '91' for track 1) from HAFAS APIs must be stripped before displaying to the user.
+
+## Testing Guidelines
+
+- Run tests using `./gradlew test` or specifically `./gradlew testDebugUnitTest`.
+- Use `TestScope` and `runTest` for unit testing coroutines.
+
+## Architecture & Navigation specifics
+
+- The app uses a global `NavHost`. Core tabs (Feed, Check-in, Meldungen, Profil) are housed inside a `HorizontalPager` under a unified `Screen.Main` route to support lateral swiping.
+- Deeper screens remain independent routes in the root `NavHost`.
