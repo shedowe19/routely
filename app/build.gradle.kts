@@ -85,6 +85,8 @@ dependencies {
     implementation(libs.browser)
     implementation(libs.coroutines.android)
     implementation(libs.gson)
+    implementation(libs.osmdroid.android)
+    implementation(libs.play.services.location)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

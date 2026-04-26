@@ -220,6 +220,42 @@ private fun StatusDetailContent(
 
     // Real-time ticking for smooth progress bar updates
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
+
+    // Live location handling
+    val context = androidx.compose.ui.platform.LocalContext.current
+    var currentLocation by remember { mutableStateOf<org.osmdroid.util.GeoPoint?>(null) }
+    val fusedLocationClient = remember { com.google.android.gms.location.LocationServices.getFusedLocationProviderClient(context) }
+
+    val locationPermissionLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            try {
+                fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        currentLocation = org.osmdroid.util.GeoPoint(loc.latitude, loc.longitude)
+                    }
+                }
+            } catch (e: SecurityException) {
+                // Ignore
+            }
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        val permission = android.Manifest.permission.ACCESS_FINE_LOCATION
+        if (androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            try {
+                fusedLocationClient.lastLocation.addOnSuccessListener { loc ->
+                    if (loc != null) {
+                        currentLocation = org.osmdroid.util.GeoPoint(loc.latitude, loc.longitude)
+                    }
+                }
+            } catch (e: SecurityException) {}
+        } else {
+            locationPermissionLauncher.launch(permission)
+        }
+    }
     LaunchedEffect(Unit) {
         while (true) {
             delay(1000)
@@ -336,6 +372,76 @@ private fun StatusDetailContent(
                 ) {
                     CircularProgressIndicator(modifier = Modifier.size(32.dp))
                 }
+            }
+        }
+
+        // Map
+        if (hasStopovers) {
+            item {
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Estimate fallback location based on time if currentLocation is null
+                val estimatedLocation = remember(currentLocation, stopovers, uiState.stationCoordinates, now) {
+                    if (currentLocation != null) return@remember currentLocation
+
+                    var lastStop: StopStation? = null
+                    var nextStop: StopStation? = null
+
+                    for (stop in stopovers) {
+                        val stopTimeStr = stop.departureReal ?: stop.departurePlanned ?: stop.arrivalReal ?: stop.arrivalPlanned ?: stop.arrival
+                        if (stopTimeStr != null) {
+                            try {
+                                val stopZdt = ZonedDateTime.parse(stopTimeStr)
+                                if (stopZdt.isBefore(now) || stopZdt.isEqual(now)) {
+                                    lastStop = stop
+                                } else if (nextStop == null) {
+                                    nextStop = stop
+                                    break
+                                }
+                            } catch (e: Exception) {}
+                        }
+                    }
+
+                    if (lastStop != null && nextStop != null) {
+                        val lastCoords = uiState.stationCoordinates[lastStop.id]
+                        val nextCoords = uiState.stationCoordinates[nextStop.id]
+                        if (lastCoords != null && nextCoords != null) {
+                            try {
+                                val lastTime = ZonedDateTime.parse(lastStop.departureReal ?: lastStop.departurePlanned ?: lastStop.arrivalReal ?: lastStop.arrivalPlanned ?: lastStop.arrival)
+                                val nextTime = ZonedDateTime.parse(nextStop.arrivalReal ?: nextStop.arrivalPlanned ?: nextStop.departureReal ?: nextStop.departurePlanned ?: nextStop.arrival)
+
+                                val totalSeconds = java.time.Duration.between(lastTime, nextTime).seconds
+                                val passedSeconds = java.time.Duration.between(lastTime, now).seconds
+
+                                if (totalSeconds > 0) {
+                                    val fraction = (passedSeconds.toDouble() / totalSeconds.toDouble()).coerceIn(0.0, 1.0)
+                                    val lat = lastCoords.first + fraction * (nextCoords.first - lastCoords.first)
+                                    val lon = lastCoords.second + fraction * (nextCoords.second - lastCoords.second)
+                                    return@remember org.osmdroid.util.GeoPoint(lat, lon)
+                                }
+                            } catch (e: Exception) {}
+                        }
+                    } else if (lastStop != null) {
+                        val coords = uiState.stationCoordinates[lastStop.id]
+                        if (coords != null) return@remember org.osmdroid.util.GeoPoint(coords.first, coords.second)
+                    } else if (nextStop != null) {
+                        val coords = uiState.stationCoordinates[nextStop.id]
+                        if (coords != null) return@remember org.osmdroid.util.GeoPoint(coords.first, coords.second)
+                    }
+
+                    null
+                }
+
+                de.traewelling.app.ui.components.OpenRailwayMapComponent(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(300.dp)
+                        .padding(horizontal = 16.dp)
+                        .clip(RoundedCornerShape(8.dp)),
+                    stopovers = stopovers,
+                    stationCoordinates = uiState.stationCoordinates,
+                    currentLocation = estimatedLocation
+                )
             }
         }
     }
@@ -1055,6 +1161,7 @@ private fun StopoverItem(
                     }
                 }
             }
+
         }
     }
 }

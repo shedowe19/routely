@@ -59,6 +59,11 @@ class TraewellingRepository(private val prefs: PreferencesManager) {
         r.body()?.data ?: error("Keine Bahnhöfe in der Nähe (${r.code()})")
     }
 
+    suspend fun getStation(stationId: Int): Result<TrainStation> = runCatching {
+        val r = api().getStation(stationId)
+        r.body()?.data ?: error("Haltestelle nicht gefunden (${r.code()})")
+    }
+
     // ─── Check-in ─────────────────────────────────────────────────────────────
 
     /** Departures for a station by its numeric Traewelling station ID. */

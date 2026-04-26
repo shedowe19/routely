@@ -56,6 +56,11 @@ interface TraewellingApiService {
         @Query("longitude") lon: Double
     ): Response<StationSearchResponse>
 
+    @GET("api/v1/station/{id}")
+    suspend fun getStation(
+        @Path("id") id: Int
+    ): Response<SingleStationResponse>
+
     // ─── Departures — uses numeric station ID, NOT the station name! ──────────
 
     @GET("api/v1/station/{id}/departures")

@@ -22,6 +22,9 @@ data class StatusDetailUiState(
     val isDeleting: Boolean = false,
     val isOwnStatus: Boolean = false,
 
+    // Station Coordinates (ID -> Pair(Lat, Lon))
+    val stationCoordinates: Map<Int, Pair<Double, Double>> = emptyMap(),
+
     // Editing state
     val isEditing: Boolean = false,
     val isUpdating: Boolean = false,
@@ -91,6 +94,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                         lastUpdated = System.currentTimeMillis()
                                     )
                                 }
+                                loadCoordinatesForStops(enrichedStops)
                             }
                             .onFailure { e ->
                                 _uiState.update {
@@ -158,8 +162,31 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             lastUpdated = System.currentTimeMillis()
                         )
                     }
+                    loadCoordinatesForStops(enrichedStops)
                 }
             }
+        }
+    }
+
+    private fun loadCoordinatesForStops(stops: List<de.traewelling.app.data.model.StopStation>) {
+        viewModelScope.launch {
+            val coords = mutableMapOf<Int, Pair<Double, Double>>()
+            // Add existing coordinates so we don't refetch
+            coords.putAll(_uiState.value.stationCoordinates)
+
+            stops.forEach { stop ->
+                val id = stop.id
+                if (id != null && !coords.containsKey(id)) {
+                    repo.getStation(id).onSuccess { station ->
+                        val lat = station.latitude
+                        val lon = station.longitude
+                        if (lat != null && lon != null) {
+                            coords[id] = Pair(lat, lon)
+                        }
+                    }
+                }
+            }
+            _uiState.update { it.copy(stationCoordinates = coords) }
         }
     }
 

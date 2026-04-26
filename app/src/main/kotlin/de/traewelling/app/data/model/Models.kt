@@ -157,6 +157,10 @@ data class StationSearchResponse(
     val data: List<TrainStation>?
 )
 
+data class SingleStationResponse(
+    val data: TrainStation?
+)
+
 // ─── Departures (GET /api/v1/station/{id}/departures) ────────────────────────
 
 data class DepartureResponse(
