@@ -26,6 +26,9 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import android.speech.tts.TextToSpeech
 import java.util.Locale
+import android.media.AudioFocusRequest
+import android.media.AudioManager
+import android.speech.tts.UtteranceProgressListener
 
 class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
@@ -76,6 +79,17 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                         } catch (e: Exception) {}
                     }
                     isTtsInitialized = true
+
+                    tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+                        override fun onStart(utteranceId: String?) {}
+                        override fun onDone(utteranceId: String?) {
+                            abandonAudioFocus()
+                        }
+                        @Deprecated("Deprecated in Java")
+                        override fun onError(utteranceId: String?) {
+                            abandonAudioFocus()
+                        }
+                    })
                 }
             }
         }
@@ -123,6 +137,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun startTracking(statusId: Int) {
+        if (currentStatusId != statusId) {
+            lastAnnouncedStopId = null
+            currentStatusId = statusId
+        }
         trackingJob?.cancel()
         trackingJob = serviceScope.launch {
             while (isActive) {
@@ -138,18 +156,36 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
         val status = statusResult.getOrNull() ?: return
         val checkin = status.checkin ?: return
-        val tripId = checkin.trip ?: return
+val tripId = checkin.trip ?: return
 
         val stopoversResult = repo.getStopovers(tripId)
         if (stopoversResult.isFailure) return
 
         val stopovers = stopoversResult.getOrNull() ?: return
 
-        val origin = checkin.origin
+val origin = checkin.origin
         val destination = checkin.destination
 
+        val originIndex = stopovers.indexOfFirst {
+            it.id == origin?.id ||
+            (it.name == origin?.name && it.name != null) ||
+            (it.evaIdentifier == origin?.evaIdentifier && it.evaIdentifier != null)
+        }
+        val destIndex = stopovers.indexOfFirst {
+            it.id == destination?.id ||
+            (it.name == destination?.name && it.name != null) ||
+            (it.evaIdentifier == destination?.evaIdentifier && it.evaIdentifier != null)
+        }
+
+        val validStopovers = if (originIndex != -1) {
+            val endIdx = if (destIndex != -1) destIndex + 1 else stopovers.size
+            stopovers.subList(originIndex, endIdx)
+        } else {
+            stopovers
+        }
+
         // Enrich stopovers with manual times
-        val enrichedStops = stopovers.map { stop ->
+        val enrichedStops = validStopovers.map { stop ->
             when (stop.id) {
                 origin?.id -> if (origin != null) origin.copy(departureReal = checkin.manualDeparture ?: origin.departureReal) else stop
                 destination?.id -> if (destination != null) destination.copy(arrivalReal = checkin.manualArrival ?: destination.arrivalReal) else stop
@@ -223,8 +259,46 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                         val durationToArrival = java.time.Duration.between(now, arrTime)
                         // Announce if arrival is within the next 3 minutes
                         if (durationToArrival.toMinutes() in 0..3) {
+                            // Ensure language and voice are up to date before speaking
+                            val langTag = prefs.getTtsLanguage()
+                            val locale = if (langTag != null) Locale.forLanguageTag(langTag) else Locale.GERMAN
+                            tts?.setLanguage(locale)
+
+                            val voiceName = prefs.getTtsVoice()
+                            if (voiceName != null) {
+                                val availableVoices = tts?.voices
+                                val selectedVoice = availableVoices?.find { it.name == voiceName }
+                                if (selectedVoice != null) {
+                                    tts?.voice = selectedVoice
+                                }
+                            }
+
                             val platformAnnouncement = if (!platform.isNullOrBlank()) " auf Gleis $platform" else ""
-                            val announcement = "Nächste Haltestelle in Kürze, $nextStopName$platformAnnouncement"
+                            val isDestination = nextStop.id == destination?.id
+                            val originStop = checkin.origin
+                            val isOrigin = if (originStop != null) {
+                                nextStop.id == originStop.id || (nextStop.name == originStop.name && originStop.name != null)
+                            } else {
+                                lastAnnouncedStopId == null
+                            }
+
+                            val mode = checkin.lineName ?: "Zug"
+                            val rawOperator = checkin.operator?.name ?: ""
+                            val operatorName = if (rawOperator.startsWith("Betreiber:")) {
+                                rawOperator.substringAfter("Betreiber:").trim()
+                            } else {
+                                rawOperator
+                            }
+
+                            val announcement = if (isOrigin) {
+                                "Der $mode erreicht in kürze deine Anfangshaltestelle $nextStopName bitte einsteigen"
+                            } else if (isDestination) {
+                                "Du erreichst nun in kürze deine Ausstiegshaltestelle $nextStopName ich danke dir mit der Fahrt mit $operatorName"
+                            } else {
+                                "Nächste Haltestelle in Kürze, $nextStopName$platformAnnouncement."
+                            }
+
+                            requestAudioFocus()
                             tts?.speak(announcement, TextToSpeech.QUEUE_ADD, null, "TTS_ANNOUNCEMENT")
                             lastAnnouncedStopId = stopId
                         }
@@ -260,6 +334,34 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             return if (delayMinutes > 0) delayMinutes else null
         } catch (e: Exception) {
             return null
+        }
+    }
+
+private fun requestAudioFocus() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .build()
+            audioManager.requestAudioFocus(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.requestAudioFocus(
+                null,
+                AudioManager.STREAM_MUSIC,
+                AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK
+            )
+        }
+    }
+
+    private fun abandonAudioFocus() {
+        val audioManager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val focusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
+                .build()
+            audioManager.abandonAudioFocusRequest(focusRequest)
+        } else {
+            @Suppress("DEPRECATION")
+            audioManager.abandonAudioFocus(null)
         }
     }
 
