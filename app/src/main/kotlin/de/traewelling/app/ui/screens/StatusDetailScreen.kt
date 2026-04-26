@@ -836,7 +836,12 @@ private fun StopoverItem(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 2.dp)
             ) {
-                val plat = stop.platform ?: stop.departurePlatformReal ?: stop.arrivalPlatformReal
+                val rawPlat = stop.platform ?: stop.departurePlatformReal ?: stop.arrivalPlatformReal
+                // Strip HAFAS sector prefix "9": "91"→"1", "911"→"11", "99"→"9"
+                // Some DB stations encode tracks as sector(9) + number internally
+                val plat = rawPlat?.let { p ->
+                    if (p.length > 1 && p.startsWith("9") && p.drop(1).all { it.isDigit() }) p.drop(1) else p
+                }
                 if (plat != null) {
                     val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
                     Surface(
