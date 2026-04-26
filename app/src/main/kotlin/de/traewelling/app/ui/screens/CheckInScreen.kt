@@ -166,7 +166,7 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
                 }
             else ->
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(uiState.departures, key = { it.tripId }) { departure ->
+                    items(uiState.departures) { departure ->
                         DepartureListItem(departure) { viewModel.selectTrip(departure) }
                         HorizontalDivider()
                     }
@@ -266,7 +266,7 @@ private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState
                 }
             else ->
                 LazyColumn(Modifier.fillMaxSize()) {
-                    items(stopovers, key = { "${it.id}_${it.name}" }) { stop ->
+                    items(stopovers) { stop ->
                         ListItem(
                             headlineContent = {
                                 Text(stop.name ?: "–")    // name is directly on StopStation!
