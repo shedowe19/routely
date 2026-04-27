@@ -53,9 +53,16 @@ interface TraewellingApiService {
     @GET("api/v1/trains/station/nearby")
     suspend fun getNearbyStations(
         @Query("latitude")  lat: Double,
-        @Query("longitude") lon: Double,
-        @Query("distance")  distance: Int? = null
-    ): Response<com.google.gson.JsonElement>
+        @Query("longitude") lon: Double
+    ): Response<com.google.gson.JsonObject>
+
+    @GET("api/v1/stations")
+    suspend fun getStationsInBoundingBox(
+        @Query("min_lat") minLat: Double,
+        @Query("max_lat") maxLat: Double,
+        @Query("min_lon") minLon: Double,
+        @Query("max_lon") maxLon: Double
+    ): Response<StationSearchResponse>
 
     // ─── Departures — uses numeric station ID, NOT the station name! ──────────
 

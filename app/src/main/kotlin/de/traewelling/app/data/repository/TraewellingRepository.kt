@@ -119,24 +119,35 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
         r.body()?.data ?: error("Keine Bahnhöfe gefunden (${r.code()})")
     }
 
-    suspend fun getNearbyStations(lat: Double, lon: Double, distance: Int? = null): Result<List<TrainStation>> = runCatching {
-        val r = api().getNearbyStations(lat, lon, distance)
-        if (!r.isSuccessful) {
+    suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<TrainStation>> = runCatching {
+        // Compute bounding box for 1 KM radius
+        // 1 degree latitude = ~111.32 km. 1 km ≈ 0.008983 degrees.
+        val latOffset = 0.008983
+        val minLat = lat - latOffset
+        val maxLat = lat + latOffset
+
+        // 1 degree longitude = ~111.32 km * cos(latitude).
+        val latRad = Math.toRadians(lat)
+        val lonOffset = 1.0 / (111.32 * Math.cos(latRad))
+        val minLon = lon - lonOffset
+        val maxLon = lon + lonOffset
+
+        val r = api().getStationsInBoundingBox(minLat, maxLat, minLon, maxLon)
+        val data = r.body()?.data
+        if (!r.isSuccessful || data.isNullOrEmpty()) {
             error("Keine Bahnhöfe in der Nähe (${r.code()})")
         }
-        val responseBody = r.body() ?: error("Leere Antwort (${r.code()})")
-        val json = responseBody.asJsonObject
-        val dataNode = json.get("data")
-        if (dataNode == null || dataNode.isJsonNull) {
-            error("Keine Bahnhöfe in der Nähe (${r.code()})")
-        } else if (dataNode.isJsonArray) {
-            val type = object : com.google.gson.reflect.TypeToken<List<TrainStation>>() {}.type
-            gson.fromJson<List<TrainStation>>(dataNode, type)
-        } else {
-            // The API returns a single StationResource object
-            // Wrap it in a list for consistency with searchStations().
-            val station = gson.fromJson(dataNode, TrainStation::class.java)
-            listOf(station)
+
+        // Ensure the distance of retrieved stations are within the 1km circle since BBox returns a square.
+        // Or simply let all BBox stations be shown. For proximity, calculate distance and sort.
+        data.sortedBy { st ->
+            if (st.latitude != null && st.longitude != null) {
+                val dLat = st.latitude - lat
+                val dLon = (st.longitude - lon) * Math.cos(latRad)
+                dLat * dLat + dLon * dLon
+            } else {
+                Double.MAX_VALUE
+            }
         }
     }
 

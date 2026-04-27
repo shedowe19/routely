@@ -56,7 +56,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null, stationQuery = "Stationen in der Nähe...") }
-            repo.getNearbyStations(lat, lon, 1000)
+            repo.getNearbyStations(lat, lon)
                 .onSuccess { stations ->
                     val distinctStations = stations.distinctBy { st -> st.id }
                     if (distinctStations.size == 1) {
