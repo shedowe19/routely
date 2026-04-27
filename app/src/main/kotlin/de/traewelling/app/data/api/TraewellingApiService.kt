@@ -94,9 +94,9 @@ interface TraewellingApiService {
         @Query("page")    page: Int = 1
     ): Response<StatusListResponse>
 
-    @GET("api/v1/user/search")
+    @GET("api/v1/user/search/{query}")
     suspend fun searchUsers(
-        @Query("q") query: String
+        @Path("query") query: String
     ): Response<UserSearchResponse>
 
     // ─── Stopovers (for trip detail view) ─────────────────────────────────────
