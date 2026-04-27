@@ -120,20 +120,69 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
     }
 
     suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<TrainStation>> = runCatching {
-        val r = api().getNearbyStations(lat, lon)
-        if (!r.isSuccessful) {
+        // Compute bounding box for 1 KM radius
+        // 1 degree latitude = ~111.32 km. 1 km ≈ 0.008983 degrees.
+        val latOffset = 0.008983
+        val minLat = lat - latOffset
+        val maxLat = lat + latOffset
+
+        // 1 degree longitude = ~111.32 km * cos(latitude).
+        val latRad = Math.toRadians(lat)
+        val lonOffset = 1.0 / (111.32 * Math.cos(latRad))
+        val minLon = lon - lonOffset
+        val maxLon = lon + lonOffset
+
+        val r = api().getStationsInBoundingBox(minLat, maxLat, minLon, maxLon)
+        val data = r.body()?.data
+        if (!r.isSuccessful || data.isNullOrEmpty()) {
             error("Keine Bahnhöfe in der Nähe (${r.code()})")
         }
-        val json = r.body() ?: error("Leere Antwort (${r.code()})")
-        val dataNode = json.get("data")
-        if (dataNode == null || dataNode.isJsonNull) {
-            error("Keine Bahnhöfe in der Nähe (${r.code()})")
-        } else {
-            // The API returns a single StationResource object (not an array).
-            // Wrap it in a list for consistency with searchStations().
-            val station = gson.fromJson(dataNode, TrainStation::class.java)
-            listOf(station)
+
+        // First sort by distance
+        val sortedData = data.sortedBy { st ->
+            if (st.latitude != null && st.longitude != null) {
+                val dLat = st.latitude - lat
+                val dLon = (st.longitude - lon) * Math.cos(latRad)
+                dLat * dLat + dLon * dLon
+            } else {
+                Double.MAX_VALUE
+            }
         }
+
+        // Custom deduplication to handle variations like "Kaarster See" and "Kaarster See, Kaarst"
+        val distinctStations = mutableListOf<TrainStation>()
+        for (st in sortedData) {
+            val isDuplicate = distinctStations.any { existing ->
+                if (st.latitude != null && st.longitude != null && existing.latitude != null && existing.longitude != null) {
+                    val dLat = st.latitude - existing.latitude
+                    val dLon = (st.longitude - existing.longitude) * Math.cos(Math.toRadians(existing.latitude))
+                    val distSq = dLat * dLat + dLon * dLon
+
+                    // Roughly 200m is about 0.0018 degrees. 0.0018^2 = 0.00000324
+                    val isClose = distSq < 0.0000035
+
+                    val name1 = st.name?.lowercase() ?: ""
+                    val name2 = existing.name?.lowercase() ?: ""
+
+                    val name1NoCity = name1.substringBefore(",").trim()
+                    val name2NoCity = name2.substringBefore(",").trim()
+
+                    val tokens1 = name1NoCity.split(Regex("[\\s\\.-]+")).filter { it.length > 2 }.toSet()
+                    val tokens2 = name2NoCity.split(Regex("[\\s\\.-]+")).filter { it.length > 2 }.toSet()
+
+                    val hasOverlap = tokens1.intersect(tokens2).isNotEmpty() || name1.contains(name2NoCity) || name2.contains(name1NoCity)
+
+                    isClose && hasOverlap
+                } else {
+                    st.name == existing.name
+                }
+            }
+            if (!isDuplicate) {
+                distinctStations.add(st)
+            }
+        }
+
+        distinctStations
     }
 
     // ─── Check-in ─────────────────────────────────────────────────────────────

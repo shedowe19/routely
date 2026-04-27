@@ -16,8 +16,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
@@ -79,8 +77,6 @@ fun CheckInScreen(viewModel: CheckInViewModel) {
 
 @Composable
 private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
-    val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     val context = LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
@@ -125,8 +121,7 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
                     }
                 },
                 modifier = Modifier
-                    .weight(1f)
-                    .focusRequester(focusRequester),
+                    .weight(1f),
                 singleLine = true
             )
 
