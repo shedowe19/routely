@@ -21,7 +21,22 @@ jobs:
       contents: write
     steps:
       - name: Checkout Repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
+
+      - name: Rename index.md and fix internal links
+        run: |
+          # Prüfen, ob die index.md im Wiki-Ordner existiert
+          if [ -f docs/wiki/index.md ]; then
+            
+            # 1. Die Datei selbst in Home.md umbenennen
+            mv docs/wiki/index.md docs/wiki/Home.md
+            
+            # 2. In allen .md-Dateien im Ordner nach Links suchen und anpassen.
+            # Ersetzt den String "index.md" durch "Home.md" überall dort, wo er auftaucht.
+            find docs/wiki -name "*.md" -type f -exec sed -i 's/index\.md/Home\.md/g' {} +
+            
+            echo "index.md wurde zu Home.md umbenannt und alle Referenzen wurden aktualisiert."
+          fi
 
       - name: Sync docs to wiki
         uses: newrelic/wiki-sync-action@main
