@@ -1,0 +1,33 @@
+name: Wiki Sync
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "docs/wiki/**"
+  workflow_dispatch:
+  repository_dispatch:
+    types: [docs]
+
+env:
+  GIT_AUTHOR_NAME: Actionbot
+  GIT_AUTHOR_EMAIL: actions@github.com
+
+jobs:
+  job-sync-docs-to-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v6
+
+      - name: Sync docs to wiki
+        uses: newrelic/wiki-sync-action@main
+        with:
+          source: docs/wiki
+          destination: wiki
+          token: ${{ secrets.WIKI_TOKEN }}
+          gitAuthorName: ${{ env.GIT_AUTHOR_NAME }}
+          gitAuthorEmail: ${{ env.GIT_AUTHOR_EMAIL }}
