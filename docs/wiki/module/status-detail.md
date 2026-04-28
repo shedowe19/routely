@@ -33,7 +33,9 @@ Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Der 
 
 ### Timeline-Darstellung (StatusDetailScreen)
 Die Timeline zeigt:
-- Fortschritts-Balken zwischen Haltestellen
+- Fortschritts-Balken zwischen Haltestellen, weich interpoliert (via `animateFloatAsState` mit LinearEasing)
+- Weiche Status-Übergänge zwischen Ladezuständen, Error und Timeline via `AnimatedContent`
+- Gestaffelte Fade-in/Slide-in Animationen der Timeline-Einträge via `AnimatedVisibility`
 - "LIVE" Badge mit Puls-Animation wenn Status heute ist
 - Verspätungs-Badges (grün/rot)
 - "HALT ENTFÄLLT" für gestrichene Halte
