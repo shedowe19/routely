@@ -1,5 +1,6 @@
 package de.traewelling.app.ui.screens
 
+import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -173,24 +174,39 @@ fun StatusDetailScreen(
             )
         }
     ) { innerPadding ->
-        Column(Modifier.fillMaxSize().padding(innerPadding)) {
-            when {
-                uiState.isLoading && uiState.status == null -> {
+        AnimatedContent(
+            targetState = when {
+                uiState.isLoading && uiState.status == null -> "LOADING"
+                uiState.error != null && uiState.status == null -> "ERROR"
+                else -> "CONTENT"
+            },
+            transitionSpec = {
+                fadeIn(animationSpec = tween(300)) togetherWith fadeOut(animationSpec = tween(300))
+            },
+            modifier = Modifier.fillMaxSize().padding(innerPadding),
+            label = "ContentTransition"
+        ) { targetState ->
+            when (targetState) {
+                "LOADING" -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
                             CircularProgressIndicator()
                             Spacer(Modifier.height(12.dp))
-                            Text("Lade Fahrt-Details…",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+                            Text(
+                                "Lade Fahrt-Details…",
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
                         }
                     }
                 }
-                uiState.error != null && uiState.status == null -> {
+                "ERROR" -> {
                     Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
                         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.ErrorOutline, null,
+                            Icon(
+                                Icons.Default.ErrorOutline, null,
                                 modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.error)
+                                tint = MaterialTheme.colorScheme.error
+                            )
                             Spacer(Modifier.height(12.dp))
                             Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
                             Spacer(Modifier.height(16.dp))
@@ -198,7 +214,7 @@ fun StatusDetailScreen(
                         }
                     }
                 }
-                else -> {
+                "CONTENT" -> {
                     StatusDetailContent(
                         uiState = uiState,
                         onUserClick = onUserClick
@@ -247,53 +263,85 @@ private fun StatusDetailContent(
     val isLoading = uiState.isLoading
     val hasStopovers = stopovers.isNotEmpty()
 
+    // State to trigger enter animations
+    var isVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        isVisible = true
+    }
+
     LazyColumn(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
         // Status header card
         item {
-            StatusHeaderCard(status, onUserClick)
+            AnimatedVisibility(
+                visible = isVisible,
+                enter = fadeIn(animationSpec = tween(400)) + slideInVertically(
+                    initialOffsetY = { 50 },
+                    animationSpec = tween(400)
+                )
+            ) {
+                StatusHeaderCard(status, onUserClick)
+            }
         }
 
         // Trip info card
         if (checkin != null) {
             item {
-                TripInfoCard(status)
+                AnimatedVisibility(
+                    visible = isVisible,
+                    enter = fadeIn(animationSpec = tween(400, delayMillis = 100)) + slideInVertically(
+                        initialOffsetY = { 50 },
+                        animationSpec = tween(400, delayMillis = 100)
+                    )
+                ) {
+                    TripInfoCard(status)
+                }
             }
         }
 
         // Stopovers header
         if (hasStopovers) {
             item {
-                Spacer(Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                AnimatedVisibility(
+                    visible = isVisible,
+                    enter = fadeIn(animationSpec = tween(400, delayMillis = 200)) + slideInVertically(
+                        initialOffsetY = { 50 },
+                        animationSpec = tween(400, delayMillis = 200)
+                    )
                 ) {
-                    Icon(
-                        Icons.Default.Timeline, null,
-                        modifier = Modifier.size(18.dp),
-                        tint = DeepIndigo.copy(alpha = 0.5f)
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        "Haltestellenverlauf",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.weight(1f)
-                    )
-                    Surface(
-                        color = DeepIndigo.copy(alpha = 0.08f),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text(
-                            "${stopovers.size} Halte",
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = DeepIndigo.copy(alpha = 0.6f),
-                            fontWeight = FontWeight.Medium
-                        )
+                    Column {
+                        Spacer(Modifier.height(8.dp))
+                        Row(
+                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Timeline, null,
+                                modifier = Modifier.size(18.dp),
+                                tint = DeepIndigo.copy(alpha = 0.5f)
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Haltestellenverlauf",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Surface(
+                                color = DeepIndigo.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text(
+                                    "${stopovers.size} Halte",
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = DeepIndigo.copy(alpha = 0.6f),
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -308,22 +356,32 @@ private fun StatusDetailContent(
                 val prevStop = stopovers.getOrNull(index - 1)
                 val nextStop = stopovers.getOrNull(index + 1)
 
-                StopoverItem(
-                    stop = stop,
-                    prevStop = prevStop,
-                    nextStop = nextStop,
-                    now = now,
-                    index = index,
-                    originIndex = originIdx,
-                    destinationIndex = destinationIdx,
-                    isFirst = index == firstRealStopIndex,
-                    isActualFirst = index == 0,
-                    isLast = index == lastRealStopIndex,
-                    isActualLast = index == stopovers.lastIndex,
-                    isOrigin = isOrigin,
-                    isDestination = isDestination,
-                    isInRange = isInRange
-                )
+                AnimatedVisibility(
+                    visible = isVisible,
+                    enter = fadeIn(
+                        animationSpec = tween(400, delayMillis = 200 + (index * 50).coerceAtMost(1000))
+                    ) + slideInVertically(
+                        initialOffsetY = { 50 },
+                        animationSpec = tween(400, delayMillis = 200 + (index * 50).coerceAtMost(1000))
+                    )
+                ) {
+                    StopoverItem(
+                        stop = stop,
+                        prevStop = prevStop,
+                        nextStop = nextStop,
+                        now = now,
+                        index = index,
+                        originIndex = originIdx,
+                        destinationIndex = destinationIdx,
+                        isFirst = index == firstRealStopIndex,
+                        isActualFirst = index == 0,
+                        isLast = index == lastRealStopIndex,
+                        isActualLast = index == stopovers.lastIndex,
+                        isOrigin = isOrigin,
+                        isDestination = isDestination,
+                        isInRange = isInRange
+                    )
+                }
             }
         }
         if (isLoading && !hasStopovers) {
@@ -606,28 +664,40 @@ private fun StopoverItem(
     }
 
     // Progress for the segment STARTING at this stop and going to the next
-    var outgoingProgress = 0f
+    var rawOutgoingProgress = 0f
     if (stopZdt != null && nextZdt != null) {
         if (now.isAfter(stopZdt) && now.isBefore(nextZdt)) {
             val total = java.time.Duration.between(stopZdt, nextZdt).toMillis()
             val elapsed = java.time.Duration.between(stopZdt, now).toMillis()
-            outgoingProgress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            rawOutgoingProgress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
         } else if (now.isAfter(nextZdt)) {
-            outgoingProgress = 1f
+            rawOutgoingProgress = 1f
         }
     }
     
     // Progress for the segment COMING FROM the previous stop to this one
-    var incomingProgress = 0f
+    var rawIncomingProgress = 0f
     if (prevZdt != null && stopZdt != null) {
         if (now.isAfter(prevZdt) && now.isBefore(stopZdt)) {
             val total = java.time.Duration.between(prevZdt, stopZdt).toMillis()
             val elapsed = java.time.Duration.between(prevZdt, now).toMillis()
-            incomingProgress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
+            rawIncomingProgress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
         } else if (now.isAfter(stopZdt)) {
-            incomingProgress = 1f
+            rawIncomingProgress = 1f
         }
     }
+
+    val outgoingProgress by animateFloatAsState(
+        targetValue = rawOutgoingProgress,
+        animationSpec = tween(durationMillis = 1000, easing = LinearEasing),
+        label = "outgoingProgress"
+    )
+
+    val incomingProgress by animateFloatAsState(
+        targetValue = rawIncomingProgress,
+        animationSpec = tween(durationMillis = 1000, easing = LinearEasing),
+        label = "incomingProgress"
+    )
 
     val isPast = stopZdt?.isBefore(now) ?: false
     val trainIsHere = stopZdt != null && now.isAfter(stopZdt.minusMinutes(1)) && now.isBefore(stopZdt.plusMinutes(1))
