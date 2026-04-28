@@ -4,7 +4,7 @@
 Akzeptiert
 
 ## Datum
-2024-04-28
+2026-04-28
 
 ## Kontext
 Die Android-App war zuvor direkt unter dem Namen "Träwelling" bzw. "Träwelling Android" bekannt. Um eine stärkere und eigenständigere Client-Identität zu etablieren und Verwechslungen mit der offiziellen Web-Plattform "Träwelling" zu vermeiden, wurde beschlossen, die App in "Routely" umzubenennen.

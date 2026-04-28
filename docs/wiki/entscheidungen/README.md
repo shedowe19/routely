@@ -12,4 +12,4 @@
 
 - [Architektur Entscheidungen](../architektur/entscheidungen.md)
 - [ADR Template](./adr-template.md)
-- [App-Umbenennung zu "Routely"](./2024-04-28-app-rename-routely.md)
+- [App-Umbenennung zu "Routely"](./2026-04-28-app-rename-routely.md)
