@@ -104,9 +104,9 @@ private val LightColorScheme = lightColorScheme(
 // ─── Dark Color Scheme ───────────────────────────────────────────────────────
 
 private val DarkColorScheme = darkColorScheme(
-    primary            = DeepIndigo,
+    primary            = IndigoLight,
     onPrimary          = Color.White,
-    primaryContainer   = IndigoLight,
+    primaryContainer   = DeepIndigo,
     onPrimaryContainer = Color.White,
     secondary          = TealAccent,
     onSecondary        = Color.White,
@@ -131,9 +131,9 @@ private val DarkColorScheme = darkColorScheme(
 // ─── AMOLED Color Scheme ─────────────────────────────────────────────────────
 
 private val AmoledColorScheme = darkColorScheme(
-    primary            = DeepIndigo,
+    primary            = IndigoLight,
     onPrimary          = Color.White,
-    primaryContainer   = IndigoLight,
+    primaryContainer   = DeepIndigo,
     onPrimaryContainer = Color.White,
     secondary          = TealAccent,
     onSecondary        = Color.White,

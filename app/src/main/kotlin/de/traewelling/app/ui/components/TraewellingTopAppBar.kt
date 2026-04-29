@@ -11,7 +11,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
-import de.traewelling.app.ui.theme.DeepIndigo
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -25,7 +24,10 @@ fun TraewellingTopAppBar(
             .fillMaxWidth()
             .background(
                 Brush.horizontalGradient(
-                    colors = listOf(DeepIndigo, Color(0xFF283593))
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primary,
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+                    )
                 )
             )
     ) {
