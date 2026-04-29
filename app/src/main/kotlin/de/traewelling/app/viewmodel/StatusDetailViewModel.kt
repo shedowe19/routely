@@ -170,7 +170,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     private fun propagateDelays(stops: List<StopStation>): List<StopStation> {
         var currentDelayMinutes: Long = 0
-        var lastPlannedTime: ZonedDateTime? = null
+        var lastDeparturePlanned: ZonedDateTime? = null
         var fractionalRecovery = 0.0
 
         val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
@@ -197,51 +197,74 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 null
             }
 
-            // Intelligent delay recovery based on elapsed travel time
-            val currentPlannedTime = plannedArrivalZdt ?: plannedDepartureZdt
-            if (currentPlannedTime != null && lastPlannedTime != null && currentDelayMinutes > 0) {
-                val elapsedMinutes = ChronoUnit.MINUTES.between(lastPlannedTime, currentPlannedTime).coerceAtLeast(0)
-                // Assume train recovers ~1 minute per 10 minutes of travel (10% recovery rate)
-                fractionalRecovery += elapsedMinutes * 0.1
-                if (fractionalRecovery >= 1.0) {
-                    val recoveredMins = fractionalRecovery.toLong()
-                    currentDelayMinutes = (currentDelayMinutes - recoveredMins).coerceAtLeast(0)
-                    fractionalRecovery -= recoveredMins
-                }
-            }
-
-            // Process Arrival
+            // 1. Process Travel Time Recovery (Arrival)
             if (plannedArrivalZdt != null) {
                 if (realArrivalZdt != null && !realArrivalZdt.isEqual(plannedArrivalZdt)) {
-                    currentDelayMinutes = ChronoUnit.MINUTES.between(plannedArrivalZdt, realArrivalZdt)
+                    // Always trust the API if it provides real-time data different from planned
+                    currentDelayMinutes = ChronoUnit.MINUTES.between(plannedArrivalZdt, realArrivalZdt).coerceAtLeast(0)
                     fractionalRecovery = 0.0
-                } else if (currentDelayMinutes != 0L && (stop.arrivalReal == null || stop.arrivalReal == stop.arrivalPlanned)) {
-                    val newRealArrival = plannedArrivalZdt.plusMinutes(currentDelayMinutes)
-                    updatedStop = updatedStop.copy(
-                        arrivalReal = newRealArrival.format(formatter),
-                        isArrivalDelayed = currentDelayMinutes > 0
-                    )
-                    delayUpdated = true
+                } else {
+                    // API missing real time or it equals planned time, apply propagated delay
+                    if (currentDelayMinutes > 0 && lastDeparturePlanned != null) {
+                        val travelTime = ChronoUnit.MINUTES.between(lastDeparturePlanned, plannedArrivalZdt).coerceAtLeast(0)
+
+                        // Buffer: 5% of travel time
+                        fractionalRecovery += travelTime * 0.05
+
+                        if (fractionalRecovery >= 1.0) {
+                            val recoveredMins = fractionalRecovery.toLong()
+                            currentDelayMinutes = (currentDelayMinutes - recoveredMins).coerceAtLeast(0)
+                            fractionalRecovery -= recoveredMins
+                        }
+                    }
+
+                    if (currentDelayMinutes != 0L && (stop.arrivalReal == null || stop.arrivalReal == stop.arrivalPlanned)) {
+                        val newRealArrival = plannedArrivalZdt.plusMinutes(currentDelayMinutes)
+                        updatedStop = updatedStop.copy(
+                            arrivalReal = newRealArrival.format(formatter),
+                            isArrivalDelayed = currentDelayMinutes > 0
+                        )
+                        delayUpdated = true
+                    }
                 }
             }
 
-            // Process Departure
+            // 2. Process Dwell Time Recovery (Departure)
             if (plannedDepartureZdt != null) {
                 if (realDepartureZdt != null && !realDepartureZdt.isEqual(plannedDepartureZdt)) {
-                    currentDelayMinutes = ChronoUnit.MINUTES.between(plannedDepartureZdt, realDepartureZdt)
+                    // Always trust API for departure real-time
+                    currentDelayMinutes = ChronoUnit.MINUTES.between(plannedDepartureZdt, realDepartureZdt).coerceAtLeast(0)
                     fractionalRecovery = 0.0
-                } else if (currentDelayMinutes != 0L && (stop.departureReal == null || stop.departureReal == stop.departurePlanned)) {
-                    val newRealDeparture = plannedDepartureZdt.plusMinutes(currentDelayMinutes)
-                    updatedStop = updatedStop.copy(
-                        departureReal = newRealDeparture.format(formatter),
-                        isDepartureDelayed = currentDelayMinutes > 0
-                    )
-                    delayUpdated = true
-                }
-            }
+                } else {
+                    // API missing or equals planned, calculate departure delay
+                    if (currentDelayMinutes > 0 && plannedArrivalZdt != null && plannedDepartureZdt.isAfter(plannedArrivalZdt)) {
+                        val dwellTime = ChronoUnit.MINUTES.between(plannedArrivalZdt, plannedDepartureZdt)
+                        // If stop is longer than 1 minute, the excess time can be used for recovery
+                        if (dwellTime > 1) {
+                            val recoveryFromDwell = dwellTime - 1
+                            fractionalRecovery += recoveryFromDwell
+                        }
 
-            if (currentPlannedTime != null) {
-                lastPlannedTime = plannedDepartureZdt ?: plannedArrivalZdt ?: currentPlannedTime
+                        if (fractionalRecovery >= 1.0) {
+                            val recoveredMins = fractionalRecovery.toLong()
+                            currentDelayMinutes = (currentDelayMinutes - recoveredMins).coerceAtLeast(0)
+                            fractionalRecovery -= recoveredMins
+                        }
+                    }
+
+                    if (currentDelayMinutes != 0L && (stop.departureReal == null || stop.departureReal == stop.departurePlanned)) {
+                        val newRealDeparture = plannedDepartureZdt.plusMinutes(currentDelayMinutes)
+                        updatedStop = updatedStop.copy(
+                            departureReal = newRealDeparture.format(formatter),
+                            isDepartureDelayed = currentDelayMinutes > 0
+                        )
+                        delayUpdated = true
+                    }
+                }
+                lastDeparturePlanned = plannedDepartureZdt
+            } else if (plannedArrivalZdt != null) {
+                // If it's a destination station (no departure), update last planned for completeness
+                lastDeparturePlanned = plannedArrivalZdt
             }
 
             if (delayUpdated) updatedStop else stop
