@@ -161,18 +161,18 @@ private fun ProfileHeader(user: User) {
                 modifier = Modifier
                     .size(96.dp)
                     .clip(CircleShape)
-                    .border(3.dp, DeepIndigo.copy(alpha = 0.2f), CircleShape)
+                    .border(3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape)
             )
         } else {
             Box(
                 modifier = Modifier
                     .size(96.dp)
-                    .background(DeepIndigo.copy(alpha = 0.08f), CircleShape),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Person, null,
                     modifier = Modifier.size(48.dp),
-                    tint = DeepIndigo.copy(alpha = 0.5f))
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -181,14 +181,14 @@ private fun ProfileHeader(user: User) {
             fontWeight = FontWeight.Bold, fontSize = 24.sp
         )
         Surface(
-            color = DeepIndigo.copy(alpha = 0.08f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
             modifier = Modifier.padding(top = 4.dp)
         ) {
             Text(
                 "@${user.username}",
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                color = DeepIndigo.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -211,7 +211,7 @@ private fun ProfileHeader(user: User) {
 @Composable
 private fun StatChip(label: String, value: String) {
     Surface(
-        color = DeepIndigo.copy(alpha = 0.05f),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     ) {
         Column(
@@ -219,9 +219,9 @@ private fun StatChip(label: String, value: String) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                color = DeepIndigo)
+                color = MaterialTheme.colorScheme.primary)
             Text(label, style = MaterialTheme.typography.labelSmall,
-                color = DeepIndigo.copy(alpha = 0.6f))
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
         }
     }
 }
@@ -238,7 +238,7 @@ private fun StatisticsSection(user: User?, stats: StatisticsData) {
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(3.dp),
-        colors = CardDefaults.cardColors(containerColor = androidx.compose.ui.graphics.Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(16.dp)) {
             Text("Fahrten (letzte 28 Tage)",
@@ -252,11 +252,11 @@ private fun StatisticsSection(user: User?, stats: StatisticsData) {
             }
             if (categories.isNotEmpty()) {
                 Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = DeepIndigo.copy(alpha = 0.1f))
+                HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
                 Spacer(Modifier.height(12.dp))
                 Text("Verkehrsmittel", style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = DeepIndigo.copy(alpha = 0.6f))
+                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
                 Spacer(Modifier.height(8.dp))
                 categories.take(4).forEach { cat ->
                     Row(
@@ -288,10 +288,10 @@ private fun StatItem(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
-            color = DeepIndigo.copy(alpha = 0.1f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
             shape = CircleShape
         ) {
-            Icon(icon, null, tint = DeepIndigo, modifier = Modifier.padding(8.dp).size(24.dp))
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(24.dp))
         }
         Spacer(Modifier.height(8.dp))
         Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)

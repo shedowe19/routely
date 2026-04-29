@@ -159,7 +159,7 @@ private fun NotificationItem(notification: Notification, onClick: () -> Unit) {
         else -> MaterialTheme.colorScheme.primary
     }
 
-    val bgColor = if (isUnread) DeepIndigo.copy(alpha = 0.05f) else androidx.compose.ui.graphics.Color.White
+    val bgColor = if (isUnread) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surface
 
     Card(
         modifier = Modifier
@@ -186,7 +186,7 @@ private fun NotificationItem(notification: Notification, onClick: () -> Unit) {
                     notification.lead ?: "",
                     fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = if (isUnread) DeepIndigo else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
+                    color = if (isUnread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
                 )
                 if (!notification.notice.isNullOrBlank()) {
                     Spacer(Modifier.height(4.dp))

@@ -171,18 +171,18 @@ private fun UserProfileHeader(
                 modifier = Modifier
                     .size(96.dp)
                     .clip(CircleShape)
-                    .border(3.dp, DeepIndigo.copy(alpha = 0.2f), CircleShape)
+                    .border(3.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.2f), CircleShape)
             )
         } else {
             Box(
                 modifier = Modifier
                     .size(96.dp)
-                    .background(DeepIndigo.copy(alpha = 0.08f), CircleShape),
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(Icons.Default.Person, null,
                     modifier = Modifier.size(48.dp),
-                    tint = DeepIndigo.copy(alpha = 0.5f))
+                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
             }
         }
         Spacer(Modifier.height(16.dp))
@@ -193,14 +193,14 @@ private fun UserProfileHeader(
             fontWeight = FontWeight.Bold, fontSize = 24.sp
         )
         Surface(
-            color = DeepIndigo.copy(alpha = 0.08f),
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
             shape = androidx.compose.foundation.shape.RoundedCornerShape(6.dp),
             modifier = Modifier.padding(top = 4.dp)
         ) {
             Text(
                 "@${user.username}",
                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                color = DeepIndigo.copy(alpha = 0.8f),
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium
             )
@@ -248,7 +248,7 @@ private fun UserProfileHeader(
                 Button(
                     onClick = onToggleFollow,
                     enabled = !isFollowLoading,
-                    colors = ButtonDefaults.buttonColors(containerColor = DeepIndigo)
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                 ) {
                     if (isFollowLoading) {
                         CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp,
@@ -274,7 +274,7 @@ private fun UserProfileHeader(
 @Composable
 private fun UserStatChip(label: String, value: String) {
     Surface(
-        color = DeepIndigo.copy(alpha = 0.05f),
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.05f),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
     ) {
         Column(
@@ -282,9 +282,9 @@ private fun UserStatChip(label: String, value: String) {
             modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
             Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                color = DeepIndigo)
+                color = MaterialTheme.colorScheme.primary)
             Text(label, style = MaterialTheme.typography.labelSmall,
-                color = DeepIndigo.copy(alpha = 0.6f))
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
         }
     }
 }

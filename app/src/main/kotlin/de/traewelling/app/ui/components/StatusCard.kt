@@ -42,7 +42,7 @@ fun StatusCard(
             .clickable { onStatusClick() },
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(3.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
 
@@ -60,19 +60,19 @@ fun StatusCard(
                         modifier = Modifier
                             .size(44.dp)
                             .clip(CircleShape)
-                            .border(2.dp, DeepIndigo.copy(alpha = 0.15f), CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
                     )
                     Spacer(Modifier.width(12.dp))
                 } else {
                     Box(
                         modifier = Modifier
                             .size(44.dp)
-                            .background(DeepIndigo.copy(alpha = 0.08f), CircleShape),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Person, null,
                             modifier = Modifier.size(24.dp),
-                            tint = DeepIndigo.copy(alpha = 0.5f))
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                     }
                     Spacer(Modifier.width(12.dp))
                 }
@@ -84,14 +84,14 @@ fun StatusCard(
                     )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Surface(
-                            color = DeepIndigo.copy(alpha = 0.06f),
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
                             shape = RoundedCornerShape(4.dp)
                         ) {
                             Text(
                                 "@${user?.username ?: ""}",
                                 modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = DeepIndigo.copy(alpha = 0.6f)
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
                             )
                         }
                         Spacer(Modifier.width(6.dp))

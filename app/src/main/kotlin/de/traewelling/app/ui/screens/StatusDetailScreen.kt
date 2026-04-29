@@ -320,7 +320,7 @@ private fun StatusDetailContent(
                             Icon(
                                 Icons.Default.Timeline, null,
                                 modifier = Modifier.size(18.dp),
-                                tint = DeepIndigo.copy(alpha = 0.5f)
+                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                             )
                             Spacer(Modifier.width(8.dp))
                             Text(
@@ -330,14 +330,14 @@ private fun StatusDetailContent(
                                 modifier = Modifier.weight(1f)
                             )
                             Surface(
-                                color = DeepIndigo.copy(alpha = 0.08f),
+                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
                                 Text(
                                     "${stopovers.size} Halte",
                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                                     style = MaterialTheme.typography.labelSmall,
-                                    color = DeepIndigo.copy(alpha = 0.6f),
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
                                     fontWeight = FontWeight.Medium
                                 )
                             }
@@ -407,7 +407,7 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
         modifier = Modifier.fillMaxWidth().padding(16.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(3.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(16.dp)) {
             // User row
@@ -419,18 +419,18 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
                         modifier = Modifier
                             .size(48.dp)
                             .clip(CircleShape)
-                            .border(2.dp, DeepIndigo.copy(alpha = 0.15f), CircleShape)
+                            .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape)
                     )
                 } else {
                     Box(
                         modifier = Modifier
                             .size(48.dp)
-                            .background(DeepIndigo.copy(alpha = 0.08f), CircleShape),
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Icon(Icons.Default.Person, null,
                             modifier = Modifier.size(28.dp),
-                            tint = DeepIndigo.copy(alpha = 0.5f))
+                            tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
                     }
                 }
                 Spacer(Modifier.width(12.dp))
@@ -441,14 +441,14 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
                         style = MaterialTheme.typography.bodyLarge
                     )
                     Surface(
-                        color = DeepIndigo.copy(alpha = 0.06f),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.06f),
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
                             "@${user?.username ?: ""}",
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 1.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = DeepIndigo.copy(alpha = 0.5f)
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                         )
                     }
                 }
@@ -473,7 +473,7 @@ private fun TripInfoCard(status: Status) {
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
         shape = RoundedCornerShape(16.dp),
         elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White)
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(Modifier.padding(16.dp)) {
             // Line name + category
@@ -547,7 +547,7 @@ private fun TripInfoCard(status: Status) {
                     StatPill(Icons.Default.Route, "%.1f km".format(checkin.distanceMeters / 1000.0), TealAccent)
                 }
                 if (checkin.duration != null) {
-                    StatPill(Icons.Default.Schedule, "${checkin.duration} min", DeepIndigo)
+                    StatPill(Icons.Default.Schedule, "${checkin.duration} min", MaterialTheme.colorScheme.primary)
                 }
                 if (checkin.points != null) {
                     StatPill(Icons.Default.Stars, "${checkin.points} Pkt", AmberAccent)
