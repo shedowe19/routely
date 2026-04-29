@@ -24,8 +24,8 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 ### Auto-Refresh
 Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Der aktualisierte Status wird im UIState gespeichert.
 
-### Intelligente Verspätungsvererbung
-Vor der Speicherung des Haltestellenverlaufs im `UIState` (sowohl beim Initialladen als auch beim Auto-Refresh) durchläuft die Haltestellen-Liste die Methode `propagateDelays()`. Diese Funktion gleicht Plan- und Echtzeitdaten ab und berechnet die aktuelle Verspätung in Minuten. Wenn eine nachfolgende Haltestelle keine Echtzeitverspätung von der API liefert (d.h. Plan-Zeit entspricht Echt-Zeit oder Echt-Zeit fehlt), wird die zuletzt bekannte, kumulierte Verspätung intelligent "nach unten" weitervererbt und auf Ankunft und Abfahrt angewendet, um unrealistische Zeitangaben in der Timeline zu verhindern.
+### Intelligente Verspätungsvererbung und Verspätungsabbau (Delay Recovery)
+Vor der Speicherung des Haltestellenverlaufs im `UIState` (sowohl beim Initialladen als auch beim Auto-Refresh) durchläuft die Haltestellen-Liste die Methode `propagateDelays()`. Diese Funktion gleicht Plan- und Echtzeitdaten ab und berechnet die aktuelle Verspätung in Minuten. Wenn eine nachfolgende Haltestelle keine Echtzeitverspätung von der API liefert (d.h. Plan-Zeit entspricht Echt-Zeit oder Echt-Zeit fehlt), wird die zuletzt bekannte Verspätung intelligent "nach unten" weitervererbt. Um Pufferzeiten zu simulieren, baut die App die vererbte Verspätung bei nachfolgenden Stationen anteilig ab (ca. 10% Verspätungsabbau pro Fahrtzeit-Minute), sodass die geschätzte Ankunftszeit am Ziel realistischer abnimmt und nicht der exakt selbe Verspätungswert bis zur Endstation mitgeschleppt wird.
 
 ### Bearbeitung (nur eigene Statusen)
 - `startEditing()`: Setzt Bearbeitungszustand
