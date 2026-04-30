@@ -61,6 +61,15 @@ Die Timeline zeigt:
 | `isEditing` | Boolean | Bearbeitungsmodus |
 | `isDeleting` | Boolean | Löschvorgang |
 | `lastUpdated` | Long | Timestamp letzte Aktualisierung |
+| `editingStopoverId` | Int? | ID der derzeit bearbeiteten Haltestelle |
+| `editingStopoverDeparture` | String | Temporärer ISO-String für die manuelle Abfahrt |
+| `manualStopoverDepartures` | Map<Int, String> | Gespeicherte manuelle Abfahrtszeiten pro Haltestellen-ID |
+
+## Abhängigkeiten
+
+- TraewellingRepository (API-Aufrufe, Stopover-Daten)
+- PreferencesManager (Benutzer-Einstellungen)
+- Compose Animations (`animateFloatAsState`, `AnimatedVisibility`)
 
 ## Offene Fragen
 

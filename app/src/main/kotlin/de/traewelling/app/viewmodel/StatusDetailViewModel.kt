@@ -453,6 +453,16 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     fun saveStopoverDeparture() {
         val id = _uiState.value.editingStopoverId ?: return
         val time = _uiState.value.editingStopoverDeparture
+
+        if (time.isNotBlank()) {
+            try {
+                ZonedDateTime.parse(time)
+            } catch (e: DateTimeParseException) {
+                Log.w("StatusDetailViewModel", "Validation failed for manual time: $time", e)
+                return
+            }
+        }
+
         _uiState.update { state ->
             val newMap = state.manualStopoverDepartures.toMutableMap()
             if (time.isBlank()) {
