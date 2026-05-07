@@ -22,13 +22,14 @@ class TripWidgetProvider : AppWidgetProvider() {
             val time = intent.getStringExtra("time") ?: ""
             val platform = intent.getStringExtra("platform") ?: ""
             val delay = intent.getIntExtra("delay", -1)
+            val isBus = intent.getBooleanExtra("isBus", false)
 
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val thisWidget = ComponentName(context, TripWidgetProvider::class.java)
             val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
 
             for (appWidgetId in appWidgetIds) {
-                updateAppWidget(context, appWidgetManager, appWidgetId, lineName, nextStop, destination, time, platform, delay)
+                updateAppWidget(context, appWidgetManager, appWidgetId, lineName, nextStop, destination, time, platform, delay, isBus)
             }
         }
     }
@@ -60,7 +61,8 @@ class TripWidgetProvider : AppWidgetProvider() {
         destination: String,
         time: String,
         platform: String,
-        delay: Int
+        delay: Int,
+        isBus: Boolean = false
     ) {
         val views = RemoteViews(context.packageName, R.layout.trip_widget)
 
@@ -81,7 +83,8 @@ class TripWidgetProvider : AppWidgetProvider() {
 
         if (platform.isNotBlank()) {
             views.setViewVisibility(R.id.widget_platform, View.VISIBLE)
-            views.setTextViewText(R.id.widget_platform, "Gl. $platform")
+            val platLabel = if (isBus) "Hst." else "Gl."
+            views.setTextViewText(R.id.widget_platform, "$platLabel $platform")
         } else {
             views.setViewVisibility(R.id.widget_platform, View.GONE)
         }

@@ -281,7 +281,9 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
                     val plat = departure.platform?.takeIf { it.isNotBlank() }
                     if (plat != null) {
                         Spacer(Modifier.width(8.dp))
-                        Text("Gleis $plat", style = MaterialTheme.typography.bodySmall,
+                        val isBus = departure.line?.product == "bus" || departure.line?.name?.startsWith("Bus", ignoreCase = true) == true
+                        val platLabel = if (isBus) "Hst." else "Gleis"
+                        Text("$platLabel $plat", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
                     }
                 }
@@ -376,7 +378,9 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                     InfoRow(Icons.Default.LocationOn,  "Nach",    uiState.selectedDestination?.name ?: "–")
                     InfoRow(Icons.Default.Schedule,    "Abfahrt", depTime)
                     dep?.platform?.takeIf { it.isNotBlank() }?.let {
-                        InfoRow(Icons.Default.ConfirmationNumber, "Gleis", it)
+                        val isBus = dep.line?.product == "bus" || dep.line?.name?.startsWith("Bus", ignoreCase = true) == true
+                        val platLabel = if (isBus) "Hst." else "Gleis"
+                        InfoRow(Icons.Default.ConfirmationNumber, platLabel, it)
                     }
                 }
             }

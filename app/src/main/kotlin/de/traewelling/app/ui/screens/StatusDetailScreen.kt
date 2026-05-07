@@ -356,6 +356,8 @@ private fun StatusDetailContent(
                 val prevStop = stopovers.getOrNull(index - 1)
                 val nextStop = stopovers.getOrNull(index + 1)
 
+                val isBusType = checkin?.lineName?.startsWith("Bus", ignoreCase = true) == true || checkin?.category == "bus"
+
                 AnimatedVisibility(
                     visible = isVisible,
                     enter = fadeIn(
@@ -371,6 +373,7 @@ private fun StatusDetailContent(
                         nextStop = nextStop,
                         now = now,
                         index = index,
+                        isBus = isBusType,
                         originIndex = originIdx,
                         destinationIndex = destinationIdx,
                         isFirst = index == firstRealStopIndex,
@@ -635,6 +638,7 @@ private fun StopoverItem(
     nextStop: StopStation?,
     now: ZonedDateTime,
     index: Int,
+    isBus: Boolean = false,
     originIndex: Int,
     destinationIndex: Int,
     isFirst: Boolean,
@@ -984,7 +988,11 @@ private fun StopoverItem(
                     if (p.length > 1 && p.startsWith("9") && p.drop(1).all { it.isDigit() }) p.drop(1) else p
                 }
                 if (plat != null) {
-                    val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
+                    val displayPlat = if (plat.startsWith("Gl", ignoreCase = true) || plat.startsWith("Hst", ignoreCase = true)) {
+                        plat
+                    } else {
+                        if (isBus) "Hst. $plat" else "Gl. $plat"
+                    }
                     Surface(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
                         shape = RoundedCornerShape(4.dp)

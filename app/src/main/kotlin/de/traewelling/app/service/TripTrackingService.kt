@@ -231,9 +231,11 @@ val origin = checkin.origin
         }
 
         val lineName = checkin.lineName ?: "Zug"
+        val isBus = lineName.startsWith("Bus", ignoreCase = true) || checkin.category == "bus"
         val nextStopName = nextStop?.name ?: destination?.name ?: "Unbekannt"
         val platform = nextStop?.arrivalPlatformReal ?: nextStop?.arrivalPlatformPlanned ?: nextStop?.platform
-        val platformText = if (!platform.isNullOrBlank()) " • Gl. $platform" else ""
+        val platLabel = if (isBus) "Hst." else "Gl."
+        val platformText = if (!platform.isNullOrBlank()) " • $platLabel $platform" else ""
 
         val destName = destination?.name ?: ""
 
@@ -273,7 +275,10 @@ val origin = checkin.origin
                                 }
                             }
 
-                            val platformAnnouncement = if (!platform.isNullOrBlank()) " auf Gleis $platform" else ""
+                            val isBusAnnouncement = lineName.startsWith("Bus", ignoreCase = true) || checkin.category == "bus"
+                            val platformAnnouncement = if (!platform.isNullOrBlank()) {
+                                if (isBusAnnouncement) " an Haltestelle $platform" else " auf Gleis $platform"
+                            } else ""
                             val isDestination = nextStop.id == destination?.id
                             val originStop = checkin.origin
                             val isOrigin = if (originStop != null) {
@@ -317,6 +322,7 @@ val origin = checkin.origin
             putExtra("destination", destName)
             putExtra("time", localTime)
             putExtra("platform", platform)
+            putExtra("isBus", isBus)
             putExtra("delay", calculateDelay(nextStop))
         }
         sendBroadcast(widgetIntent)
