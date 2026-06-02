@@ -32,6 +32,8 @@ data class CheckInUiState(
     val selectedDestination: StopStation? = null,
     // Optional status message
     val statusBody: String = "",
+    // Travel reason sent as API field "business" (0=private, 1=business, 2=commute)
+    val travelReason: TravelReason = TravelReason.PRIVATE,
     // Manual times
     val manualDeparture: String = "",
     val manualArrival: String = "",
@@ -214,6 +216,8 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateStatusBody(body: String) = _uiState.update { it.copy(statusBody = body) }
 
+    fun updateTravelReason(reason: TravelReason) = _uiState.update { it.copy(travelReason = reason) }
+
     // ─── Step 5: Confirm check-in ─────────────────────────────────────────────
 
     fun confirmCheckIn() {
@@ -249,7 +253,8 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                 destinationStationId = destination.id ?: 0,
                 departure            = state.manualDeparture.ifBlank { originStop?.departurePlanned ?: originStop?.departure ?: departure.plannedWhen ?: "" },
                 arrival              = state.manualArrival.ifBlank { destination.arrivalPlanned ?: destination.arrival ?: "" },
-                body                 = state.statusBody.ifBlank { null }
+                body                 = state.statusBody.ifBlank { null },
+                business             = state.travelReason.apiValue
             )
 
             repo.checkIn(request)

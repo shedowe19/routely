@@ -83,7 +83,7 @@ fun ProfileScreen(
                     uiState.user?.let { user -> ProfileHeader(user = user) }
                 }
                 item {
-                    uiState.statistics?.let { stats -> StatisticsSection(uiState.user, stats) }
+                    uiState.statistics?.let { stats -> StatisticsSection(stats) }
                 }
                 if (uiState.recentStatuses.isNotEmpty()) {
                     item {
@@ -229,7 +229,7 @@ private fun StatChip(label: String, value: String) {
 }
 
 @Composable
-private fun StatisticsSection(user: User?, stats: StatisticsData) {
+private fun StatisticsSection(stats: StatisticsData) {
     val categories = stats.categories ?: emptyList()
     if (categories.isEmpty()) return
 

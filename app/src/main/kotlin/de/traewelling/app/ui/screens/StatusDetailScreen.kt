@@ -5,10 +5,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.Status
+import de.traewelling.app.data.model.TravelReason
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
@@ -411,7 +412,12 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
     ) {
         Column(Modifier.padding(16.dp)) {
             // User row
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(enabled = user?.username != null) {
+                    user?.username?.let(onUserClick)
+                }
+            ) {
                 if (user?.profilePicture != null) {
                     AsyncImage(
                         model = user.profilePicture,
@@ -508,6 +514,9 @@ private fun TripInfoCard(status: Status) {
                 }
             }
 
+            Spacer(Modifier.height(12.dp))
+            TravelReasonInfo(status.business)
+
             Spacer(Modifier.height(16.dp))
 
             // Origin → Destination with mini-timeline
@@ -562,11 +571,45 @@ private fun TripInfoCard(status: Status) {
             val origin = checkin.origin
             val dest = checkin.destination
             if (origin != null) {
-                TimeRow("Abfahrt", origin.departurePlanned, origin.departureReal, origin.isDepartureDelayed)
+                TimeRow("Abfahrt", origin.departurePlanned, origin.departureReal)
             }
             if (dest != null) {
-                TimeRow("Ankunft", dest.arrivalPlanned, dest.arrivalReal, dest.isArrivalDelayed)
+                TimeRow("Ankunft", dest.arrivalPlanned, dest.arrivalReal)
             }
+        }
+    }
+}
+
+@Composable
+private fun TravelReasonInfo(business: Int?) {
+    val reason = travelReasonFromValue(business)
+    Surface(
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = travelReasonIcon(reason),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Reisegrund:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                travelReasonTitle(reason),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -589,7 +632,7 @@ private fun StatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
 }
 
 @Composable
-private fun TimeRow(label: String, planned: String?, real: String?, isDelayed: Boolean?) {
+private fun TimeRow(label: String, planned: String?, real: String?) {
     val plannedTime = formatTimeFromIso(planned)
     val realTimeVal = real ?: planned
     val realTime = formatTimeFromIso(realTimeVal)
@@ -701,7 +744,6 @@ private fun StopoverItem(
 
     val isPast = stopZdt?.isBefore(now) ?: false
     val trainIsHere = stopZdt != null && now.isAfter(stopZdt.minusMinutes(1)) && now.isBefore(stopZdt.plusMinutes(1))
-    val isCurrentSegment = outgoingProgress > 0f && outgoingProgress < 1f
 
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     val activeLineColor = TealAccent
@@ -722,7 +764,6 @@ private fun StopoverItem(
         else -> 0.45f
     }
     
-    val isDelayed = stop.isArrivalDelayed == true || stop.isDepartureDelayed == true
     val isCancelled = stop.cancelled == true
 
     // Journeys range logic for lines
@@ -1177,6 +1218,24 @@ private fun localiseCategory(cat: String) = when (cat) {
     "bus"             -> "Bus"
     "ferry"           -> "Fähre"
     else              -> cat
+}
+
+private fun travelReasonFromValue(value: Int?): TravelReason = when (value) {
+    TravelReason.BUSINESS.apiValue -> TravelReason.BUSINESS
+    TravelReason.COMMUTE.apiValue -> TravelReason.COMMUTE
+    else -> TravelReason.PRIVATE
+}
+
+private fun travelReasonIcon(reason: TravelReason) = when (reason) {
+    TravelReason.PRIVATE -> Icons.Default.Person
+    TravelReason.BUSINESS -> Icons.Default.Work
+    TravelReason.COMMUTE -> Icons.Default.Home
+}
+
+private fun travelReasonTitle(reason: TravelReason): String = when (reason) {
+    TravelReason.PRIVATE -> "Privat"
+    TravelReason.BUSINESS -> "Geschäftlich"
+    TravelReason.COMMUTE -> "Arbeitsweg"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

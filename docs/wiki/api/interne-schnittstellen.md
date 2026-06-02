@@ -15,12 +15,13 @@ class TraewellingRepository(context: Context, prefs: PreferencesManager)
 ```
 
 **Methoden:**
+
 - `getDashboard(page)` / `getGlobalFeed(page)` - Feed mit Pagination
 - `likeStatus(id)` / `unlikeStatus(id)` / `deleteStatus(id)` / `updateStatus(id, request)` - Status-Aktionen
 - `searchStations(query)` / `getNearbyStations(lat, lon)` - Bahnhofssuche
 - `getStationDepartures(stationId)` - Abfahrten
 - `getTrip(hafasTripId, lineName)` - Trip-Details
-- `checkIn(request)` - Check-in
+- `checkIn(request)` - Check-in inklusive Reisegrund (`CheckInRequest.business`)
 - `getStatistics()` - Statistiken
 - `getCurrentUser()` / `getUserProfile(username)` / `getUserStatuses(username, page)` - Profile
 - `searchUsers(query)` - Benutzer-Suche
@@ -37,6 +38,7 @@ class AuthRepository(prefs: PreferencesManager)
 ```
 
 **Methoden:**
+
 - `exchangeCodeForToken(...)` - OAuth Token Exchange
 - `refreshAccessToken()` - Token erneuern
 - `fetchAndSaveCurrentUser()` - User laden

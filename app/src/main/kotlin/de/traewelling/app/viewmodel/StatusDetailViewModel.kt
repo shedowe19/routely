@@ -58,15 +58,16 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             repo.getStatusDetail(statusId)
                 .onSuccess { status ->
                     // Enrich status with manual times from the checkin right away
-                    val origin = status.checkin?.origin?.let {
-                        it.copy(departureReal = status.checkin?.manualDeparture ?: it.departureReal)
+                    val checkin = status.checkin
+                    val origin = checkin?.origin?.let {
+                        it.copy(departureReal = checkin.manualDeparture ?: it.departureReal)
                     }
-                    val destination = status.checkin?.destination?.let {
-                        it.copy(arrivalReal = status.checkin?.manualArrival ?: it.arrivalReal)
+                    val destination = checkin?.destination?.let {
+                        it.copy(arrivalReal = checkin.manualArrival ?: it.arrivalReal)
                     }
 
                     val enrichedStatus = status.copy(
-                        checkin = status.checkin?.copy(
+                        checkin = checkin?.copy(
                             origin = origin,
                             destination = destination
                         )
@@ -78,6 +79,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                     // Load stopovers using the trip ID from the checkin
                     val tripId = enrichedStatus.checkin?.trip
                     if (tripId != null) {
+                        val enrichedCheckin = enrichedStatus.checkin
                         repo.getStopovers(tripId)
                             .onSuccess { stops ->
                                 val enrichedStops = enrichStops(stops, origin, destination)
@@ -85,7 +87,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                 val finalOrigin = enrichedStops.find { it.id == origin?.id } ?: origin
                                 val finalDestination = enrichedStops.find { it.id == destination?.id } ?: destination
                                 val finalStatus = enrichedStatus.copy(
-                                    checkin = enrichedStatus.checkin?.copy(
+                                    checkin = enrichedCheckin.copy(
                                         origin = finalOrigin,
                                         destination = finalDestination
                                     )
@@ -134,15 +136,16 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         // Silently update — no loading spinner
         repo.getStatusDetail(statusId).onSuccess { status ->
             // Enrich status with manual times from the checkin right away
-            val origin = status.checkin?.origin?.let {
-                it.copy(departureReal = status.checkin?.manualDeparture ?: it.departureReal)
+            val checkin = status.checkin
+            val origin = checkin?.origin?.let {
+                it.copy(departureReal = checkin.manualDeparture ?: it.departureReal)
             }
-            val destination = status.checkin?.destination?.let {
-                it.copy(arrivalReal = status.checkin?.manualArrival ?: it.arrivalReal)
+            val destination = checkin?.destination?.let {
+                it.copy(arrivalReal = checkin.manualArrival ?: it.arrivalReal)
             }
 
             val enrichedStatus = status.copy(
-                checkin = status.checkin?.copy(
+                checkin = checkin?.copy(
                     origin = origin,
                     destination = destination
                 )
@@ -152,13 +155,14 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
             val tripId = enrichedStatus.checkin?.trip
             if (tripId != null) {
+                val enrichedCheckin = enrichedStatus.checkin
                 repo.getStopovers(tripId).onSuccess { stops ->
                     val enrichedStops = enrichStops(stops, origin, destination)
 
                     val finalOrigin = enrichedStops.find { it.id == origin?.id } ?: origin
                     val finalDestination = enrichedStops.find { it.id == destination?.id } ?: destination
                     val finalStatus = enrichedStatus.copy(
-                        checkin = enrichedStatus.checkin?.copy(
+                        checkin = enrichedCheckin.copy(
                             origin = finalOrigin,
                             destination = finalDestination
                         )

@@ -29,10 +29,8 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
 
             // Cache first page
             if (page == 1) {
-                val entities = body.data?.mapNotNull { status ->
-                    status.id?.let { id ->
-                        StatusEntity(id = id, statusJson = gson.toJson(status), type = "dashboard")
-                    }
+                val entities = body.data?.map { status ->
+                    StatusEntity(id = status.id, statusJson = gson.toJson(status), type = "dashboard")
                 }
                 if (!entities.isNullOrEmpty()) {
                     statusDao.clearStatuses("dashboard")
@@ -63,10 +61,8 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
 
             // Cache first page
             if (page == 1) {
-                val entities = body.data?.mapNotNull { status ->
-                    status.id?.let { id ->
-                        StatusEntity(id = id, statusJson = gson.toJson(status), type = "global")
-                    }
+                val entities = body.data?.map { status ->
+                    StatusEntity(id = status.id, statusJson = gson.toJson(status), type = "global")
                 }
                 if (!entities.isNullOrEmpty()) {
                     statusDao.clearStatuses("global")

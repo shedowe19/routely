@@ -16,11 +16,14 @@ Der Profile-Tab zeigt nach dem Login die eigenen Nutzerdaten, Statistiken (Fahrt
 ## Verhalten
 
 ### Lade-Prozess
+
 1. `loadProfile()` lädt User, Statistiken und letzte Fahrten parallel
 2. Nutzt `repo.getCurrentUser()`, `repo.getStatistics()`, `repo.getUserStatuses()`
 
 ### TTS-Einstellungen
+
 Im ProfileScreen können TTS-Einstellungen vorgenommen werden:
+
 - **Engine**: Auswahl der TTS-Engine (z.B. Google, Samsung, etc.)
 - **Sprache**: BCP47 Language Tag (z.B. "de-DE")
 - **Stimme**: Voice-Name
@@ -29,20 +32,22 @@ Im ProfileScreen können TTS-Einstellungen vorgenommen werden:
 ProfileViewModel implementiert `TextToSpeech.OnInitListener` für TTS-Management.
 
 ### Statistiken
+
 Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
+
 - Kategorien wie ICE, IC, RE, RB, S-Bahn, etc.
 - Jeweils Anzahl und Dauer
 
 ## UI-Zustand (ProfileUiState)
 
-| Feld | Typ | Beschreibung |
-|------|-----|--------------|
-| `user` | User? | Eigene Nutzerdaten |
-| `statistics` | StatisticsData? | Fahrten-Statistiken |
-| `recentStatuses` | List<Status> | Letzte Check-ins |
-| `isTtsEnabled` | Boolean | TTS aktiviert |
-| `selectedTtsEngine/Language/Voice` | String? | Gewählte TTS-Einstellungen |
-| `availableTtsEngines/Languages/Voices` | List | Verfügbare Optionen |
+| Feld                                   | Typ             | Beschreibung               |
+| -------------------------------------- | --------------- | -------------------------- |
+| `user`                                 | User?           | Eigene Nutzerdaten         |
+| `statistics`                           | StatisticsData? | Fahrten-Statistiken        |
+| `recentStatuses`                       | List<Status>    | Letzte Check-ins           |
+| `isTtsEnabled`                         | Boolean         | TTS aktiviert              |
+| `selectedTtsEngine/Language/Voice`     | String?         | Gewählte TTS-Einstellungen |
+| `availableTtsEngines/Languages/Voices` | List            | Verfügbare Optionen        |
 
 ## Abhängigkeiten
 

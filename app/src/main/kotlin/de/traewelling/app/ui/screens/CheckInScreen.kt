@@ -1,6 +1,8 @@
 package de.traewelling.app.ui.screens
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -229,7 +231,7 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
                     }
                 }
             uiState.error != null ->
-                ErrorBox(uiState.error!!, viewModel::goBack)
+                ErrorBox(uiState.error, viewModel::goBack)
             uiState.departures.isEmpty() ->
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("Keine Abfahrten gefunden")
@@ -321,7 +323,6 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
 @Composable
 private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     val stopovers = uiState.filteredDestinations
-    val lineName  = uiState.selectedDeparture?.line?.name ?: ""
 
     Column(Modifier.fillMaxSize()) {
 
@@ -369,54 +370,65 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp)) {
-                    InfoRow(Icons.Default.Train,       "Linie",   dep?.line?.name ?: "–")
-                    InfoRow(Icons.Default.TripOrigin,  "Von",     uiState.selectedStation?.name ?: "–")
-                    InfoRow(Icons.Default.LocationOn,  "Nach",    uiState.selectedDestination?.name ?: "–")
-                    InfoRow(Icons.Default.Schedule,    "Abfahrt", depTime)
-                    dep?.platform?.takeIf { it.isNotBlank() }?.let {
-                        InfoRow(Icons.Default.ConfirmationNumber, "Gleis", it)
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                Card(modifier = Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp)) {
+                        InfoRow(Icons.Default.Train,       "Linie",   dep?.line?.name ?: "–")
+                        InfoRow(Icons.Default.TripOrigin,  "Von",     uiState.selectedStation?.name ?: "–")
+                        InfoRow(Icons.Default.LocationOn,  "Nach",    uiState.selectedDestination?.name ?: "–")
+                        InfoRow(Icons.Default.Schedule,    "Abfahrt", depTime)
+                        dep?.platform?.takeIf { it.isNotBlank() }?.let {
+                            InfoRow(Icons.Default.ConfirmationNumber, "Gleis", it)
+                        }
                     }
+                }
+                Spacer(Modifier.height(16.dp))
+                TravelReasonSelector(
+                    selected = uiState.travelReason,
+                    onSelected = viewModel::updateTravelReason
+                )
+                Spacer(Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = uiState.statusBody,
+                    onValueChange = viewModel::updateStatusBody,
+                    label = { Text("Statusmeldung (optional)") },
+                    placeholder = { Text("Was machst du auf dieser Reise?") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2
+                )
+                Spacer(Modifier.height(16.dp))
+
+                Text("Zeiten anpassen (ISO-Format)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.height(8.dp))
+                Row(Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = uiState.manualDeparture,
+                        onValueChange = viewModel::updateManualDeparture,
+                        label = { Text("Abfahrt") },
+                        modifier = Modifier.weight(1f),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    OutlinedTextField(
+                        value = uiState.manualArrival,
+                        onValueChange = viewModel::updateManualArrival,
+                        label = { Text("Ankunft") },
+                        modifier = Modifier.weight(1f),
+                        textStyle = MaterialTheme.typography.bodySmall
+                    )
+                }
+                Spacer(Modifier.height(16.dp))
+                uiState.error?.let {
+                    Spacer(Modifier.height(8.dp))
+                    Text(it, color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall)
                 }
             }
             Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                value = uiState.statusBody,
-                onValueChange = viewModel::updateStatusBody,
-                label = { Text("Statusmeldung (optional)") },
-                placeholder = { Text("Was machst du auf dieser Reise?") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 2
-            )
-            Spacer(Modifier.height(16.dp))
-            
-            Text("Zeiten anpassen (ISO-Format)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(8.dp))
-            Row(Modifier.fillMaxWidth()) {
-                OutlinedTextField(
-                    value = uiState.manualDeparture,
-                    onValueChange = viewModel::updateManualDeparture,
-                    label = { Text("Abfahrt") },
-                    modifier = Modifier.weight(1f),
-                    textStyle = MaterialTheme.typography.bodySmall
-                )
-                Spacer(Modifier.width(8.dp))
-                OutlinedTextField(
-                    value = uiState.manualArrival,
-                    onValueChange = viewModel::updateManualArrival,
-                    label = { Text("Ankunft") },
-                    modifier = Modifier.weight(1f),
-                    textStyle = MaterialTheme.typography.bodySmall
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            uiState.error?.let {
-                Spacer(Modifier.height(8.dp))
-                Text(it, color = MaterialTheme.colorScheme.error,
-                    style = MaterialTheme.typography.bodySmall)
-            }
-            Spacer(Modifier.weight(1f))
             Button(
                 onClick = viewModel::confirmCheckIn,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
@@ -490,6 +502,85 @@ private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label
         Text("$label: ", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
         Text(value, style = MaterialTheme.typography.bodyMedium)
     }
+}
+
+@Composable
+private fun TravelReasonSelector(
+    selected: TravelReason,
+    onSelected: (TravelReason) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(Modifier.fillMaxWidth()) {
+        Text(
+            "Reisegrund",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(Modifier.height(8.dp))
+        Box {
+            OutlinedButton(
+                onClick = { expanded = true },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                TravelReasonIcon(selected)
+                Spacer(Modifier.width(8.dp))
+                Text(travelReasonTitle(selected))
+                Spacer(Modifier.weight(1f))
+                Icon(Icons.Default.ExpandMore, contentDescription = null)
+            }
+            DropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false }
+            ) {
+                TravelReason.entries.forEach { reason ->
+                    DropdownMenuItem(
+                        text = {
+                            Column {
+                                Text(travelReasonTitle(reason))
+                                travelReasonDescription(reason)?.let {
+                                    Text(
+                                        it,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        },
+                        leadingIcon = { TravelReasonIcon(reason) },
+                        onClick = {
+                            onSelected(reason)
+                            expanded = false
+                        }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TravelReasonIcon(reason: TravelReason) {
+    Icon(
+        imageVector = when (reason) {
+            TravelReason.PRIVATE -> Icons.Default.Person
+            TravelReason.BUSINESS -> Icons.Default.Work
+            TravelReason.COMMUTE -> Icons.Default.Home
+        },
+        contentDescription = null
+    )
+}
+
+private fun travelReasonTitle(reason: TravelReason): String = when (reason) {
+    TravelReason.PRIVATE -> "Privat"
+    TravelReason.BUSINESS -> "Geschäftlich"
+    TravelReason.COMMUTE -> "Arbeitsweg"
+}
+
+private fun travelReasonDescription(reason: TravelReason): String? = when (reason) {
+    TravelReason.PRIVATE -> null
+    TravelReason.BUSINESS -> "Dienstfahrten"
+    TravelReason.COMMUTE -> "Weg zwischen Wohnort und Arbeitsplatz"
 }
 
 /** Convert an ISO-8601 timestamp (usually UTC from the API) to the device's local time. */

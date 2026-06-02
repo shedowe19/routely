@@ -210,6 +210,12 @@ data class TripDetails(
 
 // ─── Check-in Request ─────────────────────────────────────────────────────────
 
+enum class TravelReason(val apiValue: Int) {
+    PRIVATE(0),
+    BUSINESS(1),
+    COMMUTE(2)
+}
+
 data class CheckInRequest(
     @SerializedName("tripId")      val tripId: String,
     @SerializedName("lineName")    val lineName: String,
@@ -218,6 +224,7 @@ data class CheckInRequest(
     @SerializedName("departure")   val departure: String,
     @SerializedName("arrival")     val arrival: String,
     @SerializedName("body")        val body: String? = null,
+    @SerializedName("business")    val business: Int = TravelReason.PRIVATE.apiValue,
     @SerializedName("visibility")  val visibility: Int = 0
 )
 

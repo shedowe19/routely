@@ -71,7 +71,6 @@ object TransportColors {
         else              -> Default
     }
 
-    fun textForCategory(category: String?): Color = Color.White
 }
 
 // ─── Light Color Scheme ──────────────────────────────────────────────────────

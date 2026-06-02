@@ -20,7 +20,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 1. **Bahnhofsauswahl (Start):**
    - Entweder über die Textsuche (`GET /api/v1/trains/station/autocomplete/{query}`)
    - Oder über die Ortung (`GET /api/v1/stations` mit Koordinaten der Bounding-Box)
-   - *Wichtig:* Stationsergebnisse müssen dedupliziert werden (z.B. nach Nähe und Namen).
+   - _Wichtig:_ Stationsergebnisse müssen dedupliziert werden (z.B. nach Nähe und Namen).
 
 2. **Abfahrtsauswahl:**
    - Sobald ein Startbahnhof gewählt ist, werden die Abfahrten geladen (`GET /api/v1/station/{id}/departures`).
@@ -33,8 +33,21 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 
 4. **Der eigentliche Check-in:**
    - Wenn Start, Fahrt und Ziel bekannt sind, wird der Check-in durchgeführt.
-   - `POST /api/v1/trains/checkin` mit `CheckInRequest` (Start, Ziel, Fahrt-ID, etc.).
+   - `POST /api/v1/trains/checkin` mit `CheckInRequest` (Start, Ziel, Fahrt-ID, Reisegrund, etc.).
+   - Der Reisegrund wird über das API-Feld `business` gesendet. Die App verwendet `TravelReason.PRIVATE` (`0`) als Standard und erlaubt die Auswahl von `BUSINESS` (`1`) und `COMMUTE` (`2`).
    - Manuelle Verspätungs-Overrides (`manualDeparture`, `manualArrival`), die die API zurückgibt, müssen direkt ins Datenmodell gemerged werden, um UI-Flackern zu vermeiden.
+
+## Reisegrund
+
+Im Bestätigungsschritt zeigt `CheckInScreen` eine Auswahl für den Reisegrund an:
+
+| UI-Label       | API-Wert | Bedeutung                             |
+| -------------- | -------- | ------------------------------------- |
+| `Privat`       | `0`      | Standardwert für private Fahrten      |
+| `Geschäftlich` | `1`      | Dienstfahrten                         |
+| `Arbeitsweg`   | `2`      | Weg zwischen Wohnort und Arbeitsplatz |
+
+`CheckInViewModel` hält den Wert im `CheckInUiState.travelReason` und übergibt ihn beim Absenden an `CheckInRequest.business`.
 
 ## Abhängigkeiten
 
@@ -49,3 +62,4 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 
 - [API Überblick](../api/ueberblick.md)
 - [Externe Schnittstellen](../api/externe-schnittstellen.md)
+- [Datenmodell](../daten/datenmodell.md)

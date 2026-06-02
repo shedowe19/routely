@@ -5,6 +5,11 @@ gen/
 out/
 .gradle/
 local.properties
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
 .idea/
 *.iml
 *.iws
