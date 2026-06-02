@@ -12,10 +12,11 @@
 | FeedScreen         | `ui/screens/FeedScreen.kt`         | Dashboard/Global-Feed                     |
 | CheckInScreen      | `ui/screens/CheckInScreen.kt`      | Check-in Flow                             |
 | NotificationScreen | `ui/screens/NotificationScreen.kt` | Benachrichtigungen                        |
-| ProfileScreen      | `ui/screens/ProfileScreen.kt`      | Eigenes Profil + TTS                      |
+| ProfileScreen      | `ui/screens/ProfileScreen.kt`      | Eigenes Profil + letzte Fahrten           |
 | UserProfileScreen  | `ui/screens/UserProfileScreen.kt`  | Fremdes Profil                            |
 | UserSearchScreen   | `ui/screens/UserSearchScreen.kt`   | Benutzer-Suche                            |
 | StatusDetailScreen | `ui/screens/StatusDetailScreen.kt` | Status-Detail mit Timeline und Reisegrund |
+| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme- und TTS-Einstellungen              |
 
 ## Navigation
 
@@ -26,6 +27,8 @@ Die App nutzt einen HorizontalPager mit 4 Tabs:
 - Notifications (mit Badge bei ungelesenen)
 - Profil
 
+Die `NavigationBar` nutzt eine Surface-Optik mit tonal elevation. Ausgewählte Tabs werden über Primary-Farbe und einen dezenten Indicator hervorgehoben.
+
 Zusätzliche Screens werden als Stack navigiert:
 
 - `userProfile/{username}`
@@ -34,7 +37,7 @@ Zusätzliche Screens werden als Stack navigiert:
 
 ## Zustandsdarstellung
 
-Feed, Check-in und StatusDetail nutzen `StateMessage` für Lade-, Fehler- und Empty-States. Dadurch sind die visuellen Zustände über die wichtigsten Screens konsistent.
+Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications nutzen `StateMessage` für Lade-, Fehler- und Empty-States. Dadurch sind die visuellen Zustände über die wichtigsten Screens konsistent.
 
 ## Verwandte Seiten
 

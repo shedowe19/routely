@@ -39,6 +39,12 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 - "Mention": AlternateEmail-Icon
 - Sonst: Notifications-Icon
 
+### UI-Darstellung
+
+- Lade-, Fehler- und Empty-States via `StateMessage`
+- Benachrichtigungen werden als abgerundete Cards dargestellt
+- Ungelesene Einträge erhalten einen farbigen linken Akzent, stärkere Elevation und ein `Neu`-Badge
+
 ## UI-Zustand (NotificationUiState)
 
 | Feld            | Typ                | Beschreibung                   |
@@ -51,6 +57,7 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 ## Abhängigkeiten
 
 - **TraewellingRepository**: getNotifications, markNotificationRead, markAllNotificationsRead, getUnreadNotificationCount
+- **StateMessage**: Einheitliche UI für Lade-, Fehler- und Empty-States
 
 ## Offene Fragen
 

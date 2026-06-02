@@ -53,7 +53,7 @@ fun StateMessage(
 )
 ```
 
-Wird unter anderem im Feed, Check-in und StatusDetail genutzt, um leere Zustände, Ladezustände und Fehler visuell konsistent darzustellen.
+Wird unter anderem im Feed, Check-in, StatusDetail, Profil, Benutzerprofil, Benutzersuche und Notifications genutzt, um leere Zustände, Ladezustände und Fehler visuell konsistent darzustellen.
 
 ### StatPill
 

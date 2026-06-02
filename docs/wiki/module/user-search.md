@@ -19,7 +19,12 @@ Aufgerufen vom Feed-Screen über die Suchen-Schaltfläche. Navigiert nach Auswah
 
 1. Nutzer gibt Benutzername ein
 2. Nach 350ms Debounce wird `repo.searchUsers(query)` aufgerufen
-3. Ergebnisse werden als LazyColumn mit UserListItems angezeigt
+3. Ergebnisse werden als LazyColumn mit kartenartigen UserListItems angezeigt
+
+### UI-Darstellung
+
+- Suchzustände, leere Ergebnisse und Ladezustände werden via `StateMessage` angezeigt
+- Treffer werden als abgerundete Cards mit Avatar, Anzeigename, Benutzername und Chevron dargestellt
 
 ### UI-Zustand (UserSearchUiState)
 
@@ -33,6 +38,7 @@ Aufgerufen vom Feed-Screen über die Suchen-Schaltfläche. Navigiert nach Auswah
 ## Abhängigkeiten
 
 - **TraewellingRepository**: `searchUsers(query)` für API-Aufruf
+- **StateMessage**: Einheitliche UI für Such-, Lade- und Empty-States
 
 ## Offene Fragen
 

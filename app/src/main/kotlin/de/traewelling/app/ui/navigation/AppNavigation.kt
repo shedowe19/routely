@@ -10,6 +10,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
@@ -55,7 +56,10 @@ fun MainNavigation(
 
             Scaffold(
                 bottomBar = {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 10.dp
+                    ) {
                         tabs.forEachIndexed { index, screen ->
                             NavigationBarItem(
                                 icon = {
@@ -71,6 +75,13 @@ fun MainNavigation(
                                 },
                                 label = { Text(screen.label) },
                                 selected = pagerState.currentPage == index,
+                                colors = NavigationBarItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
+                                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                ),
                                 onClick = {
                                     coroutineScope.launch {
                                         pagerState.animateScrollToPage(index)

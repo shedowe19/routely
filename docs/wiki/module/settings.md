@@ -18,6 +18,13 @@ Der SettingsScreen wird über den `ProfileScreen` aufgerufen. Die hier getroffen
 
 Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `PreferencesManager` (welcher Android DataStore verwendet). Änderungen, wie z.B. das App-Theme, werden als StateFlow bereitgestellt, wodurch die UI (wie das `TraewellingTheme`) automatisch auf Änderungen reagiert und sich neu zeichnet.
 
+### UI-Darstellung
+
+- Nutzt `TraewellingTopAppBar` für konsistente Routely-Navigation
+- Theme-Auswahl wird als direkte `FilterChip`-Auswahl (`Hell`, `Dunkel`, `AMOLED`) dargestellt
+- Einstellungsbereiche werden als abgerundete Cards mit Icon, Beschreibung und dezentem Border angezeigt
+- TTS-Optionen bleiben als Dropdowns verfügbar, sobald Haltestellenansagen aktiviert sind
+
 ## Abhängigkeiten
 
 - `PreferencesManager` (DataStore)
