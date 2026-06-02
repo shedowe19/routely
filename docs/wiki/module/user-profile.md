@@ -34,6 +34,7 @@ Wenn der Nutzer in der LazyColumn scrollt und noch mehr Status-Seiten verfügbar
 ### UI-Darstellung
 
 - Nutzerkopf als Gradient-Hero-Card mit Avatar, Benutzername, Bio, Follow-Button und Statistik-Chips
+- Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
 - Lade-, Fehler- und Empty-States via `StateMessage`
 - Sichtbare Fahrten werden über `StatusCard` dargestellt
 

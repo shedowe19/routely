@@ -34,6 +34,7 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 ### UI-Darstellung
 
 - Profilkopf als große Gradient-Hero-Card mit Avatar, Benutzername, Bio und Statistik-Chips
+- Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
 - Lade- und Fehlerzustände via `StateMessage`
 - Letzte Fahrten werden weiterhin über `StatusCard` dargestellt
 

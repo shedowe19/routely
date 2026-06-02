@@ -19,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -32,6 +33,7 @@ import de.traewelling.app.ui.theme.TealAccent
 import de.traewelling.app.ui.theme.TealDark
 import de.traewelling.app.viewmodel.AuthViewModel
 import de.traewelling.app.viewmodel.ProfileViewModel
+import java.util.Locale
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -224,7 +226,7 @@ private fun ProfileHeader(user: User) {
             }
             Spacer(Modifier.height(24.dp))
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip("Distanz", "%.0f km".format((user.totalDistance ?: 0L) / 1000.0), Modifier.weight(1f))
+                StatChip("Distanz", formatDistanceKm(user.totalDistance ?: 0L), Modifier.weight(1f))
                 StatChip("Zeit", formatDuration(user.totalDuration ?: 0), Modifier.weight(1f))
                 if (user.pointsEnabled != false) {
                     StatChip("Punkte", (user.points ?: 0).toString(), Modifier.weight(1f))
@@ -244,10 +246,17 @@ private fun StatChip(label: String, value: String, modifier: Modifier = Modifier
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)
         ) {
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                color = Color.White)
+            Text(
+                value,
+                fontWeight = FontWeight.Bold,
+                fontSize = 17.sp,
+                color = Color.White,
+                maxLines = 1,
+                softWrap = false,
+                overflow = TextOverflow.Ellipsis
+            )
             Text(label, style = MaterialTheme.typography.labelSmall,
                 color = Color.White.copy(alpha = 0.72f))
         }
@@ -367,3 +376,6 @@ private fun formatDuration(minutes: Int): String {
     val mins  = minutes % 60
     return if (hours > 0) "${hours}h ${mins}m" else "${mins}m"
 }
+
+private fun formatDistanceKm(meters: Long): String =
+    String.format(Locale.GERMANY, "%,.0f km", meters / 1000.0)
