@@ -1,5 +1,6 @@
 package de.traewelling.app.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -34,14 +35,16 @@ fun StatusCard(
     val user    = status.user
     val checkin = status.checkin
     val isLiked = status.liked == true
+    val accentColor = TransportColors.forCategory(checkin?.category)
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
             .clickable { onStatusClick() },
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(3.dp),
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(6.dp),
+        border = BorderStroke(1.dp, accentColor.copy(alpha = 0.12f)),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -108,24 +111,34 @@ fun StatusCard(
             if (checkin != null) {
                 Spacer(Modifier.height(12.dp))
                 
-                val category = checkin.lineName?.split(" ")?.firstOrNull() ?: ""
+                val category = checkin.category ?: checkin.lineName?.split(" ")?.firstOrNull() ?: ""
                 val lineColors = TransportColors.forCategory(category)
-                
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = lineColors.copy(alpha = 0.08f),
-                    modifier = Modifier.fillMaxWidth()
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(16.dp))
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    lineColors.copy(alpha = 0.16f),
+                                    MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                                    MaterialTheme.colorScheme.surface
+                                )
+                            )
+                        )
+                        .border(1.dp, lineColors.copy(alpha = 0.12f), RoundedCornerShape(16.dp))
                 ) {
-                    Column(Modifier.padding(12.dp)) {
+                    Column(Modifier.padding(14.dp)) {
                         // Line Header
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Surface(
                                 color = lineColors,
-                                shape = RoundedCornerShape(6.dp)
+                                shape = RoundedCornerShape(10.dp)
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                                 ) {
                                     Icon(
                                         Icons.Default.Train,
@@ -142,16 +155,16 @@ fun StatusCard(
                                     )
                                 }
                             }
-                            
+
                             Spacer(Modifier.weight(1f))
-                            
+
                             if (checkin.points != null && checkin.points > 0) {
                                 StatPill(Icons.Default.Stars, "${checkin.points} Pkt", lineColors)
                             }
                         }
-                        
+
                         Spacer(Modifier.height(12.dp))
-                        
+
                         // Origin to Destination with gradient line
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -160,12 +173,12 @@ fun StatusCard(
                             // Timeline visual
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Box(modifier = Modifier
-                                    .size(10.dp)
+                                    .size(12.dp)
                                     .background(TealDark, CircleShape))
                                 Box(
                                     modifier = Modifier
-                                        .width(2.dp)
-                                        .height(24.dp)
+                                        .width(3.dp)
+                                        .height(26.dp)
                                         .background(
                                             Brush.verticalGradient(
                                                 colors = listOf(TealDark, AmberDark)
@@ -173,7 +186,7 @@ fun StatusCard(
                                         )
                                 )
                                 Box(modifier = Modifier
-                                    .size(10.dp)
+                                    .size(12.dp)
                                     .background(AmberDark, CircleShape))
                             }
                             Spacer(Modifier.width(12.dp))
@@ -234,7 +247,23 @@ fun StatusCard(
                         )
                     }
                 }
+                Spacer(Modifier.weight(1f))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Details",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                    Spacer(Modifier.width(4.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        modifier = Modifier.size(18.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+            }
         }
-}
-}
+    }
 }

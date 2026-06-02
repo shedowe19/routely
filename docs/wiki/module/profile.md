@@ -2,11 +2,11 @@
 
 ## Zweck
 
-Eigenes Profil mit Statistiken, TTS-Einstellungen und Logout-Funktionalität.
+Eigenes Profil mit Statistiken, letzten Fahrten, Einstellungen-Einstieg und Logout-Funktionalität.
 
 ## Kontext
 
-Der Profile-Tab zeigt nach dem Login die eigenen Nutzerdaten, Statistiken (Fahrten, Distanz, Zeit) und Einstellungen für die Text-to-Speech Haltestellenansage.
+Der Profile-Tab zeigt nach dem Login die eigenen Nutzerdaten, Statistiken (Fahrten, Distanz, Zeit), letzte Fahrten und Aktionen für Einstellungen und Logout. Die Detailkonfiguration für Theme und Text-to-Speech liegt im `SettingsScreen`.
 
 ## Wichtige Dateien
 
@@ -20,16 +20,9 @@ Der Profile-Tab zeigt nach dem Login die eigenen Nutzerdaten, Statistiken (Fahrt
 1. `loadProfile()` lädt User, Statistiken und letzte Fahrten parallel
 2. Nutzt `repo.getCurrentUser()`, `repo.getStatistics()`, `repo.getUserStatuses()`
 
-### TTS-Einstellungen
+### Einstellungen-Einstieg
 
-Im ProfileScreen können TTS-Einstellungen vorgenommen werden:
-
-- **Engine**: Auswahl der TTS-Engine (z.B. Google, Samsung, etc.)
-- **Sprache**: BCP47 Language Tag (z.B. "de-DE")
-- **Stimme**: Voice-Name
-- **Test**: Probiert die konfigurierte Stimme aus
-
-ProfileViewModel implementiert `TextToSpeech.OnInitListener` für TTS-Management.
+Der `ProfileScreen` enthält einen Button zum `SettingsScreen`. Dort werden Theme und TTS konfiguriert.
 
 ### Statistiken
 
@@ -37,6 +30,13 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 
 - Kategorien wie ICE, IC, RE, RB, S-Bahn, etc.
 - Jeweils Anzahl und Dauer
+
+### UI-Darstellung
+
+- Profilkopf als große Gradient-Hero-Card mit Avatar, Benutzername, Bio und Statistik-Chips
+- Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
+- Lade- und Fehlerzustände via `StateMessage`
+- Letzte Fahrten werden weiterhin über `StatusCard` dargestellt
 
 ## UI-Zustand (ProfileUiState)
 
@@ -52,7 +52,7 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 ## Abhängigkeiten
 
 - **TraewellingRepository**: getCurrentUser, getStatistics, getUserStatuses
-- **TextToSpeech**: Android TTS für Sprachausgabe-Test
+- **SettingsScreen**: Ziel für globale Theme- und TTS-Konfiguration
 
 ## Offene Fragen
 

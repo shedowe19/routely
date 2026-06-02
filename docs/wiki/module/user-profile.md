@@ -31,6 +31,13 @@ Der Nutzer kann Profile anderer Nutzer aufrufen über den Feed oder die Benutzer
 
 Wenn der Nutzer in der LazyColumn scrollt und noch mehr Status-Seiten verfügbar sind (via `links.next`), werden automatisch weitere geladen.
 
+### UI-Darstellung
+
+- Nutzerkopf als Gradient-Hero-Card mit Avatar, Benutzername, Bio, Follow-Button und Statistik-Chips
+- Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
+- Lade-, Fehler- und Empty-States via `StateMessage`
+- Sichtbare Fahrten werden über `StatusCard` dargestellt
+
 ## UI-Zustand (UserProfileUiState)
 
 | Feld              | Typ          | Beschreibung                   |
@@ -46,6 +53,7 @@ Wenn der Nutzer in der LazyColumn scrollt und noch mehr Status-Seiten verfügbar
 
 - **TraewellingRepository**: Für API-Aufrufe (getUserProfile, getUserStatuses, followUser, unfollowUser)
 - **PreferencesManager**: Für Auth-Token
+- **StateMessage**: Einheitliche UI für Lade-, Fehler- und Empty-States
 
 ## Offene Fragen
 

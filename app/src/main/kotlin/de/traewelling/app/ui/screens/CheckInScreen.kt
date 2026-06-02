@@ -27,6 +27,7 @@ import com.google.android.gms.location.Priority
 import androidx.annotation.RequiresPermission
 import com.google.android.gms.tasks.CancellationTokenSource
 import de.traewelling.app.data.model.*
+import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.viewmodel.CheckInStep
 import de.traewelling.app.viewmodel.CheckInUiState
@@ -159,21 +160,17 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
 
         when {
             uiState.stationQuery.length < 2 && uiState.searchResults.isEmpty() && !uiState.isLoading ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(Icons.Default.Train, null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f))
-                        Spacer(Modifier.height(12.dp))
-                        Text("Mindestens 2 Zeichen eingeben",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f))
-                    }
-                }
+                StateMessage(
+                    icon = Icons.Default.Train,
+                    title = "Station suchen",
+                    message = "Gib mindestens 2 Zeichen ein oder nutze deinen Standort."
+                )
             uiState.searchResults.isEmpty() && !uiState.isLoading ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Kein Bahnhof gefunden",
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                }
+                StateMessage(
+                    icon = Icons.Default.Train,
+                    title = "Kein Bahnhof gefunden",
+                    message = "Prüfe die Schreibweise oder suche nach einer größeren Station."
+                )
             else ->
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(uiState.searchResults.size) { index ->
@@ -222,20 +219,20 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
 
         when {
             uiState.isLoading ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator()
-                        Spacer(Modifier.height(12.dp))
-                        Text("Lade Abfahrten…",
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    }
-                }
+                StateMessage(
+                    icon = Icons.Default.Schedule,
+                    title = "Lade Abfahrten",
+                    message = "Wir suchen passende Verbindungen ab deiner Station.",
+                    loading = true
+                )
             uiState.error != null ->
                 ErrorBox(uiState.error, viewModel::goBack)
             uiState.departures.isEmpty() ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Keine Abfahrten gefunden")
-                }
+                StateMessage(
+                    icon = Icons.Default.Train,
+                    title = "Keine Abfahrten gefunden",
+                    message = "Für diese Station wurden aktuell keine passenden Fahrten gefunden."
+                )
             else ->
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(uiState.departures) { departure ->
@@ -328,13 +325,18 @@ private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState
 
         when {
             uiState.isLoading ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator()
-                }
+                StateMessage(
+                    icon = Icons.Default.Route,
+                    title = "Lade Halte",
+                    message = "Der Fahrtverlauf wird vorbereitet.",
+                    loading = true
+                )
             stopovers.isEmpty() ->
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("Keine Zwischenhalte verfügbar")
-                }
+                StateMessage(
+                    icon = Icons.Default.LocationOn,
+                    title = "Keine Zwischenhalte verfügbar",
+                    message = "Für diese Fahrt konnten keine möglichen Ziele geladen werden."
+                )
             else ->
                 LazyColumn(Modifier.fillMaxSize()) {
                     items(stopovers) { stop ->
@@ -482,16 +484,14 @@ private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
 
 @Composable
 private fun ErrorBox(message: String, onBack: () -> Unit) {
-    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Icon(Icons.Default.ErrorOutline, null, modifier = Modifier.size(48.dp),
-                tint = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.height(12.dp))
-            Text(message, color = MaterialTheme.colorScheme.error)
-            Spacer(Modifier.height(16.dp))
-            Button(onClick = onBack) { Text("Zurück") }
-        }
-    }
+    StateMessage(
+        icon = Icons.Default.ErrorOutline,
+        title = "Aktion fehlgeschlagen",
+        message = message,
+        iconTint = MaterialTheme.colorScheme.error,
+        actionLabel = "Zurück",
+        onAction = onBack
+    )
 }
 
 @Composable
@@ -504,13 +504,12 @@ private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun TravelReasonSelector(
     selected: TravelReason,
     onSelected: (TravelReason) -> Unit
 ) {
-    var expanded by remember { mutableStateOf(false) }
-
     Column(Modifier.fillMaxWidth()) {
         Text(
             "Reisegrund",
@@ -518,44 +517,31 @@ private fun TravelReasonSelector(
             color = MaterialTheme.colorScheme.primary
         )
         Spacer(Modifier.height(8.dp))
-        Box {
-            OutlinedButton(
-                onClick = { expanded = true },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                TravelReasonIcon(selected)
-                Spacer(Modifier.width(8.dp))
-                Text(travelReasonTitle(selected))
-                Spacer(Modifier.weight(1f))
-                Icon(Icons.Default.ExpandMore, contentDescription = null)
-            }
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false }
-            ) {
-                TravelReason.entries.forEach { reason ->
-                    DropdownMenuItem(
-                        text = {
-                            Column {
-                                Text(travelReasonTitle(reason))
-                                travelReasonDescription(reason)?.let {
-                                    Text(
-                                        it,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        },
-                        leadingIcon = { TravelReasonIcon(reason) },
-                        onClick = {
-                            onSelected(reason)
-                            expanded = false
-                        }
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            TravelReason.entries.forEach { reason ->
+                FilterChip(
+                    selected = selected == reason,
+                    onClick = { onSelected(reason) },
+                    label = { Text(travelReasonTitle(reason)) },
+                    leadingIcon = { TravelReasonIcon(reason) },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
+                        selectedLabelColor = MaterialTheme.colorScheme.primary,
+                        selectedLeadingIconColor = MaterialTheme.colorScheme.primary
                     )
-                }
+                )
             }
         }
+        Spacer(Modifier.height(6.dp))
+        Text(
+            travelReasonDescription(selected) ?: "Private Reise ohne besondere Kennzeichnung.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+        )
     }
 }
 

@@ -25,6 +25,10 @@ Die App unterstützt mehrere Authentifizierungswege:
 
 Das `AuthViewModel` propagiert den aktuellen Authentifizierungsstatus (eingeloggt / nicht eingeloggt) an die UI.
 
+### SetupScreen UI
+
+Der initiale `SetupScreen` nutzt einen Gradient-Hero mit Routely-Branding, Feature-Chips und eine Login-Card für Server-URL und manuellen Access-Token. Fehlermeldungen werden innerhalb der Card als getönter Error-Hinweis dargestellt. Echte Tokenwerte dürfen nicht dokumentiert werden.
+
 ## Abhängigkeiten
 
 - **Retrofit**: Für die API-Kommunikation (`OAuthApiService`).

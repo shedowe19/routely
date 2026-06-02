@@ -1,7 +1,9 @@
 package de.traewelling.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -29,6 +31,7 @@ import de.traewelling.app.ui.theme.DeepIndigo
 import de.traewelling.app.ui.theme.TealAccent
 import de.traewelling.app.viewmodel.AuthViewModel
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun SetupScreen(viewModel: AuthViewModel) {
     val uiState    by viewModel.uiState.collectAsState()
@@ -57,7 +60,8 @@ fun SetupScreen(viewModel: AuthViewModel) {
             Surface(
                 color = Color.White.copy(alpha = 0.1f),
                 shape = CircleShape,
-                modifier = Modifier.size(100.dp)
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
+                modifier = Modifier.size(108.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
@@ -84,13 +88,24 @@ fun SetupScreen(viewModel: AuthViewModel) {
                 color = Color.White.copy(alpha = 0.7f)
             )
 
-            Spacer(Modifier.height(48.dp))
+            Spacer(Modifier.height(18.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                LoginFeatureChip(Icons.Default.Train, "Check-ins")
+                LoginFeatureChip(Icons.Default.Timeline, "Live")
+                LoginFeatureChip(Icons.Default.People, "Community")
+            }
+
+            Spacer(Modifier.height(36.dp))
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(30.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
+                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
+                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
             ) {
                 Column(
                     modifier = Modifier.padding(24.dp),
@@ -114,7 +129,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
                         leadingIcon = { Icon(Icons.Default.Language, null, tint = DeepIndigo) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri)
                     )
 
@@ -139,7 +154,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
                         visualTransformation = if (showToken) VisualTransformation.None else PasswordVisualTransformation(),
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(14.dp)
                     )
 
                     Spacer(Modifier.height(12.dp))
@@ -147,7 +162,8 @@ fun SetupScreen(viewModel: AuthViewModel) {
                     // Info Card
                     Surface(
                         color = DeepIndigo.copy(alpha = 0.05f),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, DeepIndigo.copy(alpha = 0.08f)),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(Modifier.padding(12.dp)) {
@@ -208,12 +224,26 @@ fun SetupScreen(viewModel: AuthViewModel) {
                     
                     if (uiState.error != null) {
                         Spacer(Modifier.height(16.dp))
-                        Text(
-                            uiState.error!!,
-                            color = MaterialTheme.colorScheme.error,
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
+                        Surface(
+                            color = MaterialTheme.colorScheme.error.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(14.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.error.copy(alpha = 0.16f)),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(Icons.Default.ErrorOutline, null, tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    uiState.error!!,
+                                    color = MaterialTheme.colorScheme.error,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    fontWeight = FontWeight.Medium
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -229,6 +259,24 @@ fun SetupScreen(viewModel: AuthViewModel) {
             }
             
             Spacer(Modifier.height(32.dp))
+        }
+    }
+}
+
+@Composable
+private fun LoginFeatureChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
+    Surface(
+        color = Color.White.copy(alpha = 0.12f),
+        shape = RoundedCornerShape(999.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(icon, null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.9f))
+            Spacer(Modifier.width(6.dp))
+            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.9f))
         }
     }
 }

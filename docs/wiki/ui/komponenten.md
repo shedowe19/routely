@@ -28,11 +28,32 @@ Check-in-Karte für Feed-Listen.
 Zeigt:
 
 - User-Avatar und Name
-- Zug/Linie mit Farbe (TransportColors)
-- Start → Ziel Stationen
+- Zug/Linie mit Farbe (`TransportColors`) und farblich getöntem Route-Panel
+- Start → Ziel Stationen mit Mini-Timeline
 - Punkte-Badge
 - Status-Text (body)
 - Like-Button mit Zähler
+- Details-Hinweis als visuelle Affordance für den Status-Detail-Screen
+
+### StateMessage
+
+Einheitliche Darstellung für Lade-, Fehler- und Empty-States in Screens.
+
+```kotlin
+@Composable
+fun StateMessage(
+    icon: ImageVector,
+    title: String,
+    modifier: Modifier = Modifier,
+    message: String? = null,
+    iconTint: Color = MaterialTheme.colorScheme.primary,
+    actionLabel: String? = null,
+    onAction: (() -> Unit)? = null,
+    loading: Boolean = false
+)
+```
+
+Wird unter anderem im Feed, Check-in, StatusDetail, Profil, Benutzerprofil, Benutzersuche und Notifications genutzt, um leere Zustände, Ladezustände und Fehler visuell konsistent darzustellen.
 
 ### StatPill
 
