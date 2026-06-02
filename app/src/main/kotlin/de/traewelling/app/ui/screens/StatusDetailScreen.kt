@@ -5,10 +5,10 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -412,7 +412,12 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
     ) {
         Column(Modifier.padding(16.dp)) {
             // User row
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.clickable(enabled = user?.username != null) {
+                    user?.username?.let(onUserClick)
+                }
+            ) {
                 if (user?.profilePicture != null) {
                     AsyncImage(
                         model = user.profilePicture,
@@ -566,10 +571,10 @@ private fun TripInfoCard(status: Status) {
             val origin = checkin.origin
             val dest = checkin.destination
             if (origin != null) {
-                TimeRow("Abfahrt", origin.departurePlanned, origin.departureReal, origin.isDepartureDelayed)
+                TimeRow("Abfahrt", origin.departurePlanned, origin.departureReal)
             }
             if (dest != null) {
-                TimeRow("Ankunft", dest.arrivalPlanned, dest.arrivalReal, dest.isArrivalDelayed)
+                TimeRow("Ankunft", dest.arrivalPlanned, dest.arrivalReal)
             }
         }
     }
@@ -627,7 +632,7 @@ private fun StatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
 }
 
 @Composable
-private fun TimeRow(label: String, planned: String?, real: String?, isDelayed: Boolean?) {
+private fun TimeRow(label: String, planned: String?, real: String?) {
     val plannedTime = formatTimeFromIso(planned)
     val realTimeVal = real ?: planned
     val realTime = formatTimeFromIso(realTimeVal)
@@ -739,7 +744,6 @@ private fun StopoverItem(
 
     val isPast = stopZdt?.isBefore(now) ?: false
     val trainIsHere = stopZdt != null && now.isAfter(stopZdt.minusMinutes(1)) && now.isBefore(stopZdt.plusMinutes(1))
-    val isCurrentSegment = outgoingProgress > 0f && outgoingProgress < 1f
 
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     val activeLineColor = TealAccent
@@ -760,7 +764,6 @@ private fun StopoverItem(
         else -> 0.45f
     }
     
-    val isDelayed = stop.isArrivalDelayed == true || stop.isDepartureDelayed == true
     val isCancelled = stop.cancelled == true
 
     // Journeys range logic for lines
