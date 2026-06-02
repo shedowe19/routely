@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.Status
+import de.traewelling.app.data.model.TravelReason
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
@@ -508,6 +509,9 @@ private fun TripInfoCard(status: Status) {
                 }
             }
 
+            Spacer(Modifier.height(12.dp))
+            TravelReasonInfo(status.business)
+
             Spacer(Modifier.height(16.dp))
 
             // Origin → Destination with mini-timeline
@@ -567,6 +571,40 @@ private fun TripInfoCard(status: Status) {
             if (dest != null) {
                 TimeRow("Ankunft", dest.arrivalPlanned, dest.arrivalReal, dest.isArrivalDelayed)
             }
+        }
+    }
+}
+
+@Composable
+private fun TravelReasonInfo(business: Int?) {
+    val reason = travelReasonFromValue(business)
+    Surface(
+        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
+        shape = RoundedCornerShape(12.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = travelReasonIcon(reason),
+                contentDescription = null,
+                modifier = Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Spacer(Modifier.width(8.dp))
+            Text(
+                "Reisegrund:",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+            )
+            Spacer(Modifier.width(6.dp))
+            Text(
+                travelReasonTitle(reason),
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }
@@ -1177,6 +1215,24 @@ private fun localiseCategory(cat: String) = when (cat) {
     "bus"             -> "Bus"
     "ferry"           -> "Fähre"
     else              -> cat
+}
+
+private fun travelReasonFromValue(value: Int?): TravelReason = when (value) {
+    TravelReason.BUSINESS.apiValue -> TravelReason.BUSINESS
+    TravelReason.COMMUTE.apiValue -> TravelReason.COMMUTE
+    else -> TravelReason.PRIVATE
+}
+
+private fun travelReasonIcon(reason: TravelReason) = when (reason) {
+    TravelReason.PRIVATE -> Icons.Default.Person
+    TravelReason.BUSINESS -> Icons.Default.Work
+    TravelReason.COMMUTE -> Icons.Default.Home
+}
+
+private fun travelReasonTitle(reason: TravelReason): String = when (reason) {
+    TravelReason.PRIVATE -> "Privat"
+    TravelReason.BUSINESS -> "Geschäftlich"
+    TravelReason.COMMUTE -> "Arbeitsweg"
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

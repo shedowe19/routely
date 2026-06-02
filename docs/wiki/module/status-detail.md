@@ -47,6 +47,7 @@ Vor der Speicherung des Haltestellenverlaufs im `UIState` (sowohl beim Initialla
 
 Die Timeline zeigt:
 
+- Fahrtinformationen mit Linie, Kategorie, Betreiber, Start/Ziel, Zeiten und Reisegrund (`Status.business`)
 - Fortschritts-Balken zwischen Haltestellen, weich interpoliert (via `animateFloatAsState` mit LinearEasing)
 - Weiche Status-Übergänge zwischen Ladezuständen, Error und Timeline via `AnimatedContent`
 - Gestaffelte Fade-in/Slide-in Animationen der Timeline-Einträge via `AnimatedVisibility`
@@ -75,3 +76,4 @@ Die Timeline zeigt:
 
 - [Check-in](./checkin.md)
 - [API Überblick](../api/ueberblick.md)
+- [Datenmodell](../daten/datenmodell.md)
