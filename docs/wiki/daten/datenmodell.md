@@ -39,12 +39,12 @@ Alle Felder sind mit `@SerializedName` annotiert, um fehlerhaftes Mapping zu ver
 
 ### Station-Modelle
 
-| Modell                  | Beschreibung                                                                                                                                                                                                      |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `TrainStation`          | Bahnhof: id, ibnr, name, rilIdentifier, latitude, longitude                                                                                                                                                       |
-| `StopStation`           | Halt mit Zeitdaten: id, name, rilIdentifier, evaIdentifier, arrival, departure, platform, cancelled, isArrivalDelayed, isDepartureDelayed, arrivalReal, departureReal, arrivalPlatformReal, departurePlatformReal |
-| `StationSearchResponse` | Liste von TrainStation                                                                                                                                                                                            |
-| `DepartureResponse`     | Liste von DepartureTrip                                                                                                                                                                                           |
+| Modell                  | Beschreibung                                                                                                                                                                                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TrainStation`          | Bahnhof: id, ibnr, name, rilIdentifier, latitude, longitude                                                                                                                                                                                                       |
+| `StopStation`           | Halt mit Zeitdaten und optionalen Koordinaten: id, name, rilIdentifier, evaIdentifier, arrival, departure, platform, cancelled, isArrivalDelayed, isDepartureDelayed, arrivalReal, departureReal, arrivalPlatformReal, departurePlatformReal, latitude, longitude |
+| `StationSearchResponse` | Liste von TrainStation                                                                                                                                                                                                                                            |
+| `DepartureResponse`     | Liste von DepartureTrip                                                                                                                                                                                                                                           |
 
 ### Trip-Modelle
 
@@ -115,6 +115,10 @@ Die API unterstützt manuelle Korrekturen von Abfahrts-/Ankunftszeiten:
 - `manualArrival`: Manuell korrigierte Ankunftszeit
 
 Diese werden im CheckInInfo-Modell gespeichert und von TripTrackingService bei der Anzeige berücksichtigt.
+
+## Stopover-Koordinaten
+
+`StopStation` enthält optionale Felder `latitude` und `longitude`. Diese werden vom `TripTrackingService` verwendet, um während einer aktiven Fahrt eine GPS-basierte ETA zum nächsten Halt zu schätzen. Wenn die API für Stopovers keine Koordinaten liefert oder kein aktueller Standort verfügbar ist, nutzt die App weiterhin die regulären API-/Fahrplanzeiten.
 
 ## Reisegrund
 

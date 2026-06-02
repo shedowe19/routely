@@ -10,6 +10,8 @@ Das Widget wird von `TripTrackingService` mit Daten versorgt:
 
 - Linienname, nächster Halt, Ziel, Zeit, Gleis, Verspätung
 
+Die offizielle Ankunftszeit bleibt die Widget-Zeit. GPS-basierte ETA wird aktuell nur in der laufenden TripTracking-Notification und für TTS-Entscheidungen genutzt.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/widget/TripWidgetProvider.kt`

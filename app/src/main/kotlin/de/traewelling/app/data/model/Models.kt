@@ -148,7 +148,9 @@ data class StopStation(
     @SerializedName("departurePlatformReal")    val departurePlatformReal: String?,
     val cancelled: Boolean?,
     @SerializedName("isArrivalDelayed")   val isArrivalDelayed: Boolean?,
-    @SerializedName("isDepartureDelayed") val isDepartureDelayed: Boolean?
+    @SerializedName("isDepartureDelayed") val isDepartureDelayed: Boolean?,
+    val latitude: Double?,
+    val longitude: Double?
 )
 
 // ─── User Search ──────────────────────────────────────────────────────────────

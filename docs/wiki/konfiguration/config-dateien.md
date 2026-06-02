@@ -7,6 +7,7 @@ Wichtige Build- und Config-Dateien des Projekts.
 ## Dateien
 
 - `app/build.gradle.kts`: Zentrale Build-Datei für das App-Modul (Dependencies, SDK Versionen).
+- `app/src/main/AndroidManifest.xml`: Deklariert Berechtigungen, Activities, Services und Receiver; `TripTrackingService` nutzt `foregroundServiceType="dataSync|location"`.
 - `settings.gradle.kts` / `build.gradle.kts`: Root-Konfiguration.
 - `gradle.properties`: Compiler- und Kotlin-Flags.
 - `.gitattributes`: Normalisiert Projekttextdateien auf LF, erzwingt LF für `gradlew`, CRLF für Batch-Dateien und behandelt PNGs als Binärdateien.
@@ -17,3 +18,4 @@ Wichtige Build- und Config-Dateien des Projekts.
 
 - [Build](../entwicklung/build.md)
 - [Secrets und Sicherheit](./secrets-und-sicherheit.md)
+- [TripTracking](../module/trip-tracking.md)
