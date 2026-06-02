@@ -39,7 +39,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 
 ## Reisegrund
 
-Im Bestätigungsschritt zeigt `CheckInScreen` eine Auswahl für den Reisegrund an:
+Im Bestätigungsschritt zeigt `CheckInScreen` eine Chip-Auswahl für den Reisegrund an:
 
 | UI-Label       | API-Wert | Bedeutung                             |
 | -------------- | -------- | ------------------------------------- |
@@ -49,10 +49,15 @@ Im Bestätigungsschritt zeigt `CheckInScreen` eine Auswahl für den Reisegrund a
 
 `CheckInViewModel` hält den Wert im `CheckInUiState.travelReason` und übergibt ihn beim Absenden an `CheckInRequest.business`.
 
+Die Reisegrund-Auswahl nutzt `FilterChip`-Elemente statt eines Dropdowns, damit die drei Optionen direkt sichtbar und auf mobilen Geräten schneller erreichbar sind.
+
+Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselbe visuelle Zustandsdarstellung wie Feed und StatusDetail zu nutzen.
+
 ## Abhängigkeiten
 
 - **TraewellingApiService**: Zum Abfragen der nötigen Daten und Absenden des Check-ins.
 - **FusedLocationProviderClient**: Wird genutzt, um GPS-Koordinaten für die "In der Nähe" Suche zu generieren.
+- **StateMessage**: Einheitliche UI für Lade-, Fehler- und Empty-States.
 
 ## Offene Fragen
 

@@ -49,10 +49,13 @@ Die Timeline zeigt:
 
 - Status-Header mit Nutzerinformationen; ein Klick auf den Header öffnet das Nutzerprofil, sofern ein Nutzername vorhanden ist
 - Fahrtinformationen mit Linie, Kategorie, Betreiber, Start/Ziel, Zeiten und Reisegrund (`Status.business`)
+- Getönter Timeline-Kopf mit Halteanzahl und Hinweis auf den Live-Fortschritt
 - Fortschritts-Balken zwischen Haltestellen, weich interpoliert (via `animateFloatAsState` mit LinearEasing)
+- Dezente Container für aktuellen Halt, Einstieg, Ziel und Halte innerhalb der eigenen Reise
 - Weiche Status-Übergänge zwischen Ladezuständen, Error und Timeline via `AnimatedContent`
 - Gestaffelte Fade-in/Slide-in Animationen der Timeline-Einträge via `AnimatedVisibility`
 - "LIVE" Badge mit Puls-Animation wenn Status heute ist
+- "AKTUELL" Badge am Halt, wenn der aktuelle Zeitpunkt im kurzen Zeitfenster um diesen Halt liegt
 - Verspätungs-Badges (grün/rot)
 - "HALT ENTFÄLLT" für gestrichene Halte
 - "STARTHALTESTELLE", "ENDSTATION" Badges

@@ -1,14 +1,10 @@
 package de.traewelling.app.ui.screens
 
-import androidx.compose.ui.unit.sp
-
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
@@ -17,12 +13,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.draw.clip
-import androidx.compose.foundation.shape.CircleShape
-import coil.compose.AsyncImage
-import de.traewelling.app.data.model.Status
+import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.viewmodel.FeedType
@@ -106,36 +98,28 @@ fun FeedScreen(
 
         Box(modifier = Modifier.nestedScroll(pullRefreshState.nestedScrollConnection).fillMaxSize()) {
             when {
-                uiState.isLoading && uiState.statuses.isEmpty() && !uiState.isRefreshing -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
-                    }
-                }
-                uiState.error != null && uiState.statuses.isEmpty() -> {
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.ErrorOutline, null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.height(12.dp))
-                            Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.height(12.dp))
-                            Button(onClick = { viewModel.refresh() }) { Text("Erneut versuchen") }
-                        }
-                    }
-                }
-                uiState.statuses.isEmpty() && !uiState.isLoading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(Icons.Default.Train, null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f))
-                            Spacer(Modifier.height(12.dp))
-                            Text("Noch keine Einträge",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f))
-                        }
-                    }
-                }
+                uiState.isLoading && uiState.statuses.isEmpty() && !uiState.isRefreshing ->
+                    StateMessage(
+                        icon = Icons.Default.Train,
+                        title = "Feed wird geladen",
+                        message = "Wir holen die neuesten Fahrten für dich.",
+                        loading = true
+                    )
+                uiState.error != null && uiState.statuses.isEmpty() ->
+                    StateMessage(
+                        icon = Icons.Default.ErrorOutline,
+                        title = "Feed konnte nicht geladen werden",
+                        message = uiState.error,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        actionLabel = "Erneut versuchen",
+                        onAction = { viewModel.refresh() }
+                    )
+                uiState.statuses.isEmpty() && !uiState.isLoading ->
+                    StateMessage(
+                        icon = Icons.Default.Train,
+                        title = "Noch keine Fahrten",
+                        message = "Zieh nach unten zum Aktualisieren oder wechsle in den globalen Feed."
+                    )
                 else -> {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         items(uiState.statuses, key = { it.id }) { status ->

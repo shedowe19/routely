@@ -32,6 +32,7 @@ import coil.compose.AsyncImage
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.TravelReason
+import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
@@ -189,31 +190,22 @@ fun StatusDetailScreen(
         ) { targetState ->
             when (targetState) {
                 "LOADING" -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            CircularProgressIndicator()
-                            Spacer(Modifier.height(12.dp))
-                            Text(
-                                "Lade Fahrt-Details…",
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                    }
+                    StateMessage(
+                        icon = Icons.Default.Timeline,
+                        title = "Fahrt-Details werden geladen",
+                        message = "Timeline, Halte und Echtzeiten werden vorbereitet.",
+                        loading = true
+                    )
                 }
                 "ERROR" -> {
-                    Box(Modifier.fillMaxSize().padding(24.dp), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Icon(
-                                Icons.Default.ErrorOutline, null,
-                                modifier = Modifier.size(48.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            Text(uiState.error!!, color = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.height(16.dp))
-                            Button(onClick = { viewModel.refresh() }) { Text("Erneut versuchen") }
-                        }
-                    }
+                    StateMessage(
+                        icon = Icons.Default.ErrorOutline,
+                        title = "Fahrt konnte nicht geladen werden",
+                        message = uiState.error,
+                        iconTint = MaterialTheme.colorScheme.error,
+                        actionLabel = "Erneut versuchen",
+                        onAction = { viewModel.refresh() }
+                    )
                 }
                 "CONTENT" -> {
                     StatusDetailContent(
@@ -314,33 +306,59 @@ private fun StatusDetailContent(
                 ) {
                     Column {
                         Spacer(Modifier.height(8.dp))
-                        Row(
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                Icons.Default.Timeline, null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                "Haltestellenverlauf",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f)
-                            )
-                            Surface(
-                                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Text(
-                                    "${stopovers.size} Halte",
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f),
-                                    fontWeight = FontWeight.Medium
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 16.dp, vertical = 12.dp)
+                                .clip(RoundedCornerShape(18.dp))
+                                .background(
+                                    Brush.horizontalGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                                            MaterialTheme.colorScheme.surface
+                                        )
+                                    )
                                 )
+                                .border(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                    RoundedCornerShape(18.dp)
+                                )
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    Icons.Default.Timeline, null,
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(Modifier.width(10.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(
+                                        "Haltestellenverlauf",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Text(
+                                        "Live-Fortschritt entlang deiner Fahrt",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                    )
+                                }
+                                Surface(
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text(
+                                        "${stopovers.size} Halte",
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                }
                             }
                         }
                     }
@@ -387,14 +405,13 @@ private fun StatusDetailContent(
         }
         if (isLoading && !hasStopovers) {
             item {
-                Box(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(32.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(modifier = Modifier.size(32.dp))
-                }
+                StateMessage(
+                    icon = Icons.Default.Timeline,
+                    title = "Halte werden geladen",
+                    message = "Der Verlauf erscheint gleich in der Timeline.",
+                    modifier = Modifier.fillMaxWidth().height(180.dp),
+                    loading = true
+                )
             }
         }
     }
@@ -671,6 +688,7 @@ private fun TimeRow(label: String, planned: String?, real: String?) {
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun StopoverItem(
     stop: StopStation,
@@ -762,6 +780,19 @@ private fun StopoverItem(
         isPast || trainIsHere -> 1f
         isInRange -> 0.8f
         else -> 0.45f
+    }
+    val stopContainerColor = when {
+        trainIsHere -> TealAccent.copy(alpha = 0.12f)
+        isOrigin -> TealAccent.copy(alpha = 0.08f)
+        isDestination -> AmberAccent.copy(alpha = 0.10f)
+        isInRange -> MaterialTheme.colorScheme.primary.copy(alpha = 0.035f)
+        else -> Color.Transparent
+    }
+    val stopBorderColor = when {
+        trainIsHere -> TealAccent.copy(alpha = 0.35f)
+        isOrigin -> TealAccent.copy(alpha = 0.20f)
+        isDestination -> AmberAccent.copy(alpha = 0.25f)
+        else -> Color.Transparent
     }
     
     val isCancelled = stop.cancelled == true
@@ -857,7 +888,11 @@ private fun StopoverItem(
         Column(
             modifier = Modifier
                 .weight(1f)
-                .padding(vertical = 12.dp) // More padding to give space, IntrinsicSize.Min will handle it
+                .padding(vertical = 6.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(stopContainerColor)
+                .border(1.dp, stopBorderColor, RoundedCornerShape(16.dp))
+                .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -1014,10 +1049,37 @@ private fun StopoverItem(
             }
 
             // Platform + badges
-            Row(
+            FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 2.dp)
             ) {
+                if (trainIsHere) {
+                    Surface(
+                        color = TealAccent.copy(alpha = 0.14f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = BorderStroke(0.5.dp, TealAccent.copy(alpha = 0.35f))
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Navigation,
+                                contentDescription = null,
+                                modifier = Modifier.size(10.dp),
+                                tint = TealDark
+                            )
+                            Spacer(Modifier.width(3.dp))
+                            Text(
+                                "AKTUELL",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = TealDark,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
                 val rawPlat = stop.platform ?: stop.departurePlatformReal ?: stop.arrivalPlatformReal
                 // Strip HAFAS sector prefix "9": "91"→"1", "911"→"11", "99"→"9"
                 // Some DB stations encode tracks as sector(9) + number internally

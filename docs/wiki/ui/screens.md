@@ -32,6 +32,10 @@ Zusätzliche Screens werden als Stack navigiert:
 - `userSearch`
 - `statusDetail/{statusId}`
 
+## Zustandsdarstellung
+
+Feed, Check-in und StatusDetail nutzen `StateMessage` für Lade-, Fehler- und Empty-States. Dadurch sind die visuellen Zustände über die wichtigsten Screens konsistent.
+
 ## Verwandte Seiten
 
 - [Komponenten](./komponenten.md)
