@@ -29,7 +29,8 @@ Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `P
 - [Theme Konfiguration](../ui/theme.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [ADR Dark Mode & Settings](../entscheidungen/2026-04-29-dark-mode-und-settings.md)
+
 ## Offene Fragen
 
-* Fehlerbehandlung in PreferencesManager — offen — @dev
-* Integration von App-spezifischen Spracheinstellungen — offen — @dev
+- Fehlerbehandlung in PreferencesManager — offen — @dev
+- Integration von App-spezifischen Spracheinstellungen — offen — @dev

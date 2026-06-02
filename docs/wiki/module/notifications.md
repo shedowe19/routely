@@ -16,19 +16,23 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 ## Verhalten
 
 ### Lade-Prozess
+
 1. `loadNotifications(refresh)` lädt eine Seite
 2. `loadMore()` lädt weitere Seiten (Pagination via `links.next`)
 3. `refresh()` lädt die erste Seite mit Pull-to-Refresh
 
 ### Unread-Count Polling
+
 - Im `init` wird ein Coroutine gestartet, der alle 60 Sekunden `refreshUnreadCount()` aufruft
 - Der Badge in der NavigationBar zeigt die Anzahl
 
 ### Mark-Read Logik
+
 - `markAsRead(notificationId)`: Optimistic Update + API-Aufruf
 - `markAllAsRead()`: Setzt alle auf gelesen
 
 ### Notification-Typen
+
 - "Liked": Herz-Icon (Error-Farbe)
 - "Follow": PersonAdd-Icon (Primary-Farbe)
 - "Connection": Zug-Icon (Secondary-Farbe)
@@ -37,12 +41,12 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 
 ## UI-Zustand (NotificationUiState)
 
-| Feld | Typ | Beschreibung |
-|------|-----|--------------|
+| Feld            | Typ                | Beschreibung                   |
+| --------------- | ------------------ | ------------------------------ |
 | `notifications` | List<Notification> | Liste aller Benachrichtigungen |
-| `unreadCount` | Int | Anzahl ungelesener |
-| `hasMore` | Boolean | Weitere Seiten verfügbar |
-| `currentPage` | Int | Aktuelle Seiten-Nummer |
+| `unreadCount`   | Int                | Anzahl ungelesener             |
+| `hasMore`       | Boolean            | Weitere Seiten verfügbar       |
+| `currentPage`   | Int                | Aktuelle Seiten-Nummer         |
 
 ## Abhängigkeiten
 

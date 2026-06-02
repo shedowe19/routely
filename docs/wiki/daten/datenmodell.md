@@ -15,78 +15,79 @@ Alle Felder sind mit `@SerializedName` annotiert, um fehlerhaftes Mapping zu ver
 
 ### Auth-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
+| Modell               | Beschreibung                                                      |
+| -------------------- | ----------------------------------------------------------------- |
 | `OAuthTokenResponse` | Token-Antwort mit accessToken, refreshToken, tokenType, expiresIn |
 
 ### User-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `UserResponse` | Wrapper für User-Daten |
-| `User` | Nutzerdaten: id, uuid, username, displayName, profilePicture, bio, totalDistance, totalDuration, points, following, muted, blocked |
+| Modell         | Beschreibung                                                                                                                       |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `UserResponse` | Wrapper für User-Daten                                                                                                             |
+| `User`         | Nutzerdaten: id, uuid, username, displayName, profilePicture, bio, totalDistance, totalDuration, points, following, muted, blocked |
 
 ### Status-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `StatusListResponse` | Wrapper für Liste von Statusen mit PaginationLinks |
-| `SingleStatusResponse` | Wrapper für einzelnen Status |
-| `Status` | Check-in-Status: id, body, createdAt, likes, liked, visibility, business, user, checkin, event, tags |
-| `StatusUser` | User-Kurzform für Status |
-| `CheckinInfo` | Check-in-Details: hafasId, category, mode, lineName, distanceMeters, points, duration, origin, destination, operator, trip, number, routeColor, manualDeparture, manualArrival |
-| `StopOperator` | Betreiber-Info: id, name, uuid |
+| Modell                 | Beschreibung                                                                                                                                                                   |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `StatusListResponse`   | Wrapper für Liste von Statusen mit PaginationLinks                                                                                                                             |
+| `SingleStatusResponse` | Wrapper für einzelnen Status                                                                                                                                                   |
+| `Status`               | Check-in-Status: id, body, createdAt, likes, liked, visibility, business, user, checkin, event, tags                                                                           |
+| `StatusUser`           | User-Kurzform für Status                                                                                                                                                       |
+| `CheckinInfo`          | Check-in-Details: hafasId, category, mode, lineName, distanceMeters, points, duration, origin, destination, operator, trip, number, routeColor, manualDeparture, manualArrival |
+| `StopOperator`         | Betreiber-Info: id, name, uuid                                                                                                                                                 |
 
 ### Station-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `TrainStation` | Bahnhof: id, ibnr, name, rilIdentifier, latitude, longitude |
-| `StopStation` | Halt mit Zeitdaten: id, name, rilIdentifier, evaIdentifier, arrival, departure, platform, cancelled, isArrivalDelayed, isDepartureDelayed, arrivalReal, departureReal, arrivalPlatformReal, departurePlatformReal |
-| `StationSearchResponse` | Liste von TrainStation |
-| `DepartureResponse` | Liste von DepartureTrip |
+| Modell                  | Beschreibung                                                                                                                                                                                                      |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TrainStation`          | Bahnhof: id, ibnr, name, rilIdentifier, latitude, longitude                                                                                                                                                       |
+| `StopStation`           | Halt mit Zeitdaten: id, name, rilIdentifier, evaIdentifier, arrival, departure, platform, cancelled, isArrivalDelayed, isDepartureDelayed, arrivalReal, departureReal, arrivalPlatformReal, departurePlatformReal |
+| `StationSearchResponse` | Liste von TrainStation                                                                                                                                                                                            |
+| `DepartureResponse`     | Liste von DepartureTrip                                                                                                                                                                                           |
 
 ### Trip-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `DepartureTrip` | Abfahrt: tripId, line, direction, plannedWhen, realWhen, delay, platform, cancelled |
-| `HafasLine` | HAFAS-Linieninfo: name, fahrtNr, product, mode, operator |
-| `TripResponse` | Wrapper für TripDetails |
-| `TripDetails` | Trip mit Stopovers: id, lineName, category, stopovers |
-| `StopoversResponse` | Map von tripId zu StopStation-Liste |
+| Modell              | Beschreibung                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `DepartureTrip`     | Abfahrt: tripId, line, direction, plannedWhen, realWhen, delay, platform, cancelled |
+| `HafasLine`         | HAFAS-Linieninfo: name, fahrtNr, product, mode, operator                            |
+| `TripResponse`      | Wrapper für TripDetails                                                             |
+| `TripDetails`       | Trip mit Stopovers: id, lineName, category, stopovers                               |
+| `StopoversResponse` | Map von tripId zu StopStation-Liste                                                 |
 
 ### Check-in-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `CheckInRequest` | Request für Check-in: tripId, lineName, startStationId, destinationStationId, departure, arrival, body, visibility |
-| `CheckInResponse` | Antwort mit Status und Points |
-| `CheckInResult` | Enthält Status und CheckInPoints |
-| `UpdateStatusRequest` | PUT-Request für Status-Updates |
+| Modell                | Beschreibung                                                                                                                 |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `TravelReason`        | Enum für den Reisegrund beim Check-in: PRIVATE=0, BUSINESS=1, COMMUTE=2                                                      |
+| `CheckInRequest`      | Request für Check-in: tripId, lineName, startStationId, destinationStationId, departure, arrival, body, business, visibility |
+| `CheckInResponse`     | Antwort mit Status und Points                                                                                                |
+| `CheckInResult`       | Enthält Status und CheckInPoints                                                                                             |
+| `UpdateStatusRequest` | PUT-Request für Status-Updates                                                                                               |
 
 ### Statistik-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `StatisticsResponse` | Wrapper für StatisticsData |
-| `StatisticsData` | Statistiken: categories, operators, time, purpose |
-| `StatEntry` | Kategorie/Betreiber-Stat: name, count, duration |
-| `StatDay` | Tagesstatistik: date, count, duration |
+| Modell               | Beschreibung                                      |
+| -------------------- | ------------------------------------------------- |
+| `StatisticsResponse` | Wrapper für StatisticsData                        |
+| `StatisticsData`     | Statistiken: categories, operators, time, purpose |
+| `StatEntry`          | Kategorie/Betreiber-Stat: name, count, duration   |
+| `StatDay`            | Tagesstatistik: date, count, duration             |
 
 ### Notification-Modelle
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `NotificationListResponse` | Liste mit Pagination |
-| `Notification` | notification: id, type, lead, notice, link, readAt, createdAt, createdAtForHumans |
+| Modell                     | Beschreibung                                                                      |
+| -------------------------- | --------------------------------------------------------------------------------- |
+| `NotificationListResponse` | Liste mit Pagination                                                              |
+| `Notification`             | notification: id, type, lead, notice, link, readAt, createdAt, createdAtForHumans |
 
 ### Pagination
 
-| Modell | Beschreibung |
-|--------|--------------|
-| `PaginationLinks` | first, last, prev, next URLs |
-| `PaginationMeta` | currentPage, lastPage, total, perPage |
+| Modell            | Beschreibung                          |
+| ----------------- | ------------------------------------- |
+| `PaginationLinks` | first, last, prev, next URLs          |
+| `PaginationMeta`  | currentPage, lastPage, total, perPage |
 
 ## Wichtige Extensions
 
@@ -109,12 +110,18 @@ Flacht die Map von tripId zu StopStation-Liste in eine flache Liste.
 ## Manuelle Zeitedits
 
 Die API unterstützt manuelle Korrekturen von Abfahrts-/Ankunftszeiten:
+
 - `manualDeparture`: Manuell korrigierte Abfahrtszeit
 - `manualArrival`: Manuell korrigierte Ankunftszeit
 
 Diese werden im CheckInInfo-Modell gespeichert und von TripTrackingService bei der Anzeige berücksichtigt.
 
+## Reisegrund
+
+Der Reisegrund wird beim Check-in im Feld `business` übertragen. Das Android-Modell verwendet dafür `TravelReason` mit den API-Werten `0` (Privat), `1` (Geschäftlich) und `2` (Arbeitsweg). Standard ist `TravelReason.PRIVATE`.
+
 ## Verwandte Seiten
 
 - [Datenbank](./datenbank.md)
 - [Schemas](./schemas.md)
+- [Check-in](../module/checkin.md)

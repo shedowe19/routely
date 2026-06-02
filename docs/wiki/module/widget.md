@@ -7,6 +7,7 @@ Das Trip-Widget zeigt den aktuellen Status einer aktiven Fahrt auf dem Homescree
 ## Kontext
 
 Das Widget wird von `TripTrackingService` mit Daten versorgt:
+
 - Linienname, nächster Halt, Ziel, Zeit, Gleis, Verspätung
 
 ## Wichtige Dateien
@@ -20,6 +21,7 @@ Das Widget empfängt Broadcasts mit `ACTION_UPDATE_WIDGET` und aktualisiert sein
 ## Widget-Layout (XML)
 
 Im Ordner `res/layout/` befindet sich `trip_widget.xml` mit folgenden Views:
+
 - `widget_root` - Gesamter Widget-Container (klickbar für App-Öffnung)
 - `widget_line` - Linienname (z.B. "ICE 123")
 - `widget_next_stop` - Nächster Halt oder "Nach: <Ziel>"

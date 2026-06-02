@@ -16,18 +16,19 @@ Aufgerufen vom Feed-Screen über die Suchen-Schaltfläche. Navigiert nach Auswah
 ## Verhalten
 
 ### Suchprozess
+
 1. Nutzer gibt Benutzername ein
 2. Nach 350ms Debounce wird `repo.searchUsers(query)` aufgerufen
 3. Ergebnisse werden als LazyColumn mit UserListItems angezeigt
 
 ### UI-Zustand (UserSearchUiState)
 
-| Feld | Typ | Beschreibung |
-|------|-----|--------------|
-| `query` | String | Aktueller Suchbegriff |
-| `searchResults` | List<User> | Suchergebnisse |
-| `isLoading` | Boolean | Ladezustand |
-| `error` | String? | Fehlermeldung |
+| Feld            | Typ        | Beschreibung          |
+| --------------- | ---------- | --------------------- |
+| `query`         | String     | Aktueller Suchbegriff |
+| `searchResults` | List<User> | Suchergebnisse        |
+| `isLoading`     | Boolean    | Ladezustand           |
+| `error`         | String?    | Fehlermeldung         |
 
 ## Abhängigkeiten
 

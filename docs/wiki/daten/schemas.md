@@ -17,11 +17,11 @@ data class StatusEntity(
 
 **Tabelle:** `feed_statuses`
 
-| Spalte | Typ | Beschreibung |
-|--------|-----|--------------|
-| `id` | Int (PK) | Status-ID von der API |
-| `statusJson` | String | Serialisiertes Status-Objekt (Gson) |
-| `type` | String | "dashboard" oder "global" für Feed-Typ |
+| Spalte       | Typ      | Beschreibung                           |
+| ------------ | -------- | -------------------------------------- |
+| `id`         | Int (PK) | Status-ID von der API                  |
+| `statusJson` | String   | Serialisiertes Status-Objekt (Gson)    |
+| `type`       | String   | "dashboard" oder "global" für Feed-Typ |
 
 ## Verwandte Seiten
 
