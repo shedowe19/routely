@@ -39,7 +39,8 @@ data class User(
     val blocked: Boolean?,
     @SerializedName("userInvisibleToMe") val userInvisibleToMe: Boolean?,
     @SerializedName("pointsEnabled") val pointsEnabled: Boolean?,
-    @SerializedName("mastodonUrl") val mastodonUrl: String?
+    @SerializedName("mastodonUrl") val mastodonUrl: String?,
+    val mastodon: MastodonInfo?
 )
 
 // ─── Status list ─────────────────────────────────────────────────────────────
@@ -374,4 +375,9 @@ data class PaginationMeta(
     @SerializedName("last_page")    val lastPage: Int?,
     @SerializedName("total")        val total: Int?,
     @SerializedName("per_page")     val perPage: Int?
+)
+
+data class MastodonInfo(
+    val server: String?,
+    @SerializedName("user_id") val userId: String?
 )

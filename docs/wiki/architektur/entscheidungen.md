@@ -17,3 +17,5 @@ Kurze Zusammenfassung technischer Entscheidungen, für die es eventuell keine ei
 ## Verwandte Seiten
 
 - [Entscheidungen](../entscheidungen/README.md)
+- **Coil ImageLoader mit User-Agent**: Am 29.06.2026 wurde die App um eine eigene `Application`-Klasse (`TraewellingApplication`) erweitert, die `ImageLoaderFactory` implementiert, um Coil einen angepassten `OkHttpClient` bereitzustellen. Dieser Client fügt den erforderlichen `User-Agent` zu jedem Bild-Request hinzu, um `403 Forbidden` Fehler beim Laden von Profilbildern zu vermeiden.
+- **API Modell Updates**: Am 29.06.2026 wurde das `User`-Datenmodell um ein `mastodon`-Unterobjekt (`MastodonInfo`) erweitert, um die neue Struktur (`mastodon.server`) abzubilden und die Deprecation von `mastodonUrl` aus dem API-Changelog zu adressieren.
