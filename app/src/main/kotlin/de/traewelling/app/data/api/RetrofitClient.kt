@@ -9,6 +9,8 @@ import java.util.concurrent.TimeUnit
 
 object RetrofitClient {
 
+    private val USER_AGENT = "TraewellingApp/${BuildConfig.VERSION_NAME} (Android)"
+
     fun createApiService(baseUrl: String, accessToken: String): TraewellingApiService {
         val client = buildOkHttpClient(accessToken)
         return Retrofit.Builder()
@@ -24,6 +26,12 @@ object RetrofitClient {
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .addInterceptor { chain ->
+                val request = chain.request().newBuilder()
+                    .addHeader("User-Agent", USER_AGENT)
+                    .build()
+                chain.proceed(request)
+            }
             .addInterceptor(loggingInterceptor())
             .build()
 
@@ -45,6 +53,7 @@ object RetrofitClient {
                     .addHeader("Authorization", "Bearer $accessToken")
                     .addHeader("Accept", "application/json")
                     .addHeader("Content-Type", "application/json")
+                    .addHeader("User-Agent", USER_AGENT)
                     .build()
                 chain.proceed(request)
             }
