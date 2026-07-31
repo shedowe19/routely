@@ -50,7 +50,7 @@ interface TraewellingApiService {
         @Path("query") query: String
     ): Response<StationSearchResponse>
 
-    @GET("api/v1/station/nearby")
+    @GET("api/v1/trains/station/nearby")
     suspend fun getNearbyStations(
         @Query("latitude")  lat: Double,
         @Query("longitude") lon: Double
