@@ -23,7 +23,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
    - _Wichtig:_ Stationsergebnisse müssen dedupliziert werden (z.B. nach Nähe und Namen).
 
 2. **Abfahrtsauswahl:**
-   - Sobald ein Startbahnhof gewählt ist, werden die Abfahrten geladen (`GET /api/v1/trains/station/{id}/departures`).
+   - Sobald ein Startbahnhof gewählt ist, werden die Abfahrten geladen (`GET /api/v1/station/{id}/departures`).
    - Die `id` des Bahnhofs (numerisch) muss verwendet werden.
 
 3. **Zielauswahl (Trip Detail):**

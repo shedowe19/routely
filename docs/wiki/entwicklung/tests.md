@@ -8,7 +8,8 @@ Dokumentiert, wie die App getestet wird.
 
 - **Unit-Tests ausführen**: `./gradlew test` oder spezifisch `./gradlew testDebugUnitTest`.
 - **Coroutines testen**: Nutzung von `TestScope` und `runTest` in Unit-Tests für ViewModels oder asynchrone Repositories.
-- Aktuell sind keine Testquellen unter `app/src/test` oder `app/src/androidTest` vorhanden.
+- Der Unit-Test `TraewellingApiServiceTest` prüft den Retrofit-Vertrag für den Abfahrts-Endpunkt, damit die Route nicht versehentlich wieder unter `/api/v1/trains/station/...` geführt wird.
+- Aktuell existiert eine lokale Unit-Testquelle unter `app/src/test`; Instrumentierungstests unter `app/src/androidTest` sind noch nicht vorhanden.
 - API-nahe Tests mit echten Tokens sind derzeit nicht als automatisierte Tests eingerichtet. Falls sie ergänzt werden, müssen Tokens lokal und nicht versioniert bereitgestellt werden.
 
 ## Voraussetzungen

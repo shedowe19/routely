@@ -26,7 +26,7 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 
 - **Station Search**: `GET /api/v1/trains/station/autocomplete/{query}` – Suche von Haltestellen per Text.
 - **Nearby Stations**: `GET /api/v1/stations` (mit Bounding-Box über `min_lat`, `max_lat`, `min_lon`, `max_lon`) oder `GET /api/v1/trains/station/nearby` – Haltestellen in der Nähe. _Hinweis: `nearby` liefert immer nur einen Bahnhof, `stations` ist für Umkreissuche._
-- **Departures**: `GET /api/v1/trains/station/{id}/departures` – Abfahrtsmonitor. Benötigt die numerische ID, nicht den Namen!
+- **Departures**: `GET /api/v1/station/{id}/departures` – Abfahrtsmonitor. Benötigt die numerische ID, nicht den Namen!
 
 **3. Fahrtdetails & Haltestellen (Trip-Infos)**
 

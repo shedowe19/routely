@@ -66,7 +66,7 @@ interface TraewellingApiService {
 
     // ─── Departures — uses numeric station ID, NOT the station name! ──────────
 
-    @GET("api/v1/trains/station/{id}/departures")
+    @GET("api/v1/station/{id}/departures")
     suspend fun getStationDepartures(
         @Path("id")          stationId: Int,
         @Query("when")       whenTime: String? = null,
