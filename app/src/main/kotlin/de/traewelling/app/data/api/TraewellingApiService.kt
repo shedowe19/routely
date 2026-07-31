@@ -45,12 +45,12 @@ interface TraewellingApiService {
 
     // ─── Station search ───────────────────────────────────────────────────────
 
-    @GET("api/v1/station/autocomplete/{query}")
+    @GET("api/v1/trains/station/autocomplete/{query}")
     suspend fun searchStations(
         @Path("query") query: String
     ): Response<StationSearchResponse>
 
-    @GET("api/v1/station/nearby")
+    @GET("api/v1/trains/station/nearby")
     suspend fun getNearbyStations(
         @Query("latitude")  lat: Double,
         @Query("longitude") lon: Double
@@ -66,7 +66,7 @@ interface TraewellingApiService {
 
     // ─── Departures — uses numeric station ID, NOT the station name! ──────────
 
-    @GET("api/v1/station/{id}/departures")
+    @GET("api/v1/trains/station/{id}/departures")
     suspend fun getStationDepartures(
         @Path("id")          stationId: Int,
         @Query("when")       whenTime: String? = null,
