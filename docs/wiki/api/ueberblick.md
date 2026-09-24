@@ -8,6 +8,7 @@
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/api/RetrofitClient.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/transitous/TransitousLiveMapClient.kt`
 
 ## TraewellingApiService
 
@@ -49,6 +50,10 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 ## OAuth
 
 Token Exchange und Refreshing laufen über den `OAuthApiService` in `TraewellingApiService.kt` (`POST /oauth/token`).
+
+## Transitous Live-Karte
+
+Die Live-Karte verwendet zusätzlich und unabhängig von Träwelling `GET https://api.transitous.org/api/v6/map/trips` für Fahrtabschnitte im sichtbaren Kartenausschnitt. Transitous erhält dabei keinen Träwelling-OAuth-Token. Die Fahrzeugpositionen leitet die App aus den gelieferten Zeiten und Liniengeometrien ab; sie sind geschätzt. Einzelheiten stehen unter [Externe Schnittstellen](./externe-schnittstellen.md) und [Transitous Live-Karte](../features/transitous-live-karte.md).
 
 ## Logging und Tokens
 

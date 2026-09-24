@@ -19,9 +19,13 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 - **Java/Kotlin**: JDK 17, JVM Target 17
 - **Zeilenenden**: `.gitattributes` erzwingt LF für `gradlew` und zentrale Projekttextdateien, damit der Unix-Wrapper in Linux-basierten CI-Umgebungen ausführbar bleibt.
 
-## GitHub Actions CI/CD (Deployment)
+## GitHub Actions CI
 
-Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.github/workflows/android.yml`).
+`.github/workflows/android-ci.yml` prüft Pull Requests und Pushes auf `main`. Mit JDK 17 läuft `./gradlew --no-daemon testDebugUnitTest assembleDebug`. Der Debug-Build wird dabei nicht signiert oder als Release veröffentlicht.
+
+## GitHub Actions Release
+
+Der manuell gestartete Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.github/workflows/android.yml`).
 
 - **Trigger**: Manueller Start (`workflow_dispatch`), bei dem `version_name` (z.B. `1.0.0`) und `version_code` (z.B. `1`) angegeben werden.
 - **Build**: Es wird `./gradlew assembleRelease` ausgeführt.
@@ -35,3 +39,4 @@ Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.gi
 
 - [Setup](./setup.md)
 - [Config-Dateien](../konfiguration/config-dateien.md)
+- [Tests](./tests.md)

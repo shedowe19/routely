@@ -22,6 +22,7 @@ sealed class Screen(val route: String, val label: String, val icon: ImageVector)
     object Main          : Screen("main",          "Main",              Icons.Default.Home)
     object Feed          : Screen("feed",          "Feed",              Icons.Default.Home)
     object CheckIn       : Screen("checkin",       "Check-in",          Icons.Default.Train)
+    object LiveMap       : Screen("liveMap",       "Karte",             Icons.Default.Map)
     object Notifications : Screen("notifications", "Meldungen",         Icons.Default.Notifications)
     object Profile       : Screen("profile",       "Profil",            Icons.Default.Person)
     object Settings      : Screen("settings",      "Einstellungen",     Icons.Default.Settings)
@@ -33,6 +34,7 @@ fun MainNavigation(
     authViewModel: AuthViewModel,
     feedViewModel: FeedViewModel,
     checkInViewModel: CheckInViewModel,
+    liveMapViewModel: LiveMapViewModel,
     profileViewModel: ProfileViewModel,
     notificationViewModel: NotificationViewModel,
     userProfileViewModel: UserProfileViewModel,
@@ -50,7 +52,7 @@ fun MainNavigation(
             val notificationState by notificationViewModel.uiState.collectAsState()
             val unreadCount = notificationState.unreadCount
 
-            val tabs = listOf(Screen.Feed, Screen.CheckIn, Screen.Notifications, Screen.Profile)
+            val tabs = listOf(Screen.Feed, Screen.CheckIn, Screen.LiveMap, Screen.Notifications, Screen.Profile)
             val pagerState = rememberPagerState(pageCount = { tabs.size })
             val coroutineScope = rememberCoroutineScope()
 
@@ -107,6 +109,9 @@ fun MainNavigation(
                         }
                         Screen.CheckIn -> {
                             CheckInScreen(checkInViewModel)
+                        }
+                        Screen.LiveMap -> {
+                            LiveMapScreen(liveMapViewModel, isActive = pagerState.currentPage == page)
                         }
                         Screen.Notifications -> {
                             NotificationScreen(notificationViewModel)

@@ -22,6 +22,10 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 -   Ein dezenter **Live-Indikator** in der TopAppBar zeigt dir bei Fahrten am aktuellen Tag sofort an, dass du dich gerade im "Live-Modus" befindest.
 -   Optimierte Ladezeiten für umfangreiche Haltestellenlisten durch effizientes Daten-Merging im ViewModel.
 
+### 🗺️ Transitous Live-Karte
+-   Ein eigener Karten-Tab zeigt geschätzte Positionen öffentlicher Verkehrsmittel im gewählten Ausschnitt. Marker lassen sich nach Verkehrsart filtern und antippen.
+-   Die Positionen werden aus Fahrtzeiten und Liniengeometrie berechnet; selbst mit Echtzeit-Fahrtdaten sind sie keine GPS-Ortung. Datenquellen und Kartenurheber sind in der App verlinkt.
+
 ## 🛠 Tech Stack
 
 -   **Sprache:** Kotlin
@@ -38,3 +42,9 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 Die interne Projektdokumentation (für Entwickler und Agenten) befindet sich unter:
 
 - [Projekt-Wiki](docs/wiki/index.md)
+
+## Lizenz und externe Daten
+
+Der von Routely entwickelte Quellcode, die Projektdokumentation und die selbst erstellten App-Grafiken einschließlich Icons stehen unter der [Apache License 2.0](LICENSE). Copyright 2026 Routely contributors. Externe Bibliotheken, Verkehrs- und Kartendaten behalten ihre eigenen Nutzungsbedingungen. Die Lizenz räumt keine Rechte an fremden Marken ein, etwa am Namen Träwelling.
+
+Die öffentliche [Transitous-API](https://transitous.org/api/) unterliegt eigenen Nutzungsbedingungen: Sie ist für quelloffene, nichtkommerzielle und ressourcenschonende Anwendungen vorgesehen. Die Apache-Lizenz für den App-Code erlaubt keinen davon abweichenden Zugriff auf den Transitous-Dienst. Für andere Einsatzformen muss die Datenanbindung entsprechend ersetzt oder mit Transitous geklärt werden.
