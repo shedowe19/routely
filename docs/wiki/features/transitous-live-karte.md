@@ -29,12 +29,12 @@ Die Karte ist ein eigener Tab der angemeldeten App. Sie verwendet eine native Ma
 
 - Die [Transitous-API](https://transitous.org/api/) stellt je nach Verkehrsverbund unterschiedliche Fahrplandaten und Echtzeitinformationen bereit; ein Marker ist deshalb keine Zusage, dass ein Fahrzeug dort tatsächlich fährt.
 - Die Karte benötigt eine Internetverbindung zu Transitous und zu den OpenFreeMap-Kacheln.
-- Transitous verlangt einen identifizierbaren `User-Agent`, sichtbare Quellennennung sowie eine ressourcenschonende Nutzung. Bei großem Anfragevolumen verlangt die Nutzungsrichtlinie vorab eine Abstimmung. Für eine Veröffentlichung ist zudem eine passende Open-Source-Lizenz des Projekts nötig.
+- Transitous verlangt einen identifizierbaren `User-Agent`, sichtbare Quellennennung sowie eine ressourcenschonende und nichtkommerzielle Nutzung. Bei großem Anfragevolumen verlangt die Nutzungsrichtlinie vorab eine Abstimmung. Der Routely-Code ist unter Apache-2.0 veröffentlicht; die Transitous-Daten und der API-Dienst fallen nicht unter diese Codelizenz.
 - Der Kartenstil trägt eigene OpenMapTiles/OpenStreetMap-Attribution; diese darf bei Anpassungen der Kartenoberfläche nicht verdeckt werden.
 
 ## Offene Fragen
 
-- TODO: Vor einer breiteren Veröffentlichung eine geeignete Projektlizenz festlegen und bei erwartbar hoher Nutzung das Anfragevolumen mit Transitous abstimmen.
+- TODO: Bei erwartbar hoher Nutzung das Anfragevolumen vorab mit Transitous abstimmen.
 
 ## Verwandte Seiten
 

@@ -42,3 +42,9 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 Die interne Projektdokumentation (für Entwickler und Agenten) befindet sich unter:
 
 - [Projekt-Wiki](docs/wiki/index.md)
+
+## Lizenz und externe Daten
+
+Der von Routely entwickelte Quellcode und die Projektdokumentation stehen unter der [Apache License 2.0](LICENSE). Copyright 2026 Routely contributors. Die Lizenz erfasst keine Rechte an externen Bibliotheken, Verkehrs- und Kartendaten oder fremden Logos und Marken. Insbesondere sind die vorhandenen Träwelling-Grafiken und App-Icons nicht durch Routely neu lizenziert.
+
+Die öffentliche [Transitous-API](https://transitous.org/api/) unterliegt eigenen Nutzungsbedingungen: Sie ist für quelloffene, nichtkommerzielle und ressourcenschonende Anwendungen vorgesehen. Die Apache-Lizenz für den App-Code erlaubt keinen davon abweichenden Zugriff auf den Transitous-Dienst. Für andere Einsatzformen muss die Datenanbindung entsprechend ersetzt oder mit Transitous geklärt werden.
