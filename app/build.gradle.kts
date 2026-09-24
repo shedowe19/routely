@@ -86,6 +86,7 @@ dependencies {
     implementation(libs.browser)
     implementation(libs.coroutines.android)
     implementation(libs.gson)
+    implementation(libs.maplibre.android)
     implementation("com.google.android.gms:play-services-location:21.2.0")
 
     implementation(libs.room.runtime)

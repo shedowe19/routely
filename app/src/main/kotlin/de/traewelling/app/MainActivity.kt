@@ -31,6 +31,7 @@ class MainActivity : ComponentActivity() {
     private val authViewModel:         AuthViewModel         by viewModels()
     private val feedViewModel:         FeedViewModel         by viewModels()
     private val checkInViewModel:      CheckInViewModel      by viewModels()
+    private val liveMapViewModel:      LiveMapViewModel      by viewModels()
     private val profileViewModel:      ProfileViewModel      by viewModels()
     private val notificationViewModel: NotificationViewModel by viewModels()
     private val userProfileViewModel:  UserProfileViewModel  by viewModels()
@@ -77,6 +78,7 @@ class MainActivity : ComponentActivity() {
                             authViewModel         = authViewModel,
                             feedViewModel         = feedViewModel,
                             checkInViewModel      = checkInViewModel,
+                            liveMapViewModel      = liveMapViewModel,
                             profileViewModel      = profileViewModel,
                             notificationViewModel = notificationViewModel,
                             userProfileViewModel  = userProfileViewModel,

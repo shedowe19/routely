@@ -22,6 +22,10 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 -   Ein dezenter **Live-Indikator** in der TopAppBar zeigt dir bei Fahrten am aktuellen Tag sofort an, dass du dich gerade im "Live-Modus" befindest.
 -   Optimierte Ladezeiten für umfangreiche Haltestellenlisten durch effizientes Daten-Merging im ViewModel.
 
+### 🗺️ Transitous Live-Karte
+-   Ein eigener Karten-Tab zeigt geschätzte Positionen öffentlicher Verkehrsmittel im gewählten Ausschnitt. Marker lassen sich nach Verkehrsart filtern und antippen.
+-   Die Positionen werden aus Fahrtzeiten und Liniengeometrie berechnet; selbst mit Echtzeit-Fahrtdaten sind sie keine GPS-Ortung. Datenquellen und Kartenurheber sind in der App verlinkt.
+
 ## 🛠 Tech Stack
 
 -   **Sprache:** Kotlin
