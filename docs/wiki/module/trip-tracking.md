@@ -34,6 +34,8 @@ Das Repository liefert Status und Stopovers. `checkedInRoute` grenzt die Route a
 
 `StationTrackingEngine` ist reine Kotlin-Logik ohne Android- oder Netzwerkzugriffe. Sie prüft die geordnete Haltfolge und bewahrt den aktuellen Besuch bei API-Aktualisierungen über seinen Schlüssel. Es wird nicht beliebig der global nächstgelegene Bahnhof ausgewählt. Ein noch rein zeitbasierter Cursor bleibt vorläufig: Der erste brauchbare GPS-Fix kann ihn bei einem eindeutigen nahen Halt räumlich neu verankern, auch bei großer Verspätung. Mehrdeutige Stationsbesuche werden nicht beliebig ausgewählt.
 
+Ein erster Fix fern aller Stationen macht einen bereits zeitbasiert vorgerückten Cursor nicht zu einer bestätigten GPS-Zuordnung. Er bleibt nach Cache-Restaurierung korrigierbar und wird bis zur räumlichen Bestätigung als `Fahrplan · ungefähr` angezeigt. Ein späterer eindeutiger stationsnaher Fix kann ihn zum passenden Besuch zurückführen.
+
 ## GPS-Trigger und Fortschritt
 
 Ein brauchbarer Fix hat gültige Koordinaten, höchstens 100 Meter gemeldete Ungenauigkeit und ist höchstens 30 Sekunden alt. Ungültige, alte oder bereits verarbeitete Zeitstempel bestätigen keine neue Annäherung. Nach einer längeren Signallücke muss ein neuer Annäherungstrend entstehen.
@@ -92,7 +94,7 @@ Beim Beenden werden Location-Callbacks, Polling und TTS gestoppt. Aktive Status-
 
 ## Validierung und offene Fragen
 
-- Reine Engine-Regressionen sind unter [Tests](../entwicklung/tests.md) dokumentiert; der Android-Build und die neue Testsuite werden über CI geprüft.
+- Der erste vollständige GPS-Prüflauf mit 62 Tests, Android-Debug-Build und APK-Upload war erfolgreich. Die aktuelle Suite umfasst zusätzlich die 35. GPS-Regression; historische Nachweise und aktuelle PR-Checks stehen unter [Tests](../entwicklung/tests.md).
 - TODO: Echte Zug-/Busfahrten mit Tunnel, nahen Stationen, Vorbeifahrt, Rundfahrten, grober Standortfreigabe, ausgeschaltetem Display und Neustart validieren. Hier steht kein physisches Testgerät zur Verfügung.
 - TODO: Radius- und Hysteresewerte nach diesen Fahrten bewerten; reine Nähe ist kein Nachweis eines Fahrzeughalts.
 

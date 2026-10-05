@@ -187,10 +187,12 @@ class StationTrackingEngine(
         lastReliableFix = fix
         protectCoordinateCursor = true
         if (!initializationAttempted) {
-            initializationAttempted = true
-            initializeAtMidwayStop(fix, nowMillis)
+            val anchored = initializeAtMidwayStop(fix, nowMillis)
+            // A clock-selected visit is provisional until location proves the
+            // visit. A first fix between stations must not lock that selection
+            // permanently and prevent a later safe near-station correction.
+            if (anchored || state.nextIndex == 0) establishGpsCursor()
         }
-        state = state.copy(gpsEstablished = true)
         if (mayBootstrapOrigin && oldFix != null) {
             if (bootstrapDepartedOrigin(oldFix, fix, nowMillis)) mayBootstrapOrigin = false
         }
@@ -199,7 +201,7 @@ class StationTrackingEngine(
         }
         skipCancelled()
         if (state.completed) return finishedUpdate(TrackingSource.GPS)
-        val stop = currentStop() ?: return TrackingUpdate(null, TrackingSource.GPS)
+        val stop = currentStop() ?: return TrackingUpdate(null, sourceForCurrent(nowMillis))
         if (!hasCoordinates(stop)) return onTimetable(nowMillis)
 
         if (observedKey != stop.key) {
@@ -231,6 +233,7 @@ class StationTrackingEngine(
             (approachConfirmed || stop.isOrigin || insideArrivalFixCount >= 2)
         ) {
             state = state.copy(arrivedAtCurrent = true)
+            establishGpsCursor()
         }
         val lowSpeed = fix.speedMetersPerSecond?.takeIf { it.isFinite() && it >= 0.0 }
             ?.let { it <= DESTINATION_MAX_SPEED_METERS_PER_SECOND } == true
@@ -241,6 +244,7 @@ class StationTrackingEngine(
             ((lowSpeed && insideArrivalFixCount >= 2) || dwelled)
         ) {
             state = state.copy(arrivedAtCurrent = true, completed = true)
+            establishGpsCursor()
             previousDistance = distance
             return TrackingUpdate(stop, TrackingSource.GPS, announcement, destinationReached = true)
         }
@@ -253,13 +257,14 @@ class StationTrackingEngine(
             (minimumDistance ?: Double.MAX_VALUE) <= FAST_PASS_RADIUS_METERS &&
             distance > DEPARTURE_RADIUS_METERS && riseFromMinimum >= FAST_PASS_INCREASE_METERS
         if (leftArrival || fastPass) {
+            establishGpsCursor()
             advance()
             // One fix can advance only one visit. In particular, overlapping
             // station bubbles cannot announce every nearby stop at once.
             return TrackingUpdate(currentStop(), sourceForCurrent(nowMillis), announcement)
         }
         previousDistance = distance
-        return TrackingUpdate(stop, TrackingSource.GPS, announcement)
+        return TrackingUpdate(stop, sourceForCurrent(nowMillis), announcement)
     }
 
     @Synchronized
@@ -268,7 +273,7 @@ class StationTrackingEngine(
         if (state.completed) return finishedUpdate(sourceForCurrent(nowMillis))
         var stop = currentStop() ?: return TrackingUpdate(null, TrackingSource.TIMETABLE)
         if (hasCoordinates(stop) && hasReliableLocation(nowMillis)) {
-            return TrackingUpdate(stop, TrackingSource.GPS)
+            return TrackingUpdate(stop, sourceForCurrent(nowMillis))
         }
         // After GPS tracking starts, a tunnel or a lost fix must not make a
         // delayed train jump ahead merely because the schedule has elapsed.
@@ -279,7 +284,7 @@ class StationTrackingEngine(
             skipCancelled()
             stop = currentStop() ?: return TrackingUpdate(null, TrackingSource.TIMETABLE)
             if (hasCoordinates(stop) && hasReliableLocation(nowMillis)) {
-                return TrackingUpdate(stop, TrackingSource.GPS)
+                return TrackingUpdate(stop, sourceForCurrent(nowMillis))
             }
         }
         val eventTime = if (stop.isOrigin) {
@@ -301,8 +306,8 @@ class StationTrackingEngine(
         skipCancelled()
     }
 
-    private fun initializeAtMidwayStop(fix: LocationFix, nowMillis: Long) {
-        if (state.gpsEstablished || state.completed || state.arrivedAtCurrent) return
+    private fun initializeAtMidwayStop(fix: LocationFix, nowMillis: Long): Boolean {
+        if (state.gpsEstablished || state.completed || state.arrivedAtCurrent) return false
         val candidates = route.withIndex().filter { (_, stop) ->
             if (stop.cancelled || !hasCoordinates(stop)) return@filter false
             val arrival = stop.effectiveArrivalMillis ?: stop.plannedArrivalMillis
@@ -320,7 +325,9 @@ class StationTrackingEngine(
             state = state.copy(nextIndex = candidate.index, nextStopKey = candidate.value.key)
             mayBootstrapOrigin = candidate.index == 0 && candidate.value.isOrigin
             resetObservation()
+            return true
         }
+        return false
     }
 
     private fun bootstrapDepartedOrigin(previous: LocationFix, fix: LocationFix, nowMillis: Long): Boolean {
@@ -347,6 +354,7 @@ class StationTrackingEngine(
             fromOrigin - priorFromOrigin >= supportedMovement && priorToNext - toNext >= supportedMovement &&
             toNext < betweenStops && fromOrigin + toNext <= betweenStops + MIDWAY_CORRIDOR_MARGIN_METERS
         ) {
+            establishGpsCursor()
             advance()
             return true
         }
@@ -391,6 +399,7 @@ class StationTrackingEngine(
             fromStop - priorFromStop >= movement && priorToNext - toNext >= movement &&
             toNext < betweenStops && fromStop + toNext <= betweenStops + MIDWAY_CORRIDOR_MARGIN_METERS
         ) {
+            establishGpsCursor()
             advance()
             return true
         }
@@ -398,6 +407,11 @@ class StationTrackingEngine(
     }
 
     private fun currentStop(): TrackingStop? = route.getOrNull(state.nextIndex)
+
+    private fun establishGpsCursor() {
+        state = state.copy(gpsEstablished = true)
+        initializationAttempted = true
+    }
 
     private fun skipCancelled() {
         while (!state.completed && currentStop()?.cancelled == true) advance()
@@ -427,7 +441,7 @@ class StationTrackingEngine(
     }
 
     private fun sourceForCurrent(nowMillis: Long): TrackingSource =
-        if (currentStop()?.let(::hasCoordinates) == true && hasReliableLocation(nowMillis)) {
+        if (state.gpsEstablished && currentStop()?.let(::hasCoordinates) == true && hasReliableLocation(nowMillis)) {
             TrackingSource.GPS
         } else TrackingSource.TIMETABLE
 

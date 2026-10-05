@@ -521,6 +521,31 @@ class StationTrackingEngineTest {
     }
 
     @Test
+    fun firstFarGpsDoesNotLockProvisionalClockCursorBeforeLaterStationProof() {
+        val stops = listOf(
+            stop("origin", arrival = now - 60 * MINUTE, origin = true),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        )
+        val engine = StationTrackingEngine(stops)
+        assertEquals("next", engine.onTimetable(now).stop?.key)
+
+        val farFromEitherStation = engine.onLocation(fix(500.0, now + SECOND), now + SECOND)
+        assertEquals(TrackingSource.TIMETABLE, farFromEitherStation.source)
+        assertEquals(1, engine.getProgress().nextIndex)
+        assertFalse(engine.getProgress().gpsEstablished)
+
+        val saved = Gson().fromJson(Gson().toJson(engine.getProgress()), TrackingProgress::class.java)
+        val restarted = StationTrackingEngine(stops, saved)
+        val actualOrigin = restarted.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+
+        assertEquals(TrackingSource.GPS, actualOrigin.source)
+        assertEquals("origin", actualOrigin.stop?.key)
+        assertEquals(0, restarted.getProgress().nextIndex)
+        assertTrue(restarted.getProgress().gpsEstablished)
+        assertFalse(actualOrigin.destinationReached)
+    }
+
+    @Test
     fun cachedRouteAndProgressWorkOfflineWithoutCurrentApiResponses() {
         val gson = Gson()
         val stops = listOf(stop("cached-next", destination = true))

@@ -33,9 +33,9 @@ GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56
 
 ## Prüfung der GPS-Erweiterung
 
-Die neue `StationTrackingEngineTest` ergänzt die bisherigen API-Regressionen. Die Tests prüfen unter anderem verspätete Fahrten, schnelle Zielvorbeifahrt gegenüber langsamer/stabiler Ankunft, vorläufige Zeitcursor nach Cache-Restaurierung, späten Start am Ursprung, getrennten GPS-aus-/Ausfallmodus, Rundfahrten sowie freigegebene und bestätigte Ansageschlüssel. Die endgültige Testanzahl wird mit dem vollständigen CI-Ergebnis dokumentiert.
+Die aktuelle Testsuite umfasst 35 Regressionen in `StationTrackingEngineTest` und 28 API-Regressionen, insgesamt 63. Geprüft werden unter anderem verspätete Fahrten, schnelle Zielvorbeifahrt gegenüber langsamer/stabiler Ankunft, vorläufige Zeitcursor nach Cache-Restaurierung, späten Start am Ursprung, getrennten GPS-aus-/Ausfallmodus, Rundfahrten sowie freigegebene und bestätigte Ansageschlüssel. Der zusätzliche Startfall verhindert, dass ein erster GPS-Fix fern aller Stationen einen vorläufigen Zeitcursor festschreibt.
 
-TODO: Ergebnis des vollständigen CI-Laufs mit `:app:testDebugUnitTest :app:assembleDebug` für die GPS-Erweiterung nachtragen. Der oben dokumentierte grüne API-Commit enthält diese Erweiterung noch nicht.
+Der erste vollständige GPS-Prüflauf für Commit `672051411cc1f76bf910c0262b8fbe8710844363` war am 05.10.2026 erfolgreich: 62 Tests (34 GPS und 28 API), Android-Debug-Build und APK-Upload. Nachweis: [GitHub-Actions-Lauf 37349706390](https://github.com/shedowe19/routely/actions/runs/37349706390). Dieser historische Lauf enthält die zuletzt ergänzte 35. GPS-Regression noch nicht. Den aktuellen Prüfstand des gesamten PR zeigt [PR #36: Checks](https://github.com/shedowe19/routely/pull/36/checks).
 
 Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Echte Zug-/Busfahrten und Android-Geräteprüfungen stehen aus; hier ist kein physisches Testgerät verfügbar. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration.
 
