@@ -196,7 +196,7 @@ class StationTrackingEngine(
         }
         var advanced = false
         if (mayBootstrapOrigin && oldFix != null) {
-            advanced = bootstrapDepartedOrigin(oldFix, fix, nowMillis)
+            advanced = bootstrapDepartedOrigin(oldFix, fix)
             if (advanced) mayBootstrapOrigin = false
         }
         if (!advanced && oldFix != null) advanced = recoverPassedStopAfterGap(oldFix, fix)
@@ -357,7 +357,7 @@ class StationTrackingEngine(
         return false
     }
 
-    private fun bootstrapDepartedOrigin(previous: LocationFix, fix: LocationFix, nowMillis: Long): Boolean {
+    private fun bootstrapDepartedOrigin(previous: LocationFix, fix: LocationFix): Boolean {
         if (state.nextIndex != 0 || state.arrivedAtCurrent || state.completed ||
             fix.timeMillis - previous.timeMillis > MAX_FIX_AGE_MILLIS
         ) return false
@@ -365,12 +365,10 @@ class StationTrackingEngine(
         if (!origin.isOrigin || !hasCoordinates(origin)) return false
         val originLatitude = origin.latitude ?: return false
         val originLongitude = origin.longitude ?: return false
-        val departure = origin.effectiveDepartureMillis ?: return false
         val next = route.drop(1).firstOrNull { !it.cancelled } ?: return false
         if (!hasCoordinates(next)) return false
         val nextLatitude = next.latitude ?: return false
         val nextLongitude = next.longitude ?: return false
-        if (departure >= nowMillis) return false
         val fromOrigin = distanceMeters(fix.latitude, fix.longitude, originLatitude, originLongitude)
         val priorFromOrigin = distanceMeters(previous.latitude, previous.longitude, originLatitude, originLongitude)
         val toNext = distanceMeters(fix.latitude, fix.longitude, nextLatitude, nextLongitude)

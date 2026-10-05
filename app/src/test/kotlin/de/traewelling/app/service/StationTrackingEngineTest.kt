@@ -5,6 +5,7 @@ import com.google.gson.reflect.TypeToken
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -410,6 +411,51 @@ class StationTrackingEngineTest {
         assertEquals("next", leavingOrigin.stop?.key)
         assertEquals(1, engine.getProgress().nextIndex)
         assertFalse(leavingOrigin.destinationReached)
+    }
+
+    @Test
+    fun earlyGpsDepartureDoesNotWaitForPlannedOrApiDeparture() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", arrival = now + MINUTE, origin = true).copy(
+                plannedDepartureMillis = now + 2 * MINUTE,
+                effectiveDepartureMillis = now + 10 * MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2, arrival = now + 5 * MINUTE)
+        ))
+        engine.onLocation(fix(300.0, now, speed = 20.0), now)
+
+        val leaving = engine.onLocation(fix(400.0, now + 5 * SECOND, speed = 20.0), now + 5 * SECOND)
+
+        assertEquals("next", leaving.stop?.key)
+        assertEquals(TrackingSource.GPS, leaving.source)
+        assertEquals(1, engine.getProgress().nextIndex)
+        assertFalse(leaving.destinationReached)
+    }
+
+    @Test
+    fun gpsTimeForecastWorksWhenTrackingStartsAfterAnEarlyDeparture() {
+        val route = listOf(
+            stop("origin", arrival = now + MINUTE, origin = true).copy(
+                plannedDepartureMillis = now + 2 * MINUTE,
+                effectiveDepartureMillis = now + 10 * MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2, arrival = now + 5 * MINUTE,
+                destination = true).copy(effectiveArrivalMillis = now + 15 * MINUTE)
+        )
+        val engine = StationTrackingEngine(route)
+        val estimator = GpsJourneyTimeEstimator()
+        var estimate: GpsJourneyTimes? = null
+        listOf(300.0, 400.0, 500.0, 600.0).forEachIndexed { index, position ->
+            val time = now + index * 5 * SECOND
+            val fix = fix(position, time, speed = 20.0)
+            val update = engine.onLocation(fix, time)
+            estimate = estimator.update(route, engine.getProgress(), update.source, fix, time)
+        }
+
+        assertNotNull(estimate)
+        val arrival = estimate!!.stopTimes.single { it.stopKey == "next" }.arrivalMillis!!
+        assertTrue(arrival < route[1].plannedArrivalMillis!!)
+        assertTrue(arrival > now + 15 * SECOND)
+        assertEquals(now + 15 * MINUTE, route[1].effectiveArrivalMillis)
+        assertFalse(engine.getProgress().completed)
     }
 
     @Test
