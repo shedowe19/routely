@@ -5,6 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.*
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.service.RecognizedRide
+import de.traewelling.app.service.RideRecognitionService
+import de.traewelling.app.service.RideRecognitionState
+import de.traewelling.app.service.RideRecognitionEngine
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
@@ -37,7 +41,10 @@ data class CheckInUiState(
     val manualArrival: String = "",
     // Result
     val checkInResult: CheckInResult? = null,
-    val resolvedOriginStop: StopStation? = null
+    val resolvedOriginStop: StopStation? = null,
+    val rideRecognitionEnabled: Boolean = false,
+    val rideRecognition: RideRecognitionState = RideRecognitionState(),
+    val activeRidePresent: Boolean = false
 )
 
 class CheckInViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,15 +56,71 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     val uiState: StateFlow<CheckInUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+    private var selectionJob: Job? = null
+    private var selectionGeneration = 0L
+
+    init {
+        viewModelScope.launch {
+            combine(prefs.rideRecognitionEnabled, RideRecognitionService.state, prefs.activeStatusId) { enabled, recognition, active ->
+                Triple(enabled, recognition, active != null)
+            }.collect { (enabled, recognition, active) ->
+                _uiState.update { it.copy(rideRecognitionEnabled = enabled, rideRecognition = recognition, activeRidePresent = active) }
+            }
+        }
+    }
+
+    /** Acceptance only prepares a manual check-in. It never publishes a status. */
+    fun acceptRecognizedRide(candidate: RecognizedRide) {
+        val requestedSelection = ++selectionGeneration
+        searchJob?.cancel()
+        selectionJob?.cancel()
+        selectionJob = viewModelScope.launch {
+            val current = RideRecognitionService.state.value
+            val freshCandidate = current.candidates.firstOrNull {
+                it.id == candidate.id && it.sessionId == candidate.sessionId &&
+                    it.latestFixMillis == candidate.latestFixMillis
+            }
+            val enabled = prefs.getRideRecognitionEnabled()
+            val active = prefs.activeStatusId.first()
+            val loggedIn = prefs.getAccessToken() != null
+            val now = System.currentTimeMillis()
+            if (requestedSelection != selectionGeneration ||
+                !enabled || active != null || !loggedIn || freshCandidate == null ||
+                now - freshCandidate.latestFixMillis !in 0..RideRecognitionEngine.MAX_FIX_AGE_MILLIS ||
+                current.sessionId != candidate.sessionId || RideRecognitionService.state.value != current) {
+                _uiState.update { it.copy(error = "Dieser Vorschlag ist nicht mehr aktuell. Bitte warte auf eine neue Erkennung.") }
+                return@launch
+            }
+            val ride = freshCandidate.ride
+            val origin = ride.origin ?: return@launch
+            val originStation = origin.station ?: return@launch
+            val destinations = ride.trip.stopovers.orEmpty().drop(ride.originIndex + 1).filter { it.cancelled != true }
+            if (destinations.isEmpty()) {
+                _uiState.update { it.copy(error = "Für diese Fahrt sind keine gültigen Ziele verfügbar.") }
+                return@launch
+            }
+            _uiState.update { it.copy(
+                step = CheckInStep.DESTINATION, selectedStation = originStation,
+                selectedDeparture = ride.departure.copy(station = originStation),
+                selectedTripDetails = ride.trip, resolvedOriginStop = origin,
+                filteredDestinations = destinations, selectedDestination = null,
+                isLoading = false, error = null, stationQuery = originStation.name.orEmpty()
+            ) }
+        }
+    }
+
 
     // ─── Step 1: Station search ───────────────────────────────────────────────
 
     fun searchNearbyStations(lat: Double, lon: Double) {
+        val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
+        selectionJob?.cancel()
         searchJob = viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null, stationQuery = "Stationen in der Nähe...") }
             repo.getNearbyStations(lat, lon)
                 .onSuccess { stations ->
+                    if (requestGeneration != selectionGeneration) return@onSuccess
                     val distinctStations = stations.distinctBy { st -> st.id }
                     if (distinctStations.size == 1) {
                         selectStation(distinctStations.first())
@@ -72,6 +135,8 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
                 .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (requestGeneration != selectionGeneration) return@onFailure
                     _uiState.update {
                         it.copy(
                             isLoading = false,
@@ -84,18 +149,23 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun updateStationQuery(query: String) {
-        _uiState.update { it.copy(stationQuery = query, searchResults = emptyList(), error = null) }
-        if (query.length < 2) return
-
+        val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
+        selectionJob?.cancel()
+        _uiState.update { it.copy(stationQuery = query, searchResults = emptyList(), error = null, isLoading = false) }
+        if (query.length < 2) return
         searchJob = viewModelScope.launch {
             delay(350)
+            if (requestGeneration != selectionGeneration) return@launch
             _uiState.update { it.copy(isLoading = true) }
             repo.searchStations(query)
                 .onSuccess { stations ->
+                    if (requestGeneration != selectionGeneration) return@onSuccess
                     _uiState.update { it.copy(isLoading = false, searchResults = stations.distinctBy { it.id }) }
                 }
                 .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (requestGeneration != selectionGeneration) return@onFailure
                     _uiState.update { it.copy(isLoading = false, error = "Suche fehlgeschlagen: ${e.message}") }
                 }
         }
@@ -104,12 +174,15 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     // ─── Step 2: Load departures using station.id ─────────────────────────────
 
     fun selectStation(station: TrainStation) {
+        val requestGeneration = ++selectionGeneration
+        searchJob?.cancel()
+        selectionJob?.cancel()
         val stationId = station.id
         if (stationId == null) {
             _uiState.update { it.copy(error = "Bahnhof hat keine gültige ID.") }
             return
         }
-        viewModelScope.launch {
+        selectionJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     selectedStation = station,
@@ -121,11 +194,14 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             }
             repo.getStationDepartures(stationId)
                 .onSuccess { trips ->
+                    if (requestGeneration != selectionGeneration) return@onSuccess
                     _uiState.update {
                         it.copy(isLoading = false, departures = trips, step = CheckInStep.DEPARTURES)
                     }
                 }
                 .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (requestGeneration != selectionGeneration) return@onFailure
                     _uiState.update {
                         it.copy(isLoading = false, error = "Abfahrten konnten nicht geladen werden: ${e.message}")
                     }
@@ -136,13 +212,17 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     // ─── Step 3: User picks a departure → load full trip (stopovers) ──────────
 
     fun selectTrip(departure: DepartureTrip) {
+        val requestGeneration = ++selectionGeneration
+        searchJob?.cancel()
+        selectionJob?.cancel()
         val lineName = departure.line?.name ?: ""
-        viewModelScope.launch {
+        selectionJob = viewModelScope.launch {
             _uiState.update {
                 it.copy(selectedDeparture = departure, isLoading = true, error = null)
             }
             repo.getTrip(hafasTripId = departure.tripId, lineName = lineName)
                 .onSuccess { tripDetails ->
+                    if (requestGeneration != selectionGeneration) return@onSuccess
                     // Radius-based departure queries can return a nearby station's service.
                     // The departure's station is the authoritative boarding station.
                     val origin = departure.station ?: _uiState.value.selectedStation
@@ -169,6 +249,8 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                     }
                 }
                 .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (requestGeneration != selectionGeneration) return@onFailure
                     _uiState.update {
                         it.copy(isLoading = false, error = "Halte konnten nicht geladen werden: ${e.message}")
                     }
@@ -294,10 +376,18 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         }.getOrDefault(false)
     }
 
-    fun reset() { _uiState.value = CheckInUiState() }
+    fun reset() {
+        selectionGeneration++
+        searchJob?.cancel()
+        selectionJob?.cancel()
+        _uiState.update { CheckInUiState(rideRecognitionEnabled = it.rideRecognitionEnabled,
+            rideRecognition = it.rideRecognition, activeRidePresent = it.activeRidePresent) }
+    }
 
     fun goBack() {
+        selectionGeneration++
         searchJob?.cancel()
+        selectionJob?.cancel()
         _uiState.update { state ->
             when (state.step) {
                 CheckInStep.DEPARTURES  -> state.copy(

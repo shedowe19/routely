@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und meldet den nächsten Halt per Notification, Widget und optionaler Sprachausgabe. Bei fehlendem brauchbarem Standort nutzt er gekennzeichnete Fahrplanangaben. Dies ist ein Stationsalarm, keine Turn-by-Turn-Streckenführung.
+Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und meldet den nächsten Halt per Notification, Widget und optionaler Sprachausgabe. Er vergleicht frische API-Daten für Änderungshinweise und liefert das gemeinsame Haltemodell der Fortschrittsbenachrichtigung. Bei fehlendem brauchbarem Standort nutzt er gekennzeichnete Fahrplanangaben. Dies ist ein Stationsalarm, keine Turn-by-Turn-Streckenführung.
 
 ## Wichtige Dateien
 
@@ -94,6 +94,12 @@ Bei Zielankunft wartet der Service auf eine bereits laufende oder gerade eingere
 
 Notification und Widget erhalten Linie, nächsten Halt, Ziel, Zeit, Gleis und positive Verspätung. Der Quellenhinweis `GPS` beziehungsweise `Fahrplan · ungefähr` steht auch im Widget-Namen des nächsten Halts. GPS-Annäherung ersetzt die zeitlichen Angaben für Ankunft und Gleis nicht.
 
+## Fahrtänderungen und Fortschrittsanzeige
+
+Der [Änderungsmonitor](./trip-changes.md) verarbeitet ausschließlich frische erfolgreiche API-Snapshots. Die erste Antwort beziehungsweise die erste Antwort nach Cache-Wiederanlauf bildet still die Basis. Deduplizierungsmetadaten derselben Fahrt werden im bestehenden Cache gespeichert; der Standort-Tick erzeugt keine Änderungshinweise. Der separate Benachrichtigungskanal öffnet das passende Fahrtdetail; optionale Änderungssprache benötigt zusätzlich globale TTS. `SpeechDeliveryKind` trennt diese Ansagen von Stationsansagen und deren Wiederholungsfreigabe.
+
+Das [Fortschrittsmodell](./trip-progress.md) verwendet den gemeinsamen Besuchscursor für verbleibende Halte und den Android-Balken. Das Ziel wird durch Zeitfortschritt allein nicht als erreicht markiert. Ab API 36 wird `ProgressStyle` verwendet, ältere Geräte erhalten eine normale Fahrtbenachrichtigung. Die Live-Update-Anfrage ist systemabhängig; deaktivierte Sperrbildschirmdetails verhindern sie und verwenden eine allgemeine öffentliche Ersatzanzeige.
+
 ## Stopp-Bedingungen
 
 - GPS-Zielkriterium mit innerem Aufenthalt/niedriger Geschwindigkeit; gegebenenfalls erst nach Abschluss der Zielansage
@@ -119,6 +125,9 @@ Beim Beenden werden Location-Callbacks, Polling und TTS gestoppt. Aktive Status-
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)
+- [Fahrterkennung](./ride-recognition.md)
+- [Fahrtänderungen](./trip-changes.md)
+- [Reisefortschritt](./trip-progress.md)
 - [Settings](./settings.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [Widget](./widget.md)

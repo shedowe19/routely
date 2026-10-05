@@ -30,6 +30,7 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 
 - `markAsRead(notificationId)`: Optimistic Update + API-Aufruf
 - `markAllAsRead()`: Setzt alle auf gelesen
+- Tippen auf eine Meldung ruft nur für ungelesene Einträge `markAsRead()` auf. Es gibt dabei keine Zielnavigation zum Profil oder zur Fahrt.
 
 ### Notification-Typen
 
@@ -61,8 +62,9 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 
 ## Offene Fragen
 
-- Keine spezifischen aktuell.
+- TODO: Meldungen mit auflösbaren Zielinformationen zum zugehörigen Profil oder Status navigieren lassen.
 
 ## Verwandte Seiten
 
 - [API Überblick](../api/ueberblick.md)
+- [Offene Fragen](../offene-fragen.md)

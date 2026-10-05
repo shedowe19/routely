@@ -24,9 +24,20 @@ Bei der Ergebnisübernahme publiziert der Service vor der ersten Suspension `Tra
 
 Route und Besuchsfortschritt werden für die passende aktive Status-ID in DataStore gespeichert. Der Live-Flow ist kein zusätzlicher persistierter Zustand und wird bei Fahrtwechsel beziehungsweise Service-Ende geleert. API-Ausfälle blockieren die GPS-Auswertung einer bereits verfügbaren Route nicht. Gerätepositionen bleiben im Speicher und werden weder im Live-DTO veröffentlicht noch an Träwelling gesendet. Details: [TripTracking](../module/trip-tracking.md).
 
+## Fahrterkennung und Änderungshinweise
+
+Die Opt-in-[Fahrterkennung](../module/ride-recognition.md) ist vom aktiven Fahrttracking getrennt. Ein sichtbarer Location-Foreground-Service überträgt für Nearby-Anfragen aktuelle Koordinaten an den konfigurierten Träwelling-Server und lädt Abfahrten/Tripdetails. `RideRecognitionEngine` gleicht diese RAM-Kandidaten lokal mit frischer Bewegung ab. `CheckInViewModel` übernimmt ausschließlich noch gültige, vom Nutzer ausgewählte Vorschläge in den bestehenden Ziel-/Bestätigungsablauf. Kein GPS-Ergebnis löst selbst einen schreibenden Check-in aus.
+
+Der [Änderungsmonitor](../module/trip-changes.md) vergleicht nur frische erfolgreiche Status-/Stopover-Antworten des aktiven Services. Er prüft vorhandene Providerfelder vor manuellen Zeitüberschreibungen. Meldungen gehen in einen eigenen Android-Kanal und optional in die gemeinsame TTS-Queue; die erste frische Antwort bleibt still. Deduplizierungswerte werden mit dem vorhandenen Fahrtcache gespeichert.
+
+`TripProgressModel` berechnet aus eingegrenzter Haltfolge und gemeinsamem Cursor die Haltezahl. `TripProgressNotificationBuilder` wählt Framework-ProgressStyle oder kompatible Standardanzeige. Interne Notification-Intents mit `open_status_id` oder `open_recognition` werden über `NavigationRequest` sowohl beim Start als auch in einer laufenden Activity verarbeitet.
+
 ## Verwandte Seiten
 
 - [Architektur Überblick](./ueberblick.md)
 - [TripTracking](../module/trip-tracking.md)
 - [StatusDetail](../module/status-detail.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
+- [Fahrterkennung](../module/ride-recognition.md)
+- [Fahrtänderungen](../module/trip-changes.md)
+- [Reisefortschritt](../module/trip-progress.md)

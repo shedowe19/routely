@@ -62,7 +62,9 @@ object RetrofitClient {
     }
 
     private fun loggingInterceptor(): HttpLoggingInterceptor {
-        return HttpLoggingInterceptor().apply {
+        return HttpLoggingInterceptor { message ->
+            android.util.Log.d("RoutelyHttp", HttpLogSanitizer.sanitize(message))
+        }.apply {
             redactHeader("Authorization")
             level = if (BuildConfig.DEBUG) {
                 HttpLoggingInterceptor.Level.BASIC

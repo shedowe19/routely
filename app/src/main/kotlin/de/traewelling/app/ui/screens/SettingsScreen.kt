@@ -16,12 +16,32 @@ import androidx.compose.ui.unit.dp
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.viewmodel.SettingsViewModel
 
+@Composable
+private fun CompanionToggle(
+    title: String,
+    description: String,
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    enabled: Boolean = true
+) {
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, fontWeight = FontWeight.SemiBold)
+            Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
     onBack: () -> Unit,
-    onRequestGpsPermission: () -> Unit
+    onRequestGpsPermission: () -> Unit,
+    onStartRideRecognition: () -> Unit,
+    onStopRideRecognition: () -> Unit,
+    onOpenLiveUpdateSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -44,6 +64,55 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item {
+                Text("Reisebegleitung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                        CompanionToggle(
+                            title = "Fahrten automatisch erkennen",
+                            description = "Sucht passende Fahrten, bis du einen Check-in startest. Du bestätigst Fahrt und Ziel selbst.",
+                            checked = uiState.rideRecognitionEnabled,
+                            onCheckedChange = { if (it) onStartRideRecognition() else onStopRideRecognition() }
+                        )
+                        Text(
+                            "Die Suche verwendet präzisen Standort, auch bei ausgeschaltetem Display. Für Stationen in der Nähe wird dein Standort an deinen Träwelling-Server gesendet. Du kannst die Suche jederzeit beenden.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        HorizontalDivider()
+                        CompanionToggle(
+                            "Reiseänderungen melden",
+                            "Informiert über Gleiswechsel, entfallene Halte und größere Verspätungsänderungen.",
+                            uiState.tripChangeAlertsEnabled,
+                            viewModel::setTripChangeAlertsEnabled
+                        )
+                        CompanionToggle(
+                            "Änderungen auch ansagen",
+                            "Spricht wichtige Änderungen, wenn „Haltestellen ansagen“ aktiviert ist.",
+                            uiState.tripChangeSpeechEnabled,
+                            viewModel::setTripChangeSpeechEnabled,
+                            enabled = uiState.tripChangeAlertsEnabled
+                        )
+                        HorizontalDivider()
+                        CompanionToggle(
+                            "Live-Reisefortschritt",
+                            "Zeigt nächste Station und verbleibende Halte. Auf unterstützten Geräten als Android Live Update.",
+                            uiState.liveProgressEnabled,
+                            viewModel::setLiveProgressEnabled
+                        )
+                        CompanionToggle(
+                            "Reisedetails auf dem Sperrbildschirm",
+                            "Zeigt Linie, Ziel, nächsten Halt und Gleis auch auf dem gesperrten Gerät.",
+                            uiState.lockScreenDetailsEnabled,
+                            viewModel::setLockScreenDetailsEnabled
+                        )
+                        OutlinedButton(onClick = onOpenLiveUpdateSettings, modifier = Modifier.fillMaxWidth()) {
+                            Text("Android-Anzeigeeinstellungen")
+                        }
+                    }
+                }
+            }
             item {
                 Text(
                     text = "Erscheinungsbild",

@@ -23,8 +23,8 @@ Der Nutzer kann Profile anderer Nutzer aufrufen über den Feed oder die Benutzer
 
 ### Follow-Logik
 
-- Folgt bereits: `POST /api/v1/user/{id}/follow`
-- Follend bereits: `DELETE /api/v1/user/{id}/follow`
+- Folgt noch nicht: `POST /api/v1/user/{id}/follow`
+- Folgt bereits: `DELETE /api/v1/user/{id}/follow`
 - Private Profile zeigen "Angefragt" (followPending) statt "Folgen"
 
 ### Auto-Load-More
@@ -36,7 +36,7 @@ Wenn der Nutzer in der LazyColumn scrollt und noch mehr Status-Seiten verfügbar
 - Nutzerkopf als Gradient-Hero-Card mit Avatar, Benutzername, Bio, Follow-Button und Statistik-Chips
 - Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
 - Lade-, Fehler- und Empty-States via `StateMessage`
-- Sichtbare Fahrten werden über `StatusCard` dargestellt
+- Sichtbare Fahrten werden über `StatusCard` dargestellt. Der Herz-Handler ist hier leer (`onLike = {}`); Tippen führt keinen Like-Aufruf aus.
 
 ## UI-Zustand (UserProfileUiState)
 
@@ -57,9 +57,10 @@ Wenn der Nutzer in der LazyColumn scrollt und noch mehr Status-Seiten verfügbar
 
 ## Offene Fragen
 
-- Keine spezifischen aktuell.
+- TODO: Sichtbaren Herz-Button der Fahrtkarten mit Like/Unlike verbinden oder die Aktion in dieser Ansicht deaktivieren.
 
 ## Verwandte Seiten
 
 - [Feed](./feed.md)
 - [API Überblick](../api/ueberblick.md)
+- [Offene Fragen](../offene-fragen.md)

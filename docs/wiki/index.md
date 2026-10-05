@@ -82,8 +82,17 @@ Code ist die Quelle der Wahrheit. Das Wiki erklärt die Quelle der Wahrheit.
 - [Profile](./module/profile.md)
 - [StatusDetail](./module/status-detail.md)
 - [TripTracking](./module/trip-tracking.md)
+- [Fahrterkennung](./module/ride-recognition.md)
+- [Fahrtänderungen](./module/trip-changes.md)
+- [Reisefortschritt und Live Updates](./module/trip-progress.md)
 - [UserProfile](./module/user-profile.md)
 - [UserSearch](./module/user-search.md)
 - [Widget](./module/widget.md)
 - [Settings](./module/settings.md)
 - [Points-System](./features/points-enabled.md)
+
+## Verwandte Seiten
+
+- [Modulübersicht](./module/README.md)
+- [Features](./features/README.md)
+- [Wiki-Pflege](./wiki-pflege.md)

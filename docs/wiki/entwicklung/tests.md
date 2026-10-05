@@ -24,11 +24,11 @@ Dokumentiert, wie die App getestet wird.
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.
 - Der Unix-Wrapper `gradlew` muss mit LF-Zeilenenden ausgecheckt sein; dies wird zusammen mit weiteren Projekttextdateien über `.gitattributes` erzwungen.
-- Für den Android-Gradle-Lauf werden außerdem Android-SDK 34 und die auflösbaren Gradle-/Maven-Abhängigkeiten benötigt.
+- Für den Android-Gradle-Lauf werden außerdem Android-SDK 36 und die auflösbaren Gradle-/Maven-Abhängigkeiten benötigt.
 
 ## Automatisierte Prüfung
 
-`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt.
+`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 36 und Build Tools 35.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt.
 
 | Artefakt | Inhalt |
 | --- | --- |
@@ -45,11 +45,25 @@ GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56
 
 ## Prüfung der GPS-Erweiterung
 
-Der aktuelle Quellstand enthält 88 Unit-Tests: 47 Engine-, 9 Timeline-, 4 Ansagequeue- und 28 API-Tests. Gegenüber den ursprünglichen 35 Engine-Regressionen sichern zwölf zusätzliche Fälle kurze Halteabstände, frühe richtungsabhängige Übergabe, dieselbe Fixfolge für den Folgehalt, kumulierte Bewegung bei häufigen Standortupdates, Signallücken sowie unveränderte Zielankunftskriterien ab. Ein erster GPS-Fix fern aller Stationen darf weiterhin keinen vorläufigen Zeitcursor festschreiben.
+Der vor der Begleiter-Erweiterung geprüfte Stand enthält 88 Unit-Tests: 47 Engine-, 9 Timeline-, 4 Ansagequeue- und 28 API-Tests. Gegenüber den ursprünglichen 35 Engine-Regressionen sichern zwölf zusätzliche Fälle kurze Halteabstände, frühe richtungsabhängige Übergabe, dieselbe Fixfolge für den Folgehalt, kumulierte Bewegung bei häufigen Standortupdates, Signallücken sowie unveränderte Zielankunftskriterien ab. Ein erster GPS-Fix fern aller Stationen darf weiterhin keinen vorläufigen Zeitcursor festschreiben.
 
 Der erste vollständige GPS-Prüflauf für Commit `672051411cc1f76bf910c0262b8fbe8710844363` war am 05.10.2026 erfolgreich: 62 Tests (34 GPS und 28 API), Android-Debug-Build und APK-Upload. Nachweis: [GitHub-Actions-Lauf 37349706390](https://github.com/shedowe19/routely/actions/runs/37349706390). Dieser historische Lauf enthält die späteren Startup-, Kurzhalte-, Timeline- und Ansagequeue-Regressionen noch nicht. Aktuelle Ergebnisse zeigt der Workflow [API Compatibility](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml); die Quellanzahl allein ist kein Nachweis eines erfolgreichen Laufs.
 
 Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Der Nutzerbericht aus einer Fahrt mit `1.7.0` und die daraus abgeleitete erneute Geräteprüfung sind unter [TripTracking](../module/trip-tracking.md) dokumentiert. Die aktuellen Korrekturen wurden hier nicht auf einem physischen Gerät erprobt. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration; der Timeline-Maler erfordert zusätzlich eine visuelle Prüfung mit großer Schrift.
+
+## Begleiter-Erweiterung: neue Prüfziele
+
+Die Erweiterung um [Fahrterkennung](../module/ride-recognition.md), [Fahrtänderungen](../module/trip-changes.md) und [Reisefortschritt](../module/trip-progress.md) ergänzt folgende reine Kotlin-Regressionen:
+
+- `RideRecognitionEngineTest`: gerichtete und kumulierte Bewegung, beobachteter Einstieg, Aktualität/Genauigkeit, parallele Kandidaten, Mehrfachbesuche, Ausfälle, reale Abfahrt gegenüber Cache-Zeiten und begrenzte RAM-Historie.
+- `TripChangeMonitorTest`: stille erste Basis, Folge-Snapshots, Gleis-/Ausfall-/Wiederherstellungshinweise, kumulierte Fünf-Minuten-Schwelle, manuelle Zeiten, fehlende Providerfelder, Besuchsschlüssel, Deduplizierung und Cache-Neustart.
+- `TripProgressModelTest`: Einstieg ausschließen, gestrichene Halte, Annäherung/Ankunft, wiederholte Besuche, unbekannter Cursor, Zeitmodus ohne bestätigte Zielankunft, vollständiger Abschluss und Plan-/Echtzeitangaben.
+- `SpeechDeliveryQueueTest`: zusätzliche Trennung von Stations- und Änderungssprache, auch bei identischen Ereignisschlüsseln.
+- `HttpLogSanitizerTest`: redaktierte Standortparameter einschließlich Bounding-Box-Werten und unveränderte unkritische URL-Parameter.
+
+Die bisherigen 88 Tests sind kein Nachweis dieser neuen Funktionen. Die aktuelle Quellanzahl ist ebenfalls kein erfolgreicher CI-Nachweis; Ergebnisse des neuen Standes müssen dem passenden Commit/Lauf zugeordnet werden.
+
+Geräteprüfungen müssen zusätzlich die präzise Standortfreigabe der Opt-in-Suche, sichtbaren FGS, Pause bei Check-in/Logout, Kalte-/Warmstartnavigation, Benachrichtigungs- und TTS-Zustellung sowie API-35/36/36.1-Layouts und Sperrbildschirm-Privatsphäre abdecken. Die Erkennung verwendet synthetische Bewegung für Logiktests; reale Erkennungsgüte, Akkuverbrauch und Hersteller-Live-Updates sind dadurch nicht belegt.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
@@ -82,3 +96,6 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
 - [TripTracking](../module/trip-tracking.md)
 - [StatusDetail](../module/status-detail.md)
+- [Fahrterkennung](../module/ride-recognition.md)
+- [Fahrtänderungen](../module/trip-changes.md)
+- [Reisefortschritt](../module/trip-progress.md)

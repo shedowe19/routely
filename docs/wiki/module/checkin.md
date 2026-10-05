@@ -44,6 +44,10 @@ Abfahrten zeigen `direction` als Fahrtrichtung und nutzen `delayMinutes`, berech
 
 Der Check-in überträgt weiterhin numerische interne Station-IDs für `start` und `destination` und den Provider-Identifier für `tripId`. Eine Stopover-ID, IBNR oder Trip-UUID darf diese Werte nicht ersetzen.
 
+## Fahrtvorschläge aus GPS
+
+Der Stationsschritt enthält die ausdrücklich aktivierbare [Fahrterkennung](./ride-recognition.md). Eine laufende eigene Fahrt pausiert die Suche. Kandidaten bleiben prozesslokal und können mehrdeutig sein; der Nutzer prüft Linie/Richtung. `CheckInViewModel` prüft bei Auswahl Fixalter, aktuelle Session und das Fehlen eines aktiven Check-ins erneut. Ein gültiger Vorschlag übernimmt Einstieg, Abfahrt und bereits geladene Tripdetails; anschließend folgen normale Zielauswahl und manuelle Bestätigung. Es gibt keinen automatischen `POST /trains/checkin`.
+
 ## Zeitfelder und Konflikte
 
 Für einen Halt gelten `effectiveDeparture = departureReal ?: departurePlanned` und `effectiveArrival = arrivalReal ?: arrivalPlanned`. Die Legacy-Felder `departure` und `arrival` sind keine Datenquelle mehr.
@@ -83,6 +87,8 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 ## Verwandte Seiten
 
 - [API Überblick](../api/ueberblick.md)
+- [Fahrterkennung](./ride-recognition.md)
+- [TripTracking](./trip-tracking.md)
 - [Externe Schnittstellen](../api/externe-schnittstellen.md)
 - [Datenmodell](../daten/datenmodell.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)

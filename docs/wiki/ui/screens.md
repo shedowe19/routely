@@ -16,7 +16,7 @@
 | UserProfileScreen  | `ui/screens/UserProfileScreen.kt`  | Fremdes Profil                            |
 | UserSearchScreen   | `ui/screens/UserSearchScreen.kt`   | Benutzer-Suche                            |
 | StatusDetailScreen | `ui/screens/StatusDetailScreen.kt` | Status-Detail mit Timeline und Reisegrund |
-| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme, GPS-Stationsalarm und TTS          |
+| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme, GPS, Fahrterkennung, Änderungen, Fortschritt und TTS |
 
 ## Navigation
 
@@ -34,6 +34,11 @@ Zusätzliche Screens werden als Stack navigiert:
 - `userProfile/{username}`
 - `userSearch`
 - `statusDetail/{statusId}`
+- `settings` (Einstieg über das eigene Profil)
+
+## Benachrichtigungsnavigation
+
+`MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
 
 ## Zustandsdarstellung
 
@@ -45,4 +50,6 @@ Die Status-Detail-Timeline nutzt für die eigene aktive Fahrt einen gemeinsamen 
 
 - [Komponenten](./komponenten.md)
 - [Settings](../module/settings.md)
+- [Fahrterkennung](../module/ride-recognition.md)
+- [Reisefortschritt](../module/trip-progress.md)
 - [StatusDetail](../module/status-detail.md)

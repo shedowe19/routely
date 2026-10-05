@@ -15,7 +15,10 @@ Einstiegspunkt für die Beschreibung der Features und Module der App.
 - **UserSearch**: Benutzer-Suche (`UserSearchViewModel`, `UserSearchScreen`).
 - **Notifications**: Benachrichtigungsliste mit Unread-Badge (`NotificationViewModel`, `NotificationScreen`).
 - **Profile**: Eigenes Profil, Statistiken, TTS-Einstellungen (`ProfileViewModel`, `ProfileScreen`).
-- **TripTracking**: Foreground Service für Live-Reiseverfolgung mit TTS (`TripTrackingService`).
+- **TripTracking**: Foreground-Service für GPS-Stationsalarme mit TTS ([TripTracking](./trip-tracking.md)).
+- **Fahrterkennung**: Opt-in-GPS-Service für bestätigungspflichtige Fahrtvorschläge ([Fahrterkennung](./ride-recognition.md)).
+- **Fahrtänderungen**: Vergleich frischer API-Snapshots und gezielte Hinweise ([Fahrtänderungen](./trip-changes.md)).
+- **Reisefortschritt**: Gemeinsames Haltemodell und Android-Fortschrittsbenachrichtigung ([Live Updates](./trip-progress.md)).
 - **Widget**: Homescreen-Widget für aktive Fahrt (`TripWidgetProvider`).
 
 ## UI-Module

@@ -45,6 +45,18 @@ Der Tracking-Cache enthält Status-ID, Check-in, Haltfolge und `TrackingProgress
 
 Ein TTS-Fehler beziehungsweise Abbruch kann den noch aktuellen Ansageschlüssel wieder freigeben; der Service speichert diesen korrigierten Fortschritt. Der für die Status-Timeline bereitgestellte `trackingLiveState` bleibt dagegen ausschließlich im Prozessspeicher und führt keinen zusätzlichen DataStore-Key ein. Das Tracking-Cacheformat bleibt Version 1.
 
+### Reisebegleitung
+
+| Key | Flow / Standard | Beschreibung |
+| --- | --- | --- |
+| `ride_recognition_enabled` | `Flow<Boolean>`, `false` | Ausdrücklicher Opt-in für die sichtbare Fahrtsuche; Kandidaten und Fixes bleiben im RAM. |
+| `trip_change_alerts_enabled` | `Flow<Boolean>`, `true` | Änderungsmonitor-Hinweise zur eigenen aktiven Fahrt. |
+| `trip_change_speech_enabled` | `Flow<Boolean>`, `true` | Änderungssprache; benötigt zusätzlich aktivierte Hinweise und globale TTS. |
+| `live_progress_enabled` | `Flow<Boolean>`, `true` | Fortschrittsdarstellung und systemabhängige Live-Update-Anfrage. |
+| `lock_screen_details_enabled` | `Flow<Boolean>`, `true` | Sichtbare Reisedetails; `false` verwendet öffentliche Ersatzanzeigen und unterdrückt Promotion. |
+
+Die zugehörigen suspend-Getter und Setter entsprechen den Flow-Namen. Ein aktiver Check-in pausiert die Erkennung, ohne einen Kandidaten als Fahrt zu speichern. Der Trackingcache enthält zusätzlich `TripChangeMonitorState` mit letzten Ereigniswerten zur Deduplizierung. Die frische Vergleichsbasis, Verspätungsreferenzen und Gerätepositionen werden weiterhin nicht persistiert.
+
 ### TTS-Einstellungen
 
 | Key            | Flow-Typ        | Beschreibung                      |
@@ -86,3 +98,6 @@ Für nicht-reaktive Kontexte gibt es suspend-Funktionen:
 - [TripTracking](../module/trip-tracking.md)
 - [StatusDetail](../module/status-detail.md)
 - [Settings](../module/settings.md)
+- [Fahrterkennung](../module/ride-recognition.md)
+- [Fahrtänderungen](../module/trip-changes.md)
+- [Reisefortschritt](../module/trip-progress.md)
