@@ -32,6 +32,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
@@ -191,11 +192,13 @@ class RideRecognitionService : Service() {
                 val now = System.currentTimeMillis()
                 val stations = repo.getNearbyStations(fix.latitude, fix.longitude).getOrThrow()
                     .filter { it.id != null }.distinctBy { it.id }.take(MAX_NEARBY_STATIONS)
+                val departureRequests = RideDiscoveryRequests()
                 val departures = stations.flatMap { station ->
                     currentCoroutineContext().ensureActive()
-                    repo.getStationDepartures(station.id!!, Instant.ofEpochMilli(now - 5 * 60_000L).toString())
-                        .getOrElse { emptyList() }.map { station to it }
-                }.onEach { (_, departure) ->
+                    departureRequests.valueOrNull(repo.getStationDepartures(
+                        station.id!!, Instant.ofEpochMilli(now - 5 * 60_000L).toString()
+                    )).orEmpty().map { station to it }
+                }.also { departureRequests.throwIfAllFailed() }.onEach { (_, departure) ->
                     if (departure.cancelled == true) cancelledTrips += departure.tripId
                 }.filter { (_, departure) ->
                     val time = RideRecognitionEngine.parseTime(departure.realWhen ?: departure.plannedWhen)
@@ -204,15 +207,23 @@ class RideRecognitionService : Service() {
                 }.distinctBy { (station, dep) -> "${dep.tripId}|${dep.line?.name}|${dep.station?.id ?: station.id}|${dep.plannedWhen}" }
                     .sortedBy { (_, dep) -> kotlin.math.abs(now - (RideRecognitionEngine.parseTime(dep.realWhen ?: dep.plannedWhen) ?: now)) }
                     .take(MAX_DEPARTURES)
+                currentCoroutineContext().ensureActive()
+                if (!current(expected) || !isAllowed() || sessionToken != prefs.getAccessToken() ||
+                    sessionServer != prefs.getServerUrl()
+                ) return@withTimeout emptyList<RecognizableRide>()
+                // Successful departure responses remain authoritative even when
+                // subsequent trip-detail lookups fail or time out.
+                engine.removeTrips(cancelledTrips)
                 val rides = mutableListOf<RecognizableRide>()
+                val detailRequests = RideDiscoveryRequests()
                 tripCache.entries.removeAll { now - it.value.first > RideRecognitionEngine.ROUTE_TTL_MILLIS }
                 for ((station, departure) in departures) {
                     currentCoroutineContext().ensureActive()
                     if (!current(expected) || !isAllowed()) return@withTimeout emptyList<RecognizableRide>()
                     val key = "${departure.tripId}|${departure.line?.name.orEmpty()}"
                     val cached = tripCache[key]
-                    val details = cached?.second ?: repo.getTrip(departure.tripId, departure.line?.name.orEmpty())
-                        .getOrNull() ?: continue
+                    val details = detailRequests.valueOrNull(cached?.let { Result.success(it.second) }
+                        ?: repo.getTrip(departure.tripId, departure.line?.name.orEmpty())) ?: continue
                     if (cached == null) {
                         tripCache[key] = System.currentTimeMillis() to details
                         while (tripCache.size > RideRecognitionEngine.MAX_ROUTES) tripCache.remove(tripCache.keys.first())
@@ -220,6 +231,7 @@ class RideRecognitionService : Service() {
                     val originIndex = RideRecognitionEngine.resolveOriginIndex(details.stopovers.orEmpty(), departure, station)
                     if (originIndex >= 0) rides += RecognizableRide(departure, details, originIndex, cached?.first ?: System.currentTimeMillis())
                 }
+                detailRequests.throwIfAllFailed()
                 rides
             }
             // A new login, route, disabled setting or destroyed service invalidates in-flight reads.
@@ -227,16 +239,17 @@ class RideRecognitionService : Service() {
             hasSearched = true
             searching = false
             searchError = null
-            engine.removeTrips(cancelledTrips)
             engine.updateRides(found, System.currentTimeMillis())
             updateMatches()
-        } catch (error: CancellationException) {
-            if (!scope.isActive) throw error
+        } catch (_: TimeoutCancellationException) {
+            currentCoroutineContext().ensureActive()
             if (current(expected)) {
                 searching = false
                 searchError = "Die Fahrtsuche dauerte zu lange. Neuer Versuch in 90 Sekunden."
                 publish(RideRecognitionPhase.ERROR, searchError!!)
             }
+        } catch (error: CancellationException) {
+            throw error
         } catch (_: Exception) {
             if (current(expected)) {
                 searching = false

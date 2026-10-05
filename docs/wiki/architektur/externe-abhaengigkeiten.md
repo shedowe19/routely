@@ -11,7 +11,7 @@ Dokumentation wichtiger 3rd-Party-Bibliotheken und Dienste.
 - **Network**: `com.squareup.retrofit2:retrofit`, `com.squareup.okhttp3:okhttp`.
 - **JSON Parsing**: `com.google.code.gson:gson`
 - **Image Loading**: `io.coil-kt:coil-compose`
-- **Location Services**: `com.google.android.gms:play-services-location` (Nearby Stations und Standort-Callbacks im `TripTrackingService` sowie Opt-in-`RideRecognitionService`).
+- **Location Services**: `com.google.android.gms:play-services-location` (Standort für die Stationssuche und Standort-Callbacks im `TripTrackingService` sowie Opt-in-`RideRecognitionService`).
 - **Coroutines**: `org.jetbrains.kotlinx:kotlinx-coroutines-android`
 
 ## Standortnutzung beim Stationsalarm
@@ -24,7 +24,7 @@ Stationskoordinaten stammen aus Träwelling-Stopovers. Die Annäherung wird loka
 
 ## Fahrterkennung und Android-Fortschritt
 
-Die [Fahrterkennung](../module/ride-recognition.md) nutzt dieselbe Träwelling-Schnittstelle und Play Services, hat aber einen getrennten sichtbaren Location-Service. Nur die aktuelle Nearby-Anfrage überträgt dabei Gerätekoordinaten; lokale Zuordnung und RAM-Historie liegen in der App.
+Die [Fahrterkennung](../module/ride-recognition.md) nutzt dieselbe Träwelling-Schnittstelle und Play Services, hat aber einen getrennten sichtbaren Location-Service. Ihre Stationssuche überträgt aus dem aktuellen Fix berechnete Bounding-Box-Grenzen an `GET /api/v1/stations`; lokale Zuordnung und RAM-Historie liegen in der App. Die Boxmitte entspricht dem verwendeten Standort. Der aktive Stationsalarm selbst überträgt keine Gerätepositionen.
 
 Der [Reisefortschritt](../module/trip-progress.md) nutzt ab API 36 die Framework-Notification-API und auf älteren Geräten AndroidX-Core 1.13.0. Dafür wird compileSdk 36 mit AGP 8.9.1 und Gradle 8.11.1 verwendet; Kotlin 1.9.23 sowie targetSdk 34/minSdk 26 bleiben bestehen. Eine zusätzliche Routing-, Karten- oder KI-Bibliothek wurde für diese drei Erweiterungen nicht eingeführt.
 

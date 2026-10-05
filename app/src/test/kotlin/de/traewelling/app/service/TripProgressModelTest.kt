@@ -114,7 +114,64 @@ class TripProgressModelTest {
     @Test
     fun unconfirmedArrivalAtLastStopKeepsProgressBelowMaximum() {
         val model = model(route.last(), arrived = true)
-        assertTrue(model.progress!! < model.progressMax)
+        assertEquals(3, model.passedStops)
+        assertEquals(0, model.remainingStops)
+        assertEquals("Am Ziel · Ankunft wird geprüft", model.remainingText)
+        assertEquals(299, model.progress)
+        assertEquals(300, model.progressMax)
+        assertEquals("destination", model.nextStopName)
+        assertTrue(model.arrivedAtCurrent)
+        assertFalse(model.completed)
+    }
+
+    @Test
+    fun approachingDestinationStillCountsItAsRemaining() {
+        val model = model(route.last())
+        assertEquals(2, model.passedStops)
+        assertEquals(1, model.remainingStops)
+        assertEquals("Noch 1 Halt bis zum Ziel", model.remainingText)
+        assertEquals(200, model.progress)
+        assertFalse(model.arrivedAtCurrent)
+        assertFalse(model.completed)
+    }
+
+    @Test
+    fun arrivalWithOnlyDestinationRemainingDoesNotClaimCompletion() {
+        val direct = listOf(route.first(), route.last())
+        val model = TripProgressModel.from(direct, tracking(direct.last(), arrived = true))
+        assertEquals(1, model.totalStops)
+        assertEquals(1, model.passedStops)
+        assertEquals(0, model.remainingStops)
+        assertEquals("Am Ziel · Ankunft wird geprüft", model.remainingText)
+        assertEquals(99, model.progress)
+        assertEquals(100, model.progressMax)
+        assertFalse(model.completed)
+    }
+
+    @Test
+    fun destinationArrivalExcludesAllCancelledIntermediateVisits() {
+        val cancelled = route.mapIndexed { index, stop ->
+            if (index in 1..2) stop.copy(cancelled = true) else stop
+        }
+        val model = TripProgressModel.from(cancelled, tracking(cancelled.last(), arrived = true))
+        assertEquals(1, model.totalStops)
+        assertEquals(1, model.passedStops)
+        assertEquals(0, model.remainingStops)
+        assertEquals(99, model.progress)
+        assertEquals("Am Ziel · Ankunft wird geprüft", model.remainingText)
+        assertFalse(model.completed)
+    }
+
+    @Test
+    fun cancelledDestinationCannotBeCountedAsAnArrivedVisit() {
+        val cancelled = route.toMutableList().apply { this[3] = this[3].copy(cancelled = true) }
+        val model = TripProgressModel.from(cancelled, tracking(cancelled.last(), arrived = true))
+        assertEquals(2, model.totalStops)
+        assertNull(model.passedStops)
+        assertNull(model.remainingStops)
+        assertNull(model.progress)
+        assertEquals("Zielhalt entfällt", model.remainingText)
+        assertFalse(model.arrivedAtCurrent)
         assertFalse(model.completed)
     }
 
@@ -199,6 +256,22 @@ class TripProgressModelTest {
         val model = TripProgressModel.from(route, tracking(route[2]), zoneId = ZoneOffset.UTC,
             nowMillis = nowMillis, manualDestinationArrival = "2026-10-05T18:12:00Z")
         assertEquals("Ankunft Ziel: 18:12 (Manuell)", model.arrivalText)
+        assertNull(route.last().arrivalReal)
+    }
+
+    @Test
+    fun manuallyProjectedServiceRouteKeepsManualArrivalSource() {
+        val manualArrival = "2026-10-05T18:12:00Z"
+        val projected = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = manualArrival) }
+        val live = tracking(projected.last(), arrived = true).copy(source = TrackingSource.TIMETABLE)
+        val model = TripProgressModel.from(projected, live, zoneId = ZoneOffset.UTC,
+            nowMillis = nowMillis, manualDestinationArrival = manualArrival)
+        assertEquals("Ankunft Ziel: 18:12 (Manuell)", model.arrivalText)
+        assertEquals("Am Ziel · Ankunft wird geprüft", model.remainingText)
+        assertEquals(0, model.remainingStops)
+        assertEquals(299, model.progress)
+        assertFalse(model.completed)
+        assertEquals(manualArrival, projected.last().arrivalReal)
         assertNull(route.last().arrivalReal)
     }
 

@@ -19,7 +19,7 @@ Der Header `Authorization` wird explizit redaktiert. Dadurch sollen Bearer-Token
 
 ## Standort und Sperrbildschirm
 
-Beim aktiven Stationsalarm bleiben Standortfixes und Bewegungshistorie lokal. Die neue Opt-in-Fahrterkennung nutzt dagegen `trains/station/nearby`: Für diese Anfrage werden aktuelle Koordinaten an den konfigurierten Träwelling-Server übertragen. Die UI erklärt diesen Zweck vor der Aktivierung. Kandidaten, GPS-Historie und Tripcache der Erkennung sind ausschließlich im RAM; es gibt keinen automatischen öffentlichen Check-in.
+Beim aktiven Stationsalarm bleiben Standortfixes und Bewegungshistorie lokal. Die Opt-in-Fahrterkennung nutzt dagegen `GET /api/v1/stations` über `TraewellingRepository.getNearbyStations`: Die aus dem aktuellen Standort berechneten Boxgrenzen `min_lat`, `max_lat`, `min_lon` und `max_lon` werden an den konfigurierten Träwelling-Server übertragen. Aus ihrer Mitte lässt sich die verwendete Geräteposition ableiten; Bounding-Box-Parameter anonymisieren den Standort nicht. Die manuelle Suche nach Stationen in der Nähe verwendet denselben Repository-Aufruf. Die Erkennungs-UI erklärt die Standortübertragung vor der Aktivierung. Kandidaten, GPS-Historie und Tripcache der Erkennung sind ausschließlich im RAM; es gibt keinen automatischen öffentlichen Check-in.
 
 Auch [GPS-Zeitbeobachtungen und Prognosen](../module/gps-zeiten.md) der aktiven Begleitung bleiben ausschließlich im RAM. Die Erweiterung lädt keine Positionen oder Prognosewerte hoch, speichert sie nicht im Fahrtcache und führt keinen automatischen Status-PUT aus. Das Bearbeitungsformular erhält keine GPS-Schätzwerte.
 

@@ -19,7 +19,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 
 1. **Bahnhofsauswahl (Start):**
    - Entweder über die Textsuche (`GET /api/v1/trains/station/autocomplete/{query}`)
-   - Oder über die Ortung (`GET /api/v1/stations` mit Koordinaten der Bounding-Box)
+   - Oder über die Ortung (`TraewellingRepository.getNearbyStations` → `GET /api/v1/stations` mit den aus dem Standort berechneten Boxgrenzen `min_lat`, `max_lat`, `min_lon`, `max_lon`)
    - _Wichtig:_ Stationsergebnisse müssen dedupliziert werden (z.B. nach Nähe und Namen).
 
 2. **Abfahrtsauswahl:**

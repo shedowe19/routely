@@ -18,7 +18,7 @@ class TraewellingRepository(context: Context, prefs: PreferencesManager)
 
 - `getDashboard(page)` / `getGlobalFeed(page)` - Feed mit Pagination
 - `likeStatus(id)` / `unlikeStatus(id)` / `deleteStatus(id)` / `updateStatus(id, request)` - Status-Aktionen
-- `searchStations(query)` / `getNearbyStations(lat, lon)` - Bahnhofssuche
+- `searchStations(query)` / `getNearbyStations(lat, lon)` - Textsuche beziehungsweise Stationssuche über `GET /api/v1/stations`; der zweite Aufruf berechnet aus Breite/Länge die Query-Parameter `min_lat`, `max_lat`, `min_lon`, `max_lon` für eine Bounding-Box.
 - `getStationDepartures(stationId)` - Abfahrten
 - `getTrip(hafasTripId, lineName)` - Trip-Details
 - `checkIn(request)` - Check-in inklusive Reisegrund (`CheckInRequest.business`)

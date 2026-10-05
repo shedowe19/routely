@@ -28,7 +28,7 @@ Route und Besuchsfortschritt werden für die passende aktive Status-ID in DataSt
 
 ## Fahrterkennung und Änderungshinweise
 
-Die Opt-in-[Fahrterkennung](../module/ride-recognition.md) ist vom aktiven Fahrttracking getrennt. Ein sichtbarer Location-Foreground-Service überträgt für Nearby-Anfragen aktuelle Koordinaten an den konfigurierten Träwelling-Server und lädt Abfahrten/Tripdetails. `RideRecognitionEngine` gleicht diese RAM-Kandidaten lokal mit frischer Bewegung ab. `CheckInViewModel` übernimmt ausschließlich noch gültige, vom Nutzer ausgewählte Vorschläge in den bestehenden Ziel-/Bestätigungsablauf. Kein GPS-Ergebnis löst selbst einen schreibenden Check-in aus.
+Die Opt-in-[Fahrterkennung](../module/ride-recognition.md) ist vom aktiven Fahrttracking getrennt. Ein sichtbarer Location-Foreground-Service überträgt über `TraewellingRepository.getNearbyStations` die aus dem aktuellen Standort berechneten Bounding-Box-Grenzen an `GET /api/v1/stations` des konfigurierten Träwelling-Servers und lädt Abfahrten/Tripdetails. `RideRecognitionEngine` gleicht diese RAM-Kandidaten lokal mit frischer Bewegung ab. `CheckInViewModel` übernimmt ausschließlich noch gültige, vom Nutzer ausgewählte Vorschläge in den bestehenden Ziel-/Bestätigungsablauf. Kein GPS-Ergebnis löst selbst einen schreibenden Check-in aus.
 
 Der [Änderungsmonitor](../module/trip-changes.md) vergleicht nur frische erfolgreiche Status-/Stopover-Antworten des aktiven Services. Er prüft vorhandene Providerfelder vor manuellen Zeitüberschreibungen. Meldungen gehen in einen eigenen Android-Kanal und optional in die gemeinsame TTS-Queue; die erste frische Antwort bleibt still. Deduplizierungswerte werden mit dem vorhandenen Fahrtcache gespeichert.
 

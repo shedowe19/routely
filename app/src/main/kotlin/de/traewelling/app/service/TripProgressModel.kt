@@ -71,7 +71,6 @@ data class TripProgressModel(
                 tracking.completed -> countedIndices.size
                 visitIndex == null -> null
                 else -> countedIndices.count { it < visitIndex || (arrived && it == visitIndex) }
-                    .coerceAtMost((countedIndices.size - 1).coerceAtLeast(0))
             }
             val remaining = when {
                 tracking.completed -> 0

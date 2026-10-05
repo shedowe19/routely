@@ -108,6 +108,8 @@ Der [Änderungsmonitor](./trip-changes.md) verarbeitet ausschließlich frische e
 
 Das [Fortschrittsmodell](./trip-progress.md) verwendet den gemeinsamen Besuchscursor für verbleibende Halte und den Android-Balken. Das Ziel wird durch Zeitfortschritt allein nicht als erreicht markiert. Ab API 36 wird `ProgressStyle` verwendet, ältere Geräte erhalten eine normale Fahrtbenachrichtigung. Die Live-Update-Anfrage ist systemabhängig; deaktivierte Sperrbildschirmdetails verhindern sie und verwenden eine allgemeine öffentliche Ersatzanzeige.
 
+Ein als angekommen markierter nicht gestrichener Zielbesuch zeigt null verbleibende Halte und `Am Ziel · Ankunft wird geprüft`, bis der Abschluss separat bestätigt ist. Der Balken bleibt bis dahin unter seinem Maximum. Für die Service-Lebensdauer erfasst `onStartCommand` jede neue `startId` bereits vor der Verarbeitung eines Wegwisch-Intents; `finishService` verwendet anschließend diese aktuelle ID beim Stoppen.
+
 ## Stopp-Bedingungen
 
 - GPS-Zielkriterium mit innerem Aufenthalt/niedriger Geschwindigkeit; gegebenenfalls erst nach Abschluss der Zielansage

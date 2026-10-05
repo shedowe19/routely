@@ -237,6 +237,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        lastStartId = startId
         if (intent?.action == ACTION_DISMISS_LIVE_UPDATE) {
             val requestedId = intent.getIntExtra(EXTRA_STATUS_ID, -1)
             if (currentStatusId == null) {
@@ -254,7 +255,6 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             }
             return START_STICKY
         }
-        lastStartId = startId
         val thisCommand = ++commandVersion
         val requestedId = intent?.getIntExtra(EXTRA_STATUS_ID, -1)?.takeIf { it > 0 }
         pendingRequestedStatusId = requestedId

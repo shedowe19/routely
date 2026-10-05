@@ -36,12 +36,14 @@ Die Sprachausgabe benötigt weiterhin die separate Option `Haltestellen ansagen`
 
 ### Reisebegleitung
 
-- **Fahrten automatisch erkennen:** Standardmäßig aus. Aktivierung erfolgt über `MainActivity` mit präziser Freigabe und startet einen sichtbaren Location-Service; es werden mögliche Fahrten vorgeschlagen, keine automatischen Check-ins erstellt. Die UI erklärt die Nearby-Übertragung aktueller Koordinaten an den konfigurierten Träwelling-Server.
+- **Fahrten automatisch erkennen:** Standardmäßig aus. Aktivierung erfolgt über `MainActivity` mit präziser Freigabe und startet einen sichtbaren Location-Service; es werden mögliche Fahrten vorgeschlagen, keine automatischen Check-ins erstellt. Die UI erklärt die Standortübertragung an den konfigurierten Träwelling-Server. Technisch werden aus dem Standort abgeleitete Bounding-Box-Grenzen an `GET /api/v1/stations` gesendet.
 - **Änderungen erklären:** Standardmäßig an. Meldet bekannte Änderungen der eigenen aktiven Fahrt. Der zusätzliche Schalter für Änderungsansagen ist nur bei aktivierten Hinweisen bedienbar; tatsächliche Sprache setzt ebenfalls die globale TTS-Option voraus.
 - **Reisefortschritt anzeigen:** Standardmäßig an. Aktiviert den Haltefortschritt und auf geeigneten Android-Systemen die Anfrage nach Live-Update-Hervorhebung.
 - **Reisedetails auf dem Sperrbildschirm:** Standardmäßig an. Ausschalten verwendet eine allgemeine öffentliche Ersatzanzeige und verhindert die Live-Update-Hervorhebungsanfrage. Android-Einstellungen gelten zusätzlich.
 
 Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../konfiguration/preferences-manager.md).
+
+`Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Auf älteren Geräten wird die allgemeine App-Benachrichtigungseinstellung geöffnet; ohne passende System-Activity fällt der Aufruf auf die App-Detailseite zurück. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
 
 ## Abhängigkeiten
 

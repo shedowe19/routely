@@ -37,7 +37,7 @@ Alle folgenden Pfade haben das Präfix `/api/v1/`; OAuth verwendet `/oauth/token
 | Authentifizierung | `GET auth/user`, `POST auth/logout` | Weiterhin gültig; Login und Refresh über OAuth |
 | Feeds | `GET dashboard`, `GET statuses` | Weiterhin gültig; Status enthält `user` und `checkin` |
 | Einzelstatus | `GET/PUT/DELETE status/{id}`, `POST/DELETE status/{id}/like` | Weiterhin gültig; Status-ID bleibt numerisch |
-| Stationssuche | `GET trains/station/autocomplete/{query}`, `GET trains/station/nearby`, `GET stations` | Weiterhin gültig; Stationskennungen in `identifiers` |
+| Stationssuche | `GET trains/station/autocomplete/{query}`, `GET stations`; zusätzlich deklarierter `GET trains/station/nearby` | Weiterhin gültig; Standortsuche im Check-in und in der Fahrterkennung verwendet `stations` mit Bounding-Box; Stationskennungen in `identifiers` |
 | Abfahrten | `GET station/{id}/departures` | Weiterhin gültig; interne numerische Station-ID, nicht IBNR |
 | Fahrtdetails | `GET trains/trip` | Weiterhin gültig; Query `hafasTripId` und `lineName` |
 | Fahrthalte | `GET stopovers/{tripId}` | Weiterhin gültig; `data` ist eine Map von numerischer Trip-ID zu Haltliste |
