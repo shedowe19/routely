@@ -18,6 +18,8 @@ Das Widget wird von `TripTrackingService` mit Daten versorgt:
 
 Das Widget empfängt Broadcasts mit `ACTION_UPDATE_WIDGET` und aktualisiert seine Daten. Die Darstellung erfolgt als AppWidgetProvider mit einem RemoteView-Layout.
 
+Der nächste Halt stammt aus der gemeinsamen Tracking-Engine des Service. Im Feld `nextStop` wird außerdem `GPS` oder `Fahrplan · ungefähr` angezeigt; bei unbestätigter Zielankunft nach vergangener/fehlender Zielzeit oder fehlendem aktuellen Halt zusätzlich `Fahrt manuell beenden`. Bei nutzbarem GPS bleibt der konkrete Halt auch nach einer vergangenen Planzeit aktiv; die angezeigte Uhrzeit stammt weiterhin aus den Echtzeit-/Planfeldern. Das Widget führt selbst keine Ortsabfragen durch.
+
 ## Widget-Layout (XML)
 
 Im Ordner `res/layout/` befindet sich `trip_widget.xml` mit folgenden Views:

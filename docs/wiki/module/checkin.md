@@ -50,6 +50,10 @@ Für einen Halt gelten `effectiveDeparture = departureReal ?: departurePlanned` 
 
 Ein erfolgreicher Check-in enthält `data.status` und `data.points`. Bei HTTP 409 liest das Repository `data.conflicts`, erzeugt eine `CheckInConflictException` und nennt die betroffenen Linien, Ziele und Status-IDs. Die auslaufenden Felder `message.status_id` und `message.lineName` werden nicht verwendet. Eine leere Konfliktliste führt zu einer allgemeinen Überschneidungsmeldung.
 
+## Start der Fahrtverfolgung
+
+Nach einem erfolgreichen Check-in speichert `CheckInViewModel` die aktive Status-ID. `MainActivity` übernimmt den sichtbaren, berechtigungsgeprüften Start des [TripTrackingService](./trip-tracking.md); das ViewModel startet keinen GPS-Foreground-Service aus dem Hintergrund.
+
 ## Reisegrund
 
 Im Bestätigungsschritt zeigt `CheckInScreen` eine Chip-Auswahl für den Reisegrund an:

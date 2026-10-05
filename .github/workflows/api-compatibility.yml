@@ -41,6 +41,13 @@ jobs:
       - name: Run unit tests and build debug APK
         run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
 
+      - name: Upload debug APK for device testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: routely-debug-apk
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+
       - name: Upload JUnit results
         if: always()
         uses: actions/upload-artifact@v4

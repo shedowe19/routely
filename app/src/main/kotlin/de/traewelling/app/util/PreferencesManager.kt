@@ -5,6 +5,8 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
@@ -27,6 +29,12 @@ class PreferencesManager(private val context: Context) {
         val KEY_TTS_LANGUAGE  = stringPreferencesKey("tts_language")
         val KEY_TTS_VOICE     = stringPreferencesKey("tts_voice")
         val KEY_APP_THEME     = stringPreferencesKey("app_theme")
+        val KEY_GPS_TRACKING_ENABLED = booleanPreferencesKey("gps_tracking_enabled")
+        val KEY_ANNOUNCEMENT_RADIUS = intPreferencesKey("announcement_radius_meters")
+        private val KEY_TRACKING_STATE = stringPreferencesKey("trip_tracking_state")
+        private val KEY_LOCATION_PERMISSION_REQUESTED = booleanPreferencesKey("location_permission_requested")
+
+        val ANNOUNCEMENT_RADII = setOf(0, 300, 500, 1000, 2000)
 
         const val DEFAULT_SERVER_URL = "https://traewelling.de"
         const val REDIRECT_URI = "traewelling://oauth-callback"
@@ -75,6 +83,14 @@ class PreferencesManager(private val context: Context) {
 
     val appTheme: Flow<String> = context.dataStore.data.map { prefs -> prefs[KEY_APP_THEME] ?: "LIGHT" }
 
+    val gpsTrackingEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_GPS_TRACKING_ENABLED] ?: true
+    }
+
+    val announcementRadiusMeters: Flow<Int> = context.dataStore.data.map {
+        validRadius(it[KEY_ANNOUNCEMENT_RADIUS] ?: 0)
+    }
+
     suspend fun saveServerConfig(serverUrl: String, clientId: String, clientSecret: String) {
         context.dataStore.edit { prefs ->
             prefs[KEY_SERVER_URL]    = serverUrl.trimEnd('/')
@@ -100,13 +116,61 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun saveActiveStatusId(statusId: Int?) {
         context.dataStore.edit { prefs ->
+            if (prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull() != statusId) {
+                prefs.remove(KEY_TRACKING_STATE)
+            }
             if (statusId == null) {
                 prefs.remove(KEY_ACTIVE_STATUS_ID)
+                prefs.remove(KEY_TRACKING_STATE)
             } else {
                 prefs[KEY_ACTIVE_STATUS_ID] = statusId.toString()
             }
         }
     }
+
+    suspend fun setGpsTrackingEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_GPS_TRACKING_ENABLED] = enabled }
+    }
+
+    suspend fun setAnnouncementRadiusMeters(radius: Int) {
+        context.dataStore.edit { it[KEY_ANNOUNCEMENT_RADIUS] = validRadius(radius) }
+    }
+
+    suspend fun getGpsTrackingEnabled(): Boolean = gpsTrackingEnabled.first()
+
+    suspend fun getAnnouncementRadiusMeters(): Int = announcementRadiusMeters.first()
+
+    suspend fun getTrackingState(): String? = context.dataStore.data.first()[KEY_TRACKING_STATE]
+
+    suspend fun hasRequestedLocationPermission(): Boolean =
+        context.dataStore.data.first()[KEY_LOCATION_PERMISSION_REQUESTED] ?: false
+
+    suspend fun markLocationPermissionRequested() {
+        context.dataStore.edit { it[KEY_LOCATION_PERMISSION_REQUESTED] = true }
+    }
+
+    // A superseded service must never overwrite the progress of the current trip.
+    suspend fun saveTrackingState(statusId: Int, stateJson: String) {
+        context.dataStore.edit { prefs ->
+            if (prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull() == statusId) {
+                prefs[KEY_TRACKING_STATE] = stateJson
+            }
+        }
+    }
+
+    suspend fun clearActiveTracking(statusId: Int): Boolean {
+        var cleared = false
+        context.dataStore.edit { prefs ->
+            if (prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull() == statusId) {
+                prefs.remove(KEY_ACTIVE_STATUS_ID)
+                prefs.remove(KEY_TRACKING_STATE)
+                cleared = true
+            }
+        }
+        return cleared
+    }
+
+    private fun validRadius(radius: Int): Int = radius.takeIf { it in ANNOUNCEMENT_RADII } ?: 0
 
     suspend fun setTtsEnabled(enabled: Boolean) {
         context.dataStore.edit { prefs ->
@@ -135,6 +199,8 @@ class PreferencesManager(private val context: Context) {
             prefs.remove(KEY_ACCESS_TOKEN)
             prefs.remove(KEY_REFRESH_TOKEN)
             prefs.remove(KEY_USERNAME)
+            prefs.remove(KEY_ACTIVE_STATUS_ID)
+            prefs.remove(KEY_TRACKING_STATE)
         }
     }
 

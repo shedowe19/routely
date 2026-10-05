@@ -17,7 +17,9 @@ data class SettingsUiState(
     val availableTtsEngines: List<TextToSpeech.EngineInfo> = emptyList(),
     val availableLanguages: List<Locale> = emptyList(),
     val availableVoices: List<android.speech.tts.Voice> = emptyList(),
-    val appTheme: String = "LIGHT"
+    val appTheme: String = "LIGHT",
+    val gpsTrackingEnabled: Boolean = true,
+    val announcementRadiusMeters: Int = 0
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
@@ -53,6 +55,16 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             }
             launch {
                 prefs.appTheme.collect { theme -> _uiState.update { it.copy(appTheme = theme) } }
+            }
+            launch {
+                prefs.gpsTrackingEnabled.collect { enabled ->
+                    _uiState.update { it.copy(gpsTrackingEnabled = enabled) }
+                }
+            }
+            launch {
+                prefs.announcementRadiusMeters.collect { radius ->
+                    _uiState.update { it.copy(announcementRadiusMeters = radius) }
+                }
             }
         }
     }
@@ -174,5 +186,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             prefs.setAppTheme(theme)
         }
+    }
+
+    fun setGpsTrackingEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setGpsTrackingEnabled(enabled) }
+    }
+
+    fun setAnnouncementRadiusMeters(radius: Int) {
+        viewModelScope.launch { prefs.setAnnouncementRadiusMeters(radius) }
     }
 }

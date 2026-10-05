@@ -14,6 +14,16 @@ Erklärung, wie Daten durch die App fließen.
 6. Das `ViewModel` aktualisiert den `StateFlow` mit den neuen Daten.
 7. Der Compose-Screen (View) beobachtet den `StateFlow` (`collectAsStateWithLifecycle()`) und recomposed sich mit den neuen Daten.
 
+## Aktive Fahrt und Stationsalarm
+
+Nach einem erfolgreichen Check-in speichert `CheckInViewModel` die aktive Status-ID. Die sichtbare `MainActivity` prüft Standortfreigabe und GPS-Einstellung und startet den Foreground-Service. Ein ViewModel startet keinen GPS-Service aus dem Hintergrund.
+
+Im Service laufen API-Aktualisierung (60 Sekunden), Standort-Callbacks und der Fahrplan-Tick getrennt. Die letzte erfolgreiche eingegrenzte Haltfolge versorgt `StationTrackingEngine`; deren Update liefert aktuellen Halt, Quelle, optionalen Ansagetrigger und GPS-Zielkriterium. Dieses Ergebnis aktualisiert Notification, Widget und bei aktivierter TTS die Sprachausgabe.
+
+Route und Besuchsfortschritt werden für die passende aktive Status-ID in DataStore gespeichert. API-Ausfälle blockieren die GPS-Auswertung einer bereits verfügbaren Route nicht. Standortfixes bleiben im Speicher und werden nicht an Träwelling gesendet. Details: [TripTracking](../module/trip-tracking.md).
+
 ## Verwandte Seiten
 
 - [Architektur Überblick](./ueberblick.md)
+- [TripTracking](../module/trip-tracking.md)
+- [PreferencesManager](../konfiguration/preferences-manager.md)

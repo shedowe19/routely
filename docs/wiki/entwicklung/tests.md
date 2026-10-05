@@ -13,6 +13,7 @@ Dokumentiert, wie die App getestet wird.
 - `ApiCompatibilityTest` lädt Fixtures aus `app/src/test/resources/traewelling/`. Die Antworten lassen auslaufende Kompatibilitätsfelder bewusst weg und unterscheiden Stopover-ID und Station-ID.
 - Die Modelltests prüfen verschachtelte Stationen, optionale Kennungen, IBNR/RIL100, numerische und UUID-Operator-IDs, echte und geplante Zeiten, berechnete Abfahrtsverspätungen, Stopover-Erkennung bei wiederholten Stationsbesuchen, Deduplizierung einschließlich verschiedener Stopover-UUIDs und die neuen Check-in-Erfolgs- und Konfliktantworten.
 - Statusänderungs-Tests prüfen die gemeinsame Übertragung von `destinationId` und `destinationArrivalPlanned` sowie das Weglassen beider Felder bei reinen Textänderungen.
+- `StationTrackingEngineTest` verwendet synthetische Positionen und eine feste Uhr ohne Android oder Netzwerk. Geprüft werden GPS bei Verspätung, Annäherung gegenüber Ankunft, Richtungs-/Abfahrtsfortschritt, ungültige beziehungsweise alte Fixes, Signalunterbrechungen, Fahrplan-Rückfall, Radien, Rundfahrten, Ansagemarkierungen nach Neustart und per Gson restaurierte Route/Fortschritt.
 - Unit-Tests liegen unter `app/src/test`; Instrumentierungstests unter `app/src/androidTest` sind noch nicht vorhanden.
 - API-nahe Tests mit echten Tokens sind derzeit nicht als automatisierte Tests eingerichtet. Falls sie ergänzt werden, müssen Tokens lokal und nicht versioniert bereitgestellt werden.
 
@@ -24,11 +25,19 @@ Dokumentiert, wie die App getestet wird.
 
 ## Automatisierte Prüfung
 
-`.github/workflows/api-compatibility.yml` führt die Unit-Tests und den Debug-Build bei Pull Requests sowie bei manuellem Start aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. JUnit-Ergebnisse und HTML-Testberichte werden als `api-compatibility-test-results` gespeichert.
+`.github/workflows/api-compatibility.yml` führt die Unit-Tests und den Debug-Build bei Pull Requests sowie bei manuellem Start aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. JUnit-Ergebnisse und HTML-Testberichte werden als `api-compatibility-test-results` gespeichert. Nach erfolgreichem Build wird `app/build/outputs/apk/debug/app-debug.apk` als `routely-debug-apk` für Geräteprüfungen bereitgestellt.
 
 ## Ergebnis der Migration vom 05.10.2026
 
 GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56c1cfa4` alle 28 Unit-Tests und den vollständigen Android-Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). Der Prüfstand umfasst 27 neue Modelltests und den vorhandenen Retrofit-Endpunkttest. Die JUnit- und HTML-Berichte sind im Workflow-Artefakt gespeichert.
+
+## Prüfung der GPS-Erweiterung
+
+Die neue `StationTrackingEngineTest` ergänzt die bisherigen API-Regressionen. Die Tests prüfen unter anderem verspätete Fahrten, schnelle Zielvorbeifahrt gegenüber langsamer/stabiler Ankunft, vorläufige Zeitcursor nach Cache-Restaurierung, späten Start am Ursprung, getrennten GPS-aus-/Ausfallmodus, Rundfahrten sowie freigegebene und bestätigte Ansageschlüssel. Die endgültige Testanzahl wird mit dem vollständigen CI-Ergebnis dokumentiert.
+
+TODO: Ergebnis des vollständigen CI-Laufs mit `:app:testDebugUnitTest :app:assembleDebug` für die GPS-Erweiterung nachtragen. Der oben dokumentierte grüne API-Commit enthält diese Erweiterung noch nicht.
+
+Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Echte Zug-/Busfahrten und Android-Geräteprüfungen stehen aus; hier ist kein physisches Testgerät verfügbar. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
@@ -59,3 +68,4 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 - [Secrets und Sicherheit](../konfiguration/secrets-und-sicherheit.md)
 - [Build](./build.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
+- [TripTracking](../module/trip-tracking.md)

@@ -38,7 +38,8 @@ fun MainNavigation(
     userProfileViewModel: UserProfileViewModel,
     statusDetailViewModel: StatusDetailViewModel,
     userSearchViewModel: UserSearchViewModel,
-    settingsViewModel: SettingsViewModel
+    settingsViewModel: SettingsViewModel,
+    onRequestGpsPermission: () -> Unit
 ) {
     val navController = rememberNavController()
 
@@ -161,7 +162,8 @@ fun MainNavigation(
         composable(Screen.Settings.route) {
             SettingsScreen(
                 viewModel = settingsViewModel,
-                onBack = { navController.popBackStack() }
+                onBack = { navController.popBackStack() },
+                onRequestGpsPermission = onRequestGpsPermission
             )
         }
     }

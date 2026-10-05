@@ -20,7 +20,8 @@ import de.traewelling.app.viewmodel.SettingsViewModel
 @Composable
 fun SettingsScreen(
     viewModel: SettingsViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onRequestGpsPermission: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
@@ -80,6 +81,67 @@ fun SettingsScreen(
                         ThemeSelectionDropdown(
                             selectedTheme = uiState.appTheme,
                             onThemeSelected = { viewModel.setAppTheme(it) }
+                        )
+                    }
+                }
+            }
+
+            item {
+                Text(
+                    text = "Stationsansagen mit GPS",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(Modifier.height(8.dp))
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp)
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(Icons.Default.MyLocation, null, tint = MaterialTheme.colorScheme.primary)
+                            Column(Modifier.weight(1f)) {
+                                Text("GPS verwenden", fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Erkennt deine Annäherung an den nächsten Halt. Ohne brauchbaren Standort wird der Fahrplan verwendet.",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            Switch(
+                                checked = uiState.gpsTrackingEnabled,
+                                onCheckedChange = { enabled ->
+                                    viewModel.setGpsTrackingEnabled(enabled)
+                                    if (enabled) onRequestGpsPermission()
+                                }
+                            )
+                        }
+                        if (uiState.gpsTrackingEnabled) {
+                            Spacer(Modifier.height(12.dp))
+                            Text("Entfernung für die Ansage", style = MaterialTheme.typography.labelMedium)
+                            SettingsDropdownMenu(
+                                items = listOf(300, 500, 1000, 2000).map { it.toString() to "$it Meter" },
+                                selectedItem = uiState.announcementRadiusMeters.toString(),
+                                onItemSelected = { viewModel.setAnnouncementRadiusMeters(it.toIntOrNull() ?: 0) },
+                                defaultLabel = "Automatisch (300–2.000 Meter)"
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text(
+                                "Die Automatik passt die Entfernung an deine Geschwindigkeit an. Für GPS ist die präzise Standortfreigabe erforderlich.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            OutlinedButton(onClick = onRequestGpsPermission, modifier = Modifier.fillMaxWidth()) {
+                                Text("Standort freigeben")
+                            }
+                        }
+                        Text(
+                            "Aktiviere unten „Haltestellen ansagen“ für die Sprachausgabe.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
