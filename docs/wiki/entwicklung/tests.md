@@ -61,7 +61,7 @@ Die Erweiterung um [Fahrterkennung](../module/ride-recognition.md), [Fahrtänder
 - `SpeechDeliveryQueueTest`: zusätzliche Trennung von Stations- und Änderungssprache, auch bei identischen Ereignisschlüsseln.
 - `HttpLogSanitizerTest`: redaktierte Standortparameter einschließlich Bounding-Box-Werten und unveränderte unkritische URL-Parameter.
 
-Die bisherigen 88 Tests sind kein Nachweis dieser neuen Funktionen. Die aktuelle Quellanzahl ist ebenfalls kein erfolgreicher CI-Nachweis; Ergebnisse des neuen Standes müssen dem passenden Commit/Lauf zugeordnet werden.
+Der erste bestätigte Begleiter-Stand `898130b91db2fd291d94d92752084070668c43ea` bestand am 05.10.2026 alle 162 Unit-Tests (keine Fehler, Fehlschläge oder übersprungenen Tests). Derselbe Lauf baute die Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Die JUnit-Berichte bestätigen 22 Erkennungs-, 31 Änderungs-, 18 Fortschritts-, 5 Ansagequeue-, 47 GPS-, 9 Timeline-, 28 API- und 2 Logredaktionstests. Nachweis: [GitHub-Actions-Lauf 37363237606](https://github.com/shedowe19/routely/actions/runs/37363237606). Spätere Änderungen müssen dem jeweils passenden CI-Lauf zugeordnet werden.
 
 Geräteprüfungen müssen zusätzlich die präzise Standortfreigabe der Opt-in-Suche, sichtbaren FGS, Pause bei Check-in/Logout, Kalte-/Warmstartnavigation, Benachrichtigungs- und TTS-Zustellung sowie API-35/36/36.1-Layouts und Sperrbildschirm-Privatsphäre abdecken. Die Erkennung verwendet synthetische Bewegung für Logiktests; reale Erkennungsgüte, Akkuverbrauch und Hersteller-Live-Updates sind dadurch nicht belegt.
 

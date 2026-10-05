@@ -35,7 +35,9 @@ Die Zielzeit stammt aus vorhandener API-Echtzeit, sonst aus dem Fahrplan. „Noc
 
 Das Manifest enthält `POST_PROMOTED_NOTIFICATIONS`; compileSdk 36 ermöglicht die typisierte `ProgressStyle`-API. Die Promotion-Anfrage verwendet den dokumentierten Bundle-Wert der API 36.1, damit kein Minor-SDK-/Kotlin-Wechsel erforderlich ist. Es gibt keinen Aufruf einer erst ab API 36.1 verfügbaren Methode auf älteren Geräten.
 
-Benachrichtigungsberechtigung, Nutzerentscheidungen, Kanal, Android-Version und Herstelleroberfläche entscheiden über Anzeige und Hervorhebung. Eine Samsung-spezifische Sperrbildschirmoberfläche oder ein hervorgehobener Statuschip wird nicht garantiert. Das Wegwischen eines Live Updates unterdrückt die erneute Hervorhebungsanfrage für die laufende Service-Sitzung; die Fahrtbegleitung selbst bleibt bestehen.
+Benachrichtigungsberechtigung, Nutzerentscheidungen, Kanal, Android-Version und Herstelleroberfläche entscheiden über Anzeige und Hervorhebung. Eine Samsung-spezifische Sperrbildschirmoberfläche oder ein hervorgehobener Statuschip wird nicht garantiert.
+
+Das Wegwischen eines Live Updates unterdrückt die erneute Hervorhebungsanfrage für die laufende Fahrt; die Fahrtbegleitung selbst bleibt bestehen. Dieser Zustand wird im Tracking-Cache gespeichert und nach einem Service-Neustart wiederhergestellt. Eine neue Fahrt setzt ihn zurück.
 
 Die Aktionen `Fahrt öffnen` beziehungsweise Tippen öffnen das passende Fahrtdetail mit `open_status_id`. `Beenden` beendet die Begleitung. Navigation behandelt kalte und bereits laufende Activity-Starts.
 

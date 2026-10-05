@@ -278,6 +278,7 @@ class RideRecognitionService : Service() {
 
     private fun notification(message: String): android.app.Notification {
         val open = Intent(this, MainActivity::class.java).putExtra(EXTRA_OPEN_RECOGNITION, true)
+            .setAction("de.traewelling.app.OPEN_RIDE_RECOGNITION")
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val content = PendingIntent.getActivity(this, 711, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 712, stopIntent(this), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
