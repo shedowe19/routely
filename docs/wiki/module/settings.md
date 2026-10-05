@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Dieses Modul verwaltet die globalen Anwendungseinstellungen wie das UI-Theme (Light, Dark, AMOLED) und die Konfiguration der Sprachausgabe (TTS). Es bietet eine zentrale Anlaufstelle für den Benutzer, um die App an seine Präferenzen anzupassen.
+Dieses Modul verwaltet das UI-Theme (Light, Dark, AMOLED), GPS-Stationsalarme und die Konfiguration der Sprachausgabe (TTS).
 
 ## Kontext
 
@@ -13,6 +13,7 @@ Der SettingsScreen wird über den `ProfileScreen` aufgerufen. Die hier getroffen
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/SettingsScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/SettingsViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
+- `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 
 ## Verhalten
 
@@ -25,6 +26,14 @@ Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `P
 - Einstellungsbereiche werden als abgerundete Cards mit Icon, Beschreibung und dezentem Border angezeigt
 - TTS-Optionen bleiben als Dropdowns verfügbar, sobald Haltestellenansagen aktiviert sind
 
+### Stationsansagen mit GPS
+
+Der Bereich `Stationsansagen mit GPS` bietet `GPS verwenden` und die Entfernung für die Ansage. Standard ist GPS mit automatischem Radius von 300–2.000 Metern; alternativ sind 300, 500, 1.000 oder 2.000 Meter fest wählbar. `SettingsViewModel` schreibt `gps_tracking_enabled` und `announcement_radius_meters` über DataStore.
+
+`Standort freigeben` übergibt die Freigabeaktion an `MainActivity`. Dort werden präziser Standort und aktivierte Ortungsdienste geprüft; bei ausgeschalteter Ortung wird die Android-Standorteinstellung geöffnet. Bei vorheriger dauerhafter Ablehnung öffnet der manuelle Button die App-Berechtigungen. Der GPS-Schalter ersetzt die Runtimefreigabe nicht. Ohne nutzbaren Standort wird der gekennzeichnete Fahrplan-Rückfall verwendet.
+
+Die Sprachausgabe benötigt weiterhin die separate Option `Haltestellen ansagen`. GPS-Tracking und TTS-Aktivierung sind getrennte Einstellungen. Das genaue Trigger- und Rückfallverhalten beschreibt [TripTracking](./trip-tracking.md).
+
 ## Abhängigkeiten
 
 - `PreferencesManager` (DataStore)
@@ -36,6 +45,7 @@ Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `P
 - [Theme Konfiguration](../ui/theme.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [ADR Dark Mode & Settings](../entscheidungen/2026-04-29-dark-mode-und-settings.md)
+- [TripTracking](./trip-tracking.md)
 
 ## Offene Fragen
 

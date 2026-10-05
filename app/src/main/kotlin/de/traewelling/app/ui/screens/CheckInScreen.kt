@@ -179,7 +179,7 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
                             headlineContent = {
                                 Text(station.name ?: "–", fontWeight = FontWeight.Medium)
                             },
-                            supportingContent = station.rilIdentifier?.let { { Text("RIL: $it") } },
+                            supportingContent = station.identifier("de_db_ril100")?.let { { Text("RIL: $it") } },
                             leadingContent = {
                                 Icon(Icons.Default.Train, null,
                                     tint = MaterialTheme.colorScheme.primary)
@@ -248,9 +248,10 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
 private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
     val lineName  = departure.line?.name ?: "?"
     val direction = departure.direction ?: "–"
-    val timeRaw   = departure.plannedWhen ?: ""
+    val timeRaw   = departure.plannedWhen ?: departure.realWhen ?: ""
     val time      = formatLocalTime(timeRaw)
-    val delayed   = departure.delay != null && departure.delay > 0
+    val delayMinutes = departure.delayMinutes
+    val delayed   = delayMinutes != null && delayMinutes > 0
     val cancelled = departure.cancelled == true
 
     ListItem(
@@ -271,9 +272,9 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
                     Text(time, style = MaterialTheme.typography.bodySmall,
                         color = if (delayed) MaterialTheme.colorScheme.error
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    if (delayed && departure.delay != null) {
+                    if (delayed && delayMinutes != null) {
                         Spacer(Modifier.width(4.dp))
-                        Text("+${departure.delay}min",
+                        Text("+${delayMinutes}min",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.error)
                     }
@@ -315,7 +316,7 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
     )
 }
 
-// ─── Step 3: Ziel wählen (flat StopStation) ──────────────────────────────────
+// ─── Step 3: Ziel wählen ──────────────────────────────────
 
 @Composable
 private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
@@ -342,10 +343,10 @@ private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState
                     items(stopovers) { stop ->
                         ListItem(
                             headlineContent = {
-                                Text(stop.name ?: "–")    // name is directly on StopStation!
+                                Text(stop.stationName ?: "–")
                             },
                             supportingContent = {
-                                val arr = stop.arrivalPlanned ?: stop.arrival
+                                val arr = stop.effectiveArrival
                                 if (arr != null) {
                                     Text("Ankunft: ${formatLocalTime(arr)}")
                                 }
@@ -381,7 +382,7 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                     Column(Modifier.padding(16.dp)) {
                         InfoRow(Icons.Default.Train,       "Linie",   dep?.line?.name ?: "–")
                         InfoRow(Icons.Default.TripOrigin,  "Von",     uiState.selectedStation?.name ?: "–")
-                        InfoRow(Icons.Default.LocationOn,  "Nach",    uiState.selectedDestination?.name ?: "–")
+                        InfoRow(Icons.Default.LocationOn,  "Nach",    uiState.selectedDestination?.stationName ?: "–")
                         InfoRow(Icons.Default.Schedule,    "Abfahrt", depTime)
                         dep?.platform?.takeIf { it.isNotBlank() }?.let {
                             InfoRow(Icons.Default.ConfirmationNumber, "Gleis", it)

@@ -4,13 +4,11 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.*
-import android.content.Intent
-import androidx.core.content.ContextCompat
 import de.traewelling.app.data.repository.TraewellingRepository
-import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
+import java.time.OffsetDateTime
 
 enum class CheckInStep { STATION, DEPARTURES, DESTINATION, CONFIRM, SUCCESS }
 
@@ -24,11 +22,11 @@ data class CheckInUiState(
     // Selected station & departures
     val selectedStation: TrainStation? = null,
     val departures: List<DepartureTrip> = emptyList(),
-    // Selected departure & loaded trip details (flat stopovers)
+    // Selected departure & loaded trip details
     val selectedDeparture: DepartureTrip? = null,
     val selectedTripDetails: TripDetails? = null,
     val filteredDestinations: List<StopStation> = emptyList(),
-    // Selected destination (flat StopStation — id and name at top level)
+    // Selected destination stopover; station identity lives in station
     val selectedDestination: StopStation? = null,
     // Optional status message
     val statusBody: String = "",
@@ -145,33 +143,12 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             }
             repo.getTrip(hafasTripId = departure.tripId, lineName = lineName)
                 .onSuccess { tripDetails ->
-                    val origin = _uiState.value.selectedStation
+                    // Radius-based departure queries can return a nearby station's service.
+                    // The departure's station is the authoritative boarding station.
+                    val origin = departure.station ?: _uiState.value.selectedStation
                     val stopovers = tripDetails.stopovers ?: emptyList()
                     
-                    val timeMatchIdx = stopovers.indexOfFirst { stop ->
-                        departure.plannedWhen != null &&
-                        (stop.departurePlanned == departure.plannedWhen ||
-                         stop.departure == departure.plannedWhen ||
-                         stop.departureReal == departure.plannedWhen)
-                    }
-                    
-                    val initialOriginIdx = if (timeMatchIdx != -1) {
-                        timeMatchIdx
-                    } else {
-                        stopovers.indexOfFirst { stop ->
-                            val idMatch = origin != null && stop.id == origin.id
-                            val evaMatch = origin?.ibnr != null && stop.evaIdentifier?.toLongOrNull() == origin.ibnr
-                            idMatch || evaMatch
-                        }
-                    }
-
-                    val finalOriginIdx = if (initialOriginIdx == -1) {
-                        val originWords = origin?.name?.lowercase()?.split(Regex("\\W+"))?.filter { it.length > 2 } ?: emptyList()
-                        stopovers.indexOfFirst { stop ->
-                            stop.name != null && originWords.isNotEmpty() &&
-                            originWords.all { stop.name.lowercase().contains(it) }
-                        }
-                    } else { initialOriginIdx }
+                    val finalOriginIdx = resolveOriginIndex(stopovers, origin, departure)
 
                     // Only show stations AFTER the origin as possible destinations
                     val filteredStopovers = if (finalOriginIdx != -1) {
@@ -184,6 +161,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                         it.copy(
                             isLoading            = false,
                             selectedTripDetails  = tripDetails,
+                            selectedStation      = origin,
                             filteredDestinations = filteredStopovers,
                             resolvedOriginStop   = if (finalOriginIdx != -1) stopovers[finalOriginIdx] else null,
                             step                 = CheckInStep.DESTINATION
@@ -198,9 +176,13 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    // ─── Step 4: User picks destination stopover (flat StopStation) ───────────
+    // ─── Step 4: User picks destination stopover ───────────
 
     fun selectDestination(stopStation: StopStation) {
+        if (stopStation.stationId == null) {
+            _uiState.update { it.copy(error = "Zielbahnhof hat keine gültige ID.") }
+            return
+        }
         _uiState.update { 
             it.copy(
                 selectedDestination = stopStation, 
@@ -223,36 +205,43 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     fun confirmCheckIn() {
         val state       = _uiState.value
         val departure   = state.selectedDeparture   ?: return
-        val origin      = state.selectedStation     ?: return
+        val origin      = departure.station ?: state.selectedStation ?: return
         val destination = state.selectedDestination ?: return
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, error = null) }
 
-            // Match origin from the full trip details (we need the original ID and timestamp)
-            val originWords = origin.name?.lowercase()?.split(Regex("\\W+"))?.filter { it.length > 2 } ?: emptyList()
-            // Use the origin stop resolved during trip loading (has time/EVA/ID matching).
-            // Fallback: re-run full matching (id, EVA/IBNR, time, name) in case state was lost.
+            // Stopover IDs are distinct from station IDs. Resolve the matching visit
+            // by station identity and departure time, then send the nested station ID.
             val originStop = state.resolvedOriginStop
-                ?: state.selectedTripDetails?.stopovers?.find { stop ->
-                    val idMatch   = stop.id == origin.id
-                    val evaMatch  = origin.ibnr != null && stop.evaIdentifier?.toLongOrNull() == origin.ibnr
-                    val timeMatch = departure.plannedWhen != null &&
-                        (stop.departurePlanned == departure.plannedWhen ||
-                         stop.departure        == departure.plannedWhen ||
-                         stop.departureReal    == departure.plannedWhen)
-                    val nameMatch = stop.name != null && originWords.isNotEmpty() &&
-                        originWords.all { stop.name.lowercase().contains(it) }
-                    idMatch || evaMatch || timeMatch || nameMatch
+                ?: state.selectedTripDetails?.stopovers?.let { stops ->
+                    stops.getOrNull(resolveOriginIndex(stops, origin, departure))
                 }
-            
+            val startStationId = originStop?.stationId ?: origin.id
+            val destinationStationId = destination.stationId
+            val departureTime = state.manualDeparture.ifBlank {
+                originStop?.departurePlanned ?: originStop?.effectiveDeparture
+                    ?: departure.plannedWhen ?: departure.realWhen ?: ""
+            }
+            val arrivalTime = state.manualArrival.ifBlank {
+                destination.arrivalPlanned ?: destination.effectiveArrival ?: ""
+            }
+            if (startStationId == null || destinationStationId == null) {
+                _uiState.update { it.copy(isLoading = false, error = "Start- oder Zielbahnhof hat keine gültige ID.") }
+                return@launch
+            }
+            if (departureTime.isBlank() || arrivalTime.isBlank()) {
+                _uiState.update { it.copy(isLoading = false, error = "Abfahrts- oder Ankunftszeit fehlt.") }
+                return@launch
+            }
+
             val request = CheckInRequest(
                 tripId               = departure.tripId,
                 lineName             = departure.line?.name ?: "",
-                startStationId       = originStop?.id ?: origin.id ?: 0,
-                destinationStationId = destination.id ?: 0,
-                departure            = state.manualDeparture.ifBlank { originStop?.departurePlanned ?: originStop?.departure ?: departure.plannedWhen ?: "" },
-                arrival              = state.manualArrival.ifBlank { destination.arrivalPlanned ?: destination.arrival ?: "" },
+                startStationId       = startStationId,
+                destinationStationId = destinationStationId,
+                departure            = departureTime,
+                arrival              = arrivalTime,
                 body                 = state.statusBody.ifBlank { null },
                 business             = state.travelReason.apiValue
             )
@@ -261,21 +250,48 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                 .onSuccess { result ->
                     _uiState.update { it.copy(isLoading = false, checkInResult = result, step = CheckInStep.SUCCESS) }
 
-                    // Start TripTrackingService
+                    // The visible Activity starts tracking after checking location permissions.
                     result?.status?.id?.let { statusId ->
-                        launch {
-                            prefs.saveActiveStatusId(statusId)
-                            val serviceIntent = Intent(getApplication(), TripTrackingService::class.java).apply {
-                                putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
-                            }
-                            ContextCompat.startForegroundService(getApplication(), serviceIntent)
-                        }
+                        prefs.saveActiveStatusId(statusId)
                     }
                 }
                 .onFailure { e ->
                     _uiState.update { it.copy(isLoading = false, error = "Check-in fehlgeschlagen: ${e.message}") }
                 }
         }
+    }
+
+    private fun resolveOriginIndex(
+        stops: List<StopStation>,
+        origin: TrainStation?,
+        departure: DepartureTrip
+    ): Int {
+        if (origin == null) return -1
+        val ibnr = origin.identifier("de_db_ibnr")
+        val originWords = origin.name?.lowercase()?.split(Regex("\\W+"))
+            ?.filter { it.length > 2 }.orEmpty()
+        val matchingIndices = stops.indices.filter { index ->
+            val stop = stops[index]
+            val idMatch = origin.id != null && stop.stationId == origin.id
+            val identifierMatch = ibnr != null && stop.stationIdentifier("de_db_ibnr") == ibnr
+            val nameMatch = stop.stationId == null && stop.stationName?.let { name ->
+                originWords.isNotEmpty() && originWords.all { name.lowercase().contains(it) }
+            } == true
+            idMatch || identifierMatch || nameMatch
+        }
+        return matchingIndices.firstOrNull { index ->
+            val stop = stops[index]
+            sameInstant(stop.departurePlanned, departure.plannedWhen) ||
+                sameInstant(stop.effectiveDeparture, departure.realWhen)
+        } ?: matchingIndices.firstOrNull() ?: -1
+    }
+
+    private fun sameInstant(first: String?, second: String?): Boolean {
+        if (first == null || second == null) return false
+        if (first == second) return true
+        return runCatching {
+            OffsetDateTime.parse(first).toInstant() == OffsetDateTime.parse(second).toInstant()
+        }.getOrDefault(false)
     }
 
     fun reset() { _uiState.value = CheckInUiState() }

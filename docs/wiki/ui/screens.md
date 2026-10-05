@@ -16,7 +16,7 @@
 | UserProfileScreen  | `ui/screens/UserProfileScreen.kt`  | Fremdes Profil                            |
 | UserSearchScreen   | `ui/screens/UserSearchScreen.kt`   | Benutzer-Suche                            |
 | StatusDetailScreen | `ui/screens/StatusDetailScreen.kt` | Status-Detail mit Timeline und Reisegrund |
-| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme- und TTS-Einstellungen              |
+| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme, GPS-Stationsalarm und TTS          |
 
 ## Navigation
 
@@ -42,3 +42,4 @@ Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications
 ## Verwandte Seiten
 
 - [Komponenten](./komponenten.md)
+- [Settings](../module/settings.md)

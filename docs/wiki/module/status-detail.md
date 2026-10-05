@@ -22,6 +22,8 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 3. Lädt Stopovers via `repo.getStopovers(tripId)`
 4. Prüft via `checkIfOwnStatus()` ob eigener Status (für Bearbeiten/Löschen-Buttons)
 
+Die Timeline verwendet `StopStation.stationName` und `stationId` aus dem verschachtelten Stationsobjekt. Einstieg und Ziel werden über `matchesStopover` statt über die alte Stopover-`id` zugeordnet. Ankunft und Abfahrt nutzen `effectiveArrival` und `effectiveDeparture`; manuelle Zeitkorrekturen werden dafür in `arrivalReal` und `departureReal` gespeichert.
+
 ### Auto-Refresh
 
 Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Der aktualisierte Status wird im UIState gespeichert.
@@ -38,6 +40,7 @@ Vor der Speicherung des Haltestellenverlaufs im `UIState` (sowohl beim Initialla
 
 - `startEditing()`: Setzt Bearbeitungszustand
 - `saveStatusEdit()`: Sendet PUT `/api/v1/status/{id}` mit UpdateStatusRequest
+- Bei einem Zielwechsel speichert `editDestinationStop` den ausgewählten Halt. Der Request enthält dann dessen `stationId` als `destinationId` und `arrivalPlanned` als `destinationArrivalPlanned`, da Upstream beide Felder gemeinsam verlangt. Reine Text- oder Zeitkorrekturen übertragen kein Zielpaar.
 
 ### Löschung
 
@@ -81,3 +84,4 @@ Die Timeline zeigt:
 - [Check-in](./checkin.md)
 - [API Überblick](../api/ueberblick.md)
 - [Datenmodell](../daten/datenmodell.md)
+- [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)

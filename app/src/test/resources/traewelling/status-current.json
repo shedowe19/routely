@@ -1,0 +1,78 @@
+{
+  "data": {
+    "id": 731,
+    "body": "Unterwegs nach Hamburg",
+    "createdAt": "2026-10-05T08:54:00+00:00",
+    "likes": 2,
+    "liked": false,
+    "isLikable": true,
+    "visibility": 0,
+    "business": 0,
+    "user": {
+      "id": 42,
+      "uuid": "78b1027f-0710-42b1-a8f4-5909f1b75d6f",
+      "username": "test-traveller",
+      "displayName": "Test Traveller",
+      "profilePicture": "https://example.com/avatar.png"
+    },
+    "checkin": {
+      "category": "regional",
+      "mode": "train",
+      "lineName": "RE 1",
+      "distance": 116000,
+      "points": 17,
+      "duration": 92,
+      "tripUuid": "baec4235-3cb6-4d3c-8f76-d17081c22e53",
+      "origin": {
+        "id": 91001,
+        "uuid": "5f4a5ae8-0bd4-42a8-b1c3-8b53494343ad",
+        "station": {
+          "id": 80,
+          "uuid": "9766c838-a9bb-45aa-9352-7d06f238864b",
+          "name": "Schwerin Hbf",
+          "latitude": 53.634,
+          "longitude": 11.407,
+          "identifiers": [
+            {"type": "de_db_ibnr", "identifier": "8010324"},
+            {"type": "de_db_ril100", "identifier": "WS"},
+            {"type": "local_code", "identifier": "SH", "origin": "test_network"}
+          ]
+        },
+        "arrivalPlanned": null,
+        "arrivalReal": null,
+        "departurePlanned": "2026-10-05T08:54:00+00:00",
+        "departureReal": "2026-10-05T08:57:00+00:00",
+        "departurePlatformPlanned": "3",
+        "departurePlatformReal": "4",
+        "cancelled": false
+      },
+      "destination": {
+        "id": 91004,
+        "uuid": "230d0be6-e2c6-49d7-b173-65dc173b70e6",
+        "station": {
+          "id": 81,
+          "uuid": "8daef0d4-a9a4-4b16-986a-ab78a36c5cb0",
+          "name": "Hamburg Hbf",
+          "identifiers": null
+        },
+        "arrivalPlanned": "2026-10-05T10:26:00+00:00",
+        "arrivalReal": null,
+        "departurePlanned": null,
+        "departureReal": null,
+        "arrivalPlatformPlanned": "6",
+        "cancelled": false
+      },
+      "operator": {
+        "id": "81379d66-6f6a-462b-a0f0-68208b2cf9f1",
+        "uuid": "81379d66-6f6a-462b-a0f0-68208b2cf9f1",
+        "name": "Test Regionalbahn"
+      },
+      "routeColor": "D40000",
+      "routeTextColor": "FFFFFF",
+      "manualDeparture": null,
+      "manualArrival": null
+    },
+    "event": null,
+    "tags": []
+  }
+}

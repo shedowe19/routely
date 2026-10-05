@@ -243,14 +243,14 @@ private fun StatusDetailContent(
         stopovers.indexOfLast { it.cancelled != true }
     }
 
-    val originId = checkin?.origin?.id
-    val destinationId = checkin?.destination?.id
+    val origin = checkin?.origin
+    val destination = checkin?.destination
 
-    val originIdx = remember(stopovers, originId) {
-        stopovers.indexOfFirst { it.id == originId }
+    val originIdx = remember(stopovers, origin) {
+        stopovers.indexOfFirst { it.matchesStopover(origin) }
     }
-    val destinationIdx = remember(stopovers, destinationId) {
-        stopovers.indexOfFirst { it.id == destinationId }
+    val destinationIdx = remember(stopovers, destination) {
+        stopovers.indexOfFirst { it.matchesStopover(destination) }
     }
 
     val isLoading = uiState.isLoading
@@ -368,9 +368,9 @@ private fun StatusDetailContent(
             // Stopovers list
             items(stopovers.size) { index ->
                 val stop = stopovers[index]
-                val isOrigin = stop.id == originId
-                val isDestination = stop.id == destinationId
-                val isInRange = isStopInRange(stopovers, index, originId, destinationId)
+                val isOrigin = index == originIdx
+                val isDestination = index == destinationIdx
+                val isInRange = originIdx >= 0 && destinationIdx >= originIdx && index in originIdx..destinationIdx
 
                 val prevStop = stopovers.getOrNull(index - 1)
                 val nextStop = stopovers.getOrNull(index + 1)
@@ -540,7 +540,7 @@ private fun TripInfoCard(status: Status) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(TealAccent, CircleShape))
                 Spacer(Modifier.width(8.dp))
-                Text(checkin.origin?.name ?: "–", fontWeight = FontWeight.SemiBold)
+                Text(checkin.origin?.stationName ?: "–", fontWeight = FontWeight.SemiBold)
             }
             Row(modifier = Modifier.padding(start = 5.dp)) {
                 Box(
@@ -557,7 +557,7 @@ private fun TripInfoCard(status: Status) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(Modifier.size(12.dp).background(AmberAccent, CircleShape))
                 Spacer(Modifier.width(8.dp))
-                Text(checkin.destination?.name ?: "–", fontWeight = FontWeight.SemiBold)
+                Text(checkin.destination?.stationName ?: "–", fontWeight = FontWeight.SemiBold)
             }
 
             Spacer(Modifier.height(16.dp))
@@ -682,7 +682,7 @@ private fun TimeRow(label: String, planned: String?, real: String?) {
                     fontWeight = FontWeight.Bold
                 )
             } else {
-                Text(plannedTime, style = MaterialTheme.typography.bodySmall)
+                Text(realTime, style = MaterialTheme.typography.bodySmall)
             }
         }
     }
@@ -708,19 +708,19 @@ private fun StopoverItem(
 ) {
     // Determine times for this stop
     val stopZdt = remember(stop) { 
-        val timeStr = stop.departureReal ?: stop.departurePlanned ?: stop.arrivalReal ?: stop.arrivalPlanned ?: stop.arrival
+        val timeStr = stop.effectiveDeparture ?: stop.effectiveArrival
         try { timeStr?.let { ZonedDateTime.parse(it) } } catch (e: Exception) { null }
     }
 
     // Determine times for next stop
     val nextZdt = remember(nextStop) { 
-        val timeStr = nextStop?.arrivalReal ?: nextStop?.arrivalPlanned ?: nextStop?.arrival ?: nextStop?.departurePlanned
+        val timeStr = nextStop?.effectiveArrival ?: nextStop?.effectiveDeparture
         try { timeStr?.let { ZonedDateTime.parse(it) } } catch (e: Exception) { null }
     }
     
     // Determine times for previous stop (to handle the incoming line)
     val prevZdt = remember(prevStop) {
-        val timeStr = prevStop?.departureReal ?: prevStop?.departurePlanned ?: prevStop?.departure ?: prevStop?.arrivalReal
+        val timeStr = prevStop?.effectiveDeparture ?: prevStop?.effectiveArrival
         try { timeStr?.let { ZonedDateTime.parse(it) } } catch (e: Exception) { null }
     }
 
@@ -900,7 +900,7 @@ private fun StopoverItem(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    stop.name ?: "–",
+                    stop.stationName ?: "–",
                     fontWeight = if (isOrigin || isDestination) FontWeight.Bold else FontWeight.SemiBold,
                     color = if (isCancelled) ErrorRed else MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha),
                     maxLines = 1,
@@ -911,9 +911,9 @@ private fun StopoverItem(
                 )
 
                 // Time display
-                val plannedDeparture = stop.departurePlanned ?: stop.departure
+                val plannedDeparture = stop.departurePlanned
                 val realDeparture = stop.departureReal ?: plannedDeparture
-                val plannedArrival = stop.arrivalPlanned ?: stop.arrival
+                val plannedArrival = stop.arrivalPlanned
                 val realArrival = stop.arrivalReal ?: plannedArrival
 
                 val timeToShowPlanned = if (isOrigin) plannedDeparture ?: plannedArrival else if (isDestination) plannedArrival ?: plannedDeparture else null
@@ -1256,19 +1256,6 @@ private fun computeDelayMinutes(planned: String?, real: String?): Int {
     }
 }
 
-private fun isStopInRange(
-    stops: List<StopStation>,
-    currentIndex: Int,
-    originId: Int?,
-    destinationId: Int?
-): Boolean {
-    if (originId == null || destinationId == null) return false
-    val originIndex = stops.indexOfFirst { it.id == originId }
-    val destIndex = stops.indexOfFirst { it.id == destinationId }
-    if (originIndex < 0 || destIndex < 0) return false
-    return currentIndex in originIndex..destIndex
-}
-
 private fun localiseCategory(cat: String) = when (cat) {
     "nationalExpress" -> "Fernverkehr (ICE/IC)"
     "national"        -> "Fernverkehr"
@@ -1308,7 +1295,7 @@ private fun EditStatusDialog(
     onUpdateBody: (String) -> Unit,
     onUpdateDeparture: (String) -> Unit,
     onUpdateArrival: (String) -> Unit,
-    onUpdateDestination: (Int) -> Unit,
+    onUpdateDestination: (StopStation) -> Unit,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -1340,7 +1327,7 @@ private fun EditStatusDialog(
             ) {
                 // Destination selection
                 var expanded by remember { mutableStateOf(false) }
-                val selectedStop = uiState.stopovers.find { stop -> stop.id == uiState.editDestinationId }
+                val selectedStop = uiState.editDestinationStop
                 
                 Text("Ausstieg", style = MaterialTheme.typography.labelMedium)
                 ExposedDropdownMenuBox(
@@ -1348,7 +1335,9 @@ private fun EditStatusDialog(
                     onExpandedChange = { exp -> expanded = exp }
                 ) {
                     OutlinedTextField(
-                        value = selectedStop?.name ?: "Ziel auswählen",
+                        value = selectedStop?.let {
+                            "${it.stationName ?: "–"} · ${formatTimeFromIso(it.arrivalPlanned)}"
+                        } ?: "Ziel auswählen",
                         onValueChange = {},
                         readOnly = true,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
@@ -1360,9 +1349,12 @@ private fun EditStatusDialog(
                     ) {
                         for (stop in uiState.stopovers) {
                             DropdownMenuItem(
-                                text = { Text(stop.name ?: "") },
+                                text = {
+                                    Text("${stop.stationName ?: "–"} · ${formatTimeFromIso(stop.arrivalPlanned)}")
+                                },
+                                enabled = stop.stationId != null && !stop.arrivalPlanned.isNullOrBlank(),
                                 onClick = {
-                                    stop.id?.let { sid -> onUpdateDestination(sid) }
+                                    onUpdateDestination(stop)
                                     expanded = false
                                 }
                             )

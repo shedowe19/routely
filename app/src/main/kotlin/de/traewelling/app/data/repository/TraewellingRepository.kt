@@ -201,8 +201,17 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
 
     suspend fun checkIn(request: CheckInRequest): Result<CheckInResult?> = runCatching {
         val r = api().checkIn(request)
-        if (r.isSuccessful) r.body()?.data
-        else error("Check-in fehlgeschlagen (${r.code()}): ${r.errorBody()?.string()}")
+        if (r.isSuccessful) {
+            r.body()?.data ?: error("Leere Check-in-Antwort (${r.code()})")
+        } else if (r.code() == 409) {
+            val conflicts = runCatching {
+                gson.fromJson(r.errorBody()?.string(), CheckInConflictResponse::class.java)
+                    ?.data?.conflicts
+            }.getOrNull().orEmpty()
+            throw CheckInConflictException(conflicts)
+        } else {
+            error("Check-in fehlgeschlagen (${r.code()})")
+        }
     }
 
     // ─── Statistics ───────────────────────────────────────────────────────────

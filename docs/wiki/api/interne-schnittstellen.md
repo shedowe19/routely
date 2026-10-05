@@ -29,6 +29,10 @@ class TraewellingRepository(context: Context, prefs: PreferencesManager)
 - `followUser(id)` / `unfollowUser(id)` - Follow
 - `getNotifications(page)` / `getUnreadNotificationCount()` / `markNotificationRead(id)` / `markAllNotificationsRead()` - Notifications
 
+Bei einem Check-in-Konflikt (HTTP 409) wertet das Repository `data.conflicts` als Liste vollständiger `Status`-Objekte aus. Fehlermeldungen hängen nicht von den veralteten Feldern `message.status_id` und `message.lineName` ab. Der Serverfehler wird nicht mehr als unverarbeitetes JSON in die Check-in-Oberfläche übernommen.
+
+Stations- und Zeitdaten werden über die Helfer des Datenmodells gelesen: `stationId`, `stationName`, `stationIdentifier(type)`, `effectiveArrival`, `effectiveDeparture` und `matchesStopover(other)`. Damit verwenden UI, ViewModels und Tracking denselben API-Vertrag.
+
 ### AuthRepository
 
 Authentifizierungs-Operationen.
@@ -81,3 +85,5 @@ Siehe [PreferencesManager](../konfiguration/preferences-manager.md)
 ## Verwandte Seiten
 
 - [Datenbank](../daten/datenbank.md)
+- [Datenmodell](../daten/datenmodell.md)
+- [Träwelling-API-Kompatibilität](./traewelling-kompatibilitaet.md)

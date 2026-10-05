@@ -28,6 +28,21 @@ Zentraler Manager für alle App-Einstellungen und persistierte Daten. Nutzt Andr
 | ------------------ | ------------ | ---------------------------------------------- |
 | `active_status_id` | `Flow<Int?>` | ID der aktiven Fahrt (für TripTrackingService) |
 
+### Stationsalarm und Trackingzustand
+
+| Key | Zugriff / Standard | Beschreibung |
+| --- | --- | --- |
+| `gps_tracking_enabled` | `Flow<Boolean>`, `true` | GPS-Tracking gewünscht; ersetzt keine Standortfreigabe |
+| `announcement_radius_meters` | `Flow<Int>`, `0` | `0` für Automatik; feste Werte `300`, `500`, `1000`, `2000` Meter |
+| `trip_tracking_state` | `getTrackingState(): String?` | JSON-Zustand der aktiven Fahrt; intern gespeichert |
+| `location_permission_requested` | `hasRequestedLocationPermission(): Boolean`, `false` | Merkt eine bereits angeforderte Standortfreigabe für den manuellen Weg zu Android-App-Berechtigungen |
+
+`setAnnouncementRadiusMeters` und der lesende Flow setzen ungültige Radien auf Automatik (`0`) zurück. `saveTrackingState(statusId, stateJson)` schreibt nur, wenn diese Status-ID weiterhin aktiv ist. Ein abgelöster Service kann dadurch den Zustand einer neuen Fahrt nicht überschreiben.
+
+Ein Wechsel beziehungsweise Löschen der aktiven Status-ID entfernt den Trackingzustand. `clearActiveTracking(statusId)` löscht ihn nur für die passende aktive Fahrt. Auch `clearSession()` entfernt aktive Fahrt und Trackingzustand.
+
+Der Tracking-Cache enthält Status-ID, Check-in, Haltfolge und `TrackingProgress`. Gespeichert werden aktueller Besuch, `gpsEstablished` zur Unterscheidung von GPS- und vorläufigem Zeitcursor sowie erfolgreich eingereihte Ansageschlüssel. Positionen und Bewegungshistorie werden nicht persistiert. Der Marker einer Standortanfrage ist keine erteilte Berechtigung: Diese wird bei jedem sichtbaren Start erneut geprüft.
+
 ### TTS-Einstellungen
 
 | Key            | Flow-Typ        | Beschreibung                      |
@@ -53,6 +68,9 @@ Für nicht-reaktive Kontexte gibt es suspend-Funktionen:
 - `getServerUrl(): String`
 - `getUsername(): String?`
 - `getTtsEnabled(): Boolean`
+- `getGpsTrackingEnabled(): Boolean`
+- `getAnnouncementRadiusMeters(): Int`
+- `getTrackingState(): String?`
 - etc.
 
 ## Offene Fragen
@@ -63,3 +81,5 @@ Für nicht-reaktive Kontexte gibt es suspend-Funktionen:
 
 - [Auth](../module/auth.md)
 - [Config-Dateien](./config-dateien.md)
+- [TripTracking](../module/trip-tracking.md)
+- [Settings](../module/settings.md)

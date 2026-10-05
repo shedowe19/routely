@@ -20,9 +20,9 @@ Einstiegspunkt für die Beschreibung der Features und Module der App.
 
 ## UI-Module
 
-- **Screens**: Alle Compose-Screens ([Screens](./ui/screens.md))
-- **Komponenten**: Wiederverwendbare UI-Bausteine ([Komponenten](./ui/komponenten.md))
-- **Theme**: Farben und Typografie ([Theme](./ui/theme.md))
+- **Screens**: Alle Compose-Screens ([Screens](../ui/screens.md))
+- **Komponenten**: Wiederverwendbare UI-Bausteine ([Komponenten](../ui/komponenten.md))
+- **Theme**: Farben und Typografie ([Theme](../ui/theme.md))
 
 ## Verwandte Seiten
 

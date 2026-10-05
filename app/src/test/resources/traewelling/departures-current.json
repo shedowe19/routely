@@ -1,0 +1,28 @@
+{
+  "data": [
+    {
+      "tripId": "test-provider:re1:2026-10-05",
+      "line": {
+        "name": "RE 1",
+        "fahrtNr": "4301",
+        "product": "regional",
+        "mode": "train"
+      },
+      "direction": "Hamburg Hbf",
+      "plannedWhen": "2026-10-05T10:54:00+02:00",
+      "when": "2026-10-05T08:59:00Z",
+      "platform": "4",
+      "plannedPlatform": "3",
+      "cancelled": false,
+      "station": {
+        "id": 80,
+        "uuid": "9766c838-a9bb-45aa-9352-7d06f238864b",
+        "name": "Schwerin Hbf",
+        "identifiers": [
+          {"type": "de_db_ibnr", "identifier": "8010324"}
+        ]
+      }
+    }
+  ],
+  "meta": {"availableTravelTypes": ["regional", "bus"]}
+}
