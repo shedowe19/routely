@@ -52,7 +52,7 @@ Alle folgenden Pfade haben das Präfix `/api/v1/`; OAuth verwendet `/oauth/token
 | Bereich | Befund im Ausgangsstand | Aktueller Zugriff |
 | --- | --- | --- |
 | Status | `checkin` und `user` waren bereits korrekt | Keine Abhängigkeit von den am 27.09.2026 entfernten `train` und `userDetails` |
-| Mastodon | Gleichnamige Felder in verschiedenen Ressourcen müssen getrennt beurteilt werden | `LightUserResource.mastodonUrl` wurde upstream entfernt und wird vom Status-Kurzmodell nicht benutzt. Das vollständige `User`-/Auth-Modell darf das weiterhin gültige `mastodonUrl` behalten; `mastodon.server` ist ebenfalls vorhanden |
+| Mastodon | Gleichnamige Felder in verschiedenen Ressourcen müssen getrennt beurteilt werden | `LightUserResource.mastodonUrl` wurde upstream entfernt und wird vom Status-Kurzmodell nicht benutzt. Das vollständige `User`-/Auth-Modell darf das weiterhin gültige `mastodonUrl` behalten; Light-User-Antworten unterstützen `mastodon.server` |
 | Stationkennungen | Alte `ibnr`, `rilIdentifier`, `evaIdentifier` wurden vorausgesetzt | `identifiers` mit `de_db_ibnr` und `de_db_ril100`; fehlende Kennungen sind erlaubt |
 | Haltstation | Flache Stopover-`id` und `name` wurden als Stationdaten verwendet | `stationId` aus `station.id`, `stationName` aus `station.name`, Kennungen aus `station.identifiers` |
 | Haltidentität | Wiederholte Stationen konnten über dieselbe Station-ID zusammenfallen | `matchesStopover`: UUID bevorzugt, sonst gleiche Station-ID und passende geplante Ankunft oder Abfahrt |
@@ -62,7 +62,7 @@ Alle folgenden Pfade haben das Präfix `/api/v1/`; OAuth verwendet `/oauth/token
 | Abfahrtsstation | Die gesuchte Station konnte von der tatsächlichen Abfahrtsstation abweichen | `DepartureTrip.station` ist maßgeblich für den Einstieg, wenn die Abfahrt eine eigene Station liefert |
 | Betreiber der Abfahrt | Veraltetes `line.operator` | Entfernt; Betreiber aus `TripDetails.operator` beziehungsweise `CheckinInfo.operator` |
 | Operator-ID | `id` als `Int?` konnte eine UUID nicht lesen | `String?` akzeptiert numerische Legacy-IDs und UUIDs; `uuid` ist die bevorzugte stabile Kennung |
-| Check-in-Punkte | Veralteter Berechnungsname `bonus` | `calculation.reason`; `points.additional` wird nicht vorausgesetzt |
+| Check-in-Punkte | Nicht zum geprüften Vertrag passendes Berechnungsfeld `bonus` | `calculation.reason`; `points.additional` wird nicht vorausgesetzt |
 | HTTP-409-Konflikt | Rohes Fehler-JSON wurde als Fehlermeldung weitergereicht | `data.conflicts` als vollständige Status-Liste und `CheckInConflictException` |
 | Zieländerung eines Status | Ein Ziel konnte ohne die zugehörige Planankunft gesendet werden | `destinationId` und `destinationArrivalPlanned` werden zusammen nur bei einem Zielwechsel übertragen; reine Text- und Zeitkorrekturen lassen beide weg |
 | Fahrtenkennungen | Trip-UUID und Provider-Identifier waren nicht getrennt modelliert | `TripDetails.uuid`, `TripDetails.tripId`, `CheckinInfo.tripUuid`; Requests behalten den Provider-Identifier |
@@ -106,7 +106,7 @@ Die im separaten Transitous-PR #35 hinzugefügten Kotlin-Dateien wurden zusätzl
 ## Validierung und offene Fragen
 
 - Automatisierte Regressionstests und der Debug-Build sind unter [Tests](../entwicklung/tests.md) und [Build](../entwicklung/build.md) beschrieben.
-- TODO: Ergebnis von `./gradlew :app:testDebugUnitTest :app:assembleDebug` für diese Migration nachtragen. Die lokale Ausgangsumgebung hat JDK 17, aber keinen installierten Android-SDK- oder Gradle-Abhängigkeitscache.
+- GitHub Actions hat am 05.10.2026 für Commit `4186a4e69850840556980109c6f4696d5e557cbe` alle 28 Unit-Tests und den vollständigen Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). JSON-Fixtures, Wiki-Dateilinks und `git diff --check` sind ebenfalls geprüft.
 - Kein authentifizierter Live-Test gegen das Produktionskonto wurde durchgeführt. Ein Quellcode- und Fixture-Abgleich beweist keine Verfügbarkeit oder Korrektheit einer laufenden Serverinstanz.
 - TODO: Regelmäßig neue Changelog-Einträge und den tatsächlich eingesetzten Upstream-Vertrag prüfen; dieser Audit ist eine Momentaufnahme.
 

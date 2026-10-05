@@ -28,7 +28,7 @@ Dokumentiert, wie die App getestet wird.
 
 ## Ergebnis der Migration vom 05.10.2026
 
-TODO: Android-Unit-Tests und Debug-Build sind noch ausstehend. In der lokalen Ausgangsumgebung stehen JDK 17, aber kein Android-SDK und kein Gradle-Abhängigkeitscache zur Verfügung. Ein angelegter Test oder Workflow ist kein erfolgreicher Testlauf; das Ergebnis muss nach tatsächlicher Ausführung ergänzt werden.
+GitHub Actions hat am 05.10.2026 für Commit `4186a4e69850840556980109c6f4696d5e557cbe` alle 28 Unit-Tests und den vollständigen Android-Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). Der Prüfstand umfasst 27 neue Modelltests und den vorhandenen Retrofit-Endpunkttest. Die JUnit- und HTML-Berichte sind im Workflow-Artefakt gespeichert. Ein authentifizierter Live-Test gegen eine Träwelling-Serverinstanz ist damit nicht abgedeckt.
 
 ## Offene Fragen
 
