@@ -313,11 +313,26 @@ class GpsJourneyTimeEstimatorTest {
     fun plannedTimeEditInvalidatesBaselineEvenWithTheSameStopUuid() {
         val estimator = GpsJourneyTimeEstimator()
         travel(estimator)
-        val edited = route.toMutableList().apply { this[1] = this[1].copy(plannedArrivalMillis = base + 180_000) }
+        val edited = route.toMutableList().apply { this[1] = this[1].copy(plannedArrivalMillis = base + 135_000) }
         assertNull(update(estimator, fractionFix(.35), progress(), route = edited))
         assertNull(update(estimator, fractionFix(.40), progress(), route = edited))
         assertNull(update(estimator, fractionFix(.45), progress(), route = edited))
-        assertNotNull(update(estimator, fractionFix(.50), progress(), route = edited))
+        val recovered = update(estimator, fractionFix(.50), progress(), route = edited)!!
+        val middle = recovered.stopTimes.first { it.stopKey == "middle" }
+        assertEquals(base + 135_000, middle.plannedArrivalMillis)
+        assertEquals(base + 127_500, middle.arrivalMillis)
+    }
+
+    @Test
+    fun departureBeforeArrivalInvalidatesForecastAndRejectsFreshFixes() {
+        val estimator = GpsJourneyTimeEstimator()
+        assertNotNull(travel(estimator))
+        val invalid = route.toMutableList().apply {
+            this[1] = this[1].copy(plannedArrivalMillis = base + 180_000)
+        }
+        for (fraction in listOf(.35, .40, .45, .50)) {
+            assertNull(update(estimator, fractionFix(fraction), progress(), route = invalid))
+        }
     }
 
     @Test
