@@ -2,9 +2,6 @@ name: API Compatibility
 
 on:
   pull_request:
-  push:
-    branches:
-      - codex/traewelling-api-2026
   workflow_dispatch:
 
 permissions:
@@ -31,6 +28,9 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
 
       - name: Install Android 34 build dependencies
         run: sdkmanager "platforms;android-34" "build-tools;34.0.0"

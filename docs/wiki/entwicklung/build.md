@@ -22,7 +22,7 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 
 ## GitHub Actions CI/CD (Deployment)
 
-Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pull Requests, Pushes auf `codex/traewelling-api-2026` und manuell. Er führt Android-Unit-Tests und `assembleDebug` mit JDK 17, Android-SDK 34 und Build Tools 34.0.0 aus. Er benötigt keine Signierungssecrets und erstellt kein Release. Testberichte werden als Workflow-Artefakt gespeichert; den aktuellen Prüfstand beschreibt [Tests](./tests.md).
+Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pull Requests und manuell. Er führt Android-Unit-Tests und `assembleDebug` mit JDK 17, Android-SDK 34 und Build Tools 34.0.0 aus. Er benötigt keine Signierungssecrets und erstellt kein Release. Testberichte werden als Workflow-Artefakt gespeichert; den aktuellen Prüfstand beschreibt [Tests](./tests.md).
 
 Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.github/workflows/android.yml`).
 

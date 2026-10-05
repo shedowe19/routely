@@ -24,7 +24,7 @@ Dokumentiert, wie die App getestet wird.
 
 ## Automatisierte Prüfung
 
-`.github/workflows/api-compatibility.yml` führt die Unit-Tests und den Debug-Build bei Pull Requests, Pushes auf `codex/traewelling-api-2026` sowie bei manuellem Start aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. JUnit-Ergebnisse und HTML-Testberichte werden als `api-compatibility-test-results` gespeichert.
+`.github/workflows/api-compatibility.yml` führt die Unit-Tests und den Debug-Build bei Pull Requests sowie bei manuellem Start aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. JUnit-Ergebnisse und HTML-Testberichte werden als `api-compatibility-test-results` gespeichert.
 
 ## Ergebnis der Migration vom 05.10.2026
 
