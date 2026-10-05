@@ -62,6 +62,8 @@ Die [GPS-Zeiterweiterung](../module/gps-zeiten.md) ergänzt synthetische Kotlin-
 
 Der Quellstand ergänzt 43 Estimator- und 22 Resolver-Tests sowie sechs weitere Fortschrittsmodell-Fälle und zwei weitere Stationsengine-Fälle. Die Stationsengine enthält damit 49 Testmethoden; insgesamt sind 235 Unit-Testmethoden im Quellstand vorhanden. Diese Prüfziele sind getrennt von historischen erfolgreichen Läufen zu bewerten. Ein erfolgreicher älterer Begleiter-Build belegt die neue Zeitprognose nicht; den passenden aktuellen Commit und CI-Lauf prüfen. Reale Prognosegüte, Kurven/Tunnel, Signalwiederkehr und einheitliche Quellenwechsel in Header, Haltliste, Widget und Samsung-Sperrbildschirm bleiben Gerätetests.
 
+Der GPS-Zeiten-Stand `fb0f75eb9dbdd21f6addb11fbe1cb1f333b07757` bestand am 05.10.2026 alle 235 Unit-Tests ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen auch die 43 Estimator- und 22 Resolver-Fälle. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37376730124](https://github.com/shedowe19/routely/actions/runs/37376730124). Diese Prüfung umfasst die korrigierte gültige Planänderung und die gesonderte Ablehnung einer Abfahrt vor der Planankunft; sie ersetzt die genannten Geräteprüfungen nicht.
+
 ## Begleiter-Erweiterung: neue Prüfziele
 
 Die Erweiterung um [Fahrterkennung](../module/ride-recognition.md), [Fahrtänderungen](../module/trip-changes.md) und [Reisefortschritt](../module/trip-progress.md) ergänzt folgende reine Kotlin-Regressionen:
