@@ -7,6 +7,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import java.time.Instant
 import java.time.ZoneOffset
 
 class TripProgressModelTest {
@@ -138,7 +139,7 @@ class TripProgressModelTest {
     fun realtimeArrivalOverridesPlannedArrival() {
         val realtime = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = "2026-10-05T18:08:00Z") }
         val model = TripProgressModel.from(realtime, tracking(route[2]), zoneId = ZoneOffset.UTC)
-        assertEquals("Ankunft Ziel: 18:08 (Echtzeit)", model.arrivalText)
+        assertEquals("Ankunft Ziel: 18:08 (API-Echtzeit)", model.arrivalText)
     }
 
     @Test
@@ -146,6 +147,59 @@ class TripProgressModelTest {
         val invalid = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = "invalid") }
         val model = TripProgressModel.from(invalid, tracking(route[2]), zoneId = ZoneOffset.UTC)
         assertEquals("Ankunft Ziel: 18:00 (Fahrplan)", model.arrivalText)
+    }
+
+    @Test
+    fun freshGpsDestinationEstimateOverridesProviderTime() {
+        val realtime = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = "2026-10-05T18:08:00Z") }
+        val live = tracking(realtime[2]).copy(gpsTimes = gpsTimes(realtime.last()))
+        val model = TripProgressModel.from(realtime, live, zoneId = ZoneOffset.UTC, nowMillis = nowMillis)
+        assertEquals("Ankunft Ziel: 18:04 (GPS-Schätzung)", model.arrivalText)
+        assertFalse(model.completed)
+        assertEquals(2, model.remainingStops)
+    }
+
+    @Test
+    fun expiredGpsDestinationEstimateFallsBackToApi() {
+        val realtime = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = "2026-10-05T18:08:00Z") }
+        val live = tracking(realtime[2]).copy(gpsTimes = gpsTimes(realtime.last()))
+        val model = TripProgressModel.from(realtime, live, zoneId = ZoneOffset.UTC, nowMillis = nowMillis + 30_001)
+        assertEquals("Ankunft Ziel: 18:08 (API-Echtzeit)", model.arrivalText)
+    }
+
+    @Test
+    fun timetableModeIgnoresEvenFreshGpsTimes() {
+        val realtime = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = "2026-10-05T18:08:00Z") }
+        val live = tracking(realtime[2]).copy(source = TrackingSource.TIMETABLE, gpsTimes = gpsTimes(realtime.last()))
+        val model = TripProgressModel.from(realtime, live, zoneId = ZoneOffset.UTC, nowMillis = nowMillis)
+        assertEquals("Ankunft Ziel: 18:08 (API-Echtzeit)", model.arrivalText)
+        assertTrue(model.approximate)
+    }
+
+    @Test
+    fun observedDestinationArrivalIsLabelledSeparately() {
+        val live = tracking(route.last(), arrived = true).copy(completed = true,
+            gpsTimes = gpsTimes(route.last(), observed = true))
+        val model = TripProgressModel.from(route, live, zoneId = ZoneOffset.UTC, nowMillis = nowMillis)
+        assertEquals("Ankunft Ziel: 18:01 (GPS beobachtet)", model.arrivalText)
+        assertTrue(model.completed)
+    }
+
+    @Test
+    fun anotherVisitCannotSupplyDestinationTime() {
+        val realtime = route.toMutableList().apply { this[3] = this[3].copy(arrivalReal = "2026-10-05T18:08:00Z") }
+        val otherVisit = realtime.last().copy(uuid = "earlier-visit")
+        val live = tracking(realtime[2]).copy(gpsTimes = gpsTimes(otherVisit))
+        val model = TripProgressModel.from(realtime, live, zoneId = ZoneOffset.UTC, nowMillis = nowMillis)
+        assertEquals("Ankunft Ziel: 18:08 (API-Echtzeit)", model.arrivalText)
+    }
+
+    @Test
+    fun gpsFallbackPreservesManualDestinationCorrection() {
+        val model = TripProgressModel.from(route, tracking(route[2]), zoneId = ZoneOffset.UTC,
+            nowMillis = nowMillis, manualDestinationArrival = "2026-10-05T18:12:00Z")
+        assertEquals("Ankunft Ziel: 18:12 (Manuell)", model.arrivalText)
+        assertNull(route.last().arrivalReal)
     }
 
     @Test
@@ -164,6 +218,22 @@ class TripProgressModelTest {
     }
 
     private fun model(stop: StopStation, arrived: Boolean = false) = TripProgressModel.from(route, tracking(stop, arrived))
+
+    private val nowMillis = Instant.parse("2026-10-05T18:01:00Z").toEpochMilli()
+
+    private fun gpsTimes(stop: StopStation, observed: Boolean = false) = GpsJourneyTimes(
+        updatedAtMillis = nowMillis,
+        validUntilMillis = nowMillis + 30_000,
+        stopTimes = listOf(GpsStopTime(
+            stopKey = stop.uuid!!,
+            stationId = stop.stationId,
+            plannedArrivalMillis = Instant.parse(stop.arrivalPlanned).toEpochMilli(),
+            plannedDepartureMillis = null,
+            arrivalMillis = if (observed) nowMillis else Instant.parse("2026-10-05T18:04:00Z").toEpochMilli(),
+            departureMillis = null,
+            arrivalObserved = observed
+        ))
+    )
 
     private fun stop(name: String) = StopStation(
         uuid = name,

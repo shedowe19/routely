@@ -10,13 +10,14 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 05.10.2026. Erre
 | --- | --- |
 | [Anmeldung](../module/auth.md) | Server-URL und manueller Access-Token, Tokenprüfung, Willkommen-Hinweis und Logout. |
 | [Check-in](../module/checkin.md) | Stationssuche, Stationen in der Nähe, Abfahrten mit Gleis/Verspätung/Ausfall, Fahrt und Ausstieg auswählen, Status-Text, Reisegrund und manuelle Zeiten. |
-| [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit, Gleise, Ausfälle, Einstieg/Ausstieg und gemeinsamer Fortschritt der aktiven Fahrt. Eigene Fahrt bearbeiten oder löschen. |
+| [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit sowie gekennzeichnete lokale GPS-Zeiten der eigenen aktiven Fahrt, Gleise, Ausfälle, Einstieg/Ausstieg und gemeinsamer Fortschritt. Eigene Fahrt bearbeiten oder löschen. |
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
+| [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Gemeinsame Quellenwahl mit API-/Plan-Rückfall. |
 | [Sprachausgabe](../module/settings.md) | Haltestellen- und Zielansagen; TTS-Engine, Sprache und Stimme konfigurierbar. |
 | [Fahrterkennung](../module/ride-recognition.md) | Ausdrücklich aktivierte GPS-Suche nach möglichen Fahrten; Linie prüfen, Ziel wählen und Check-in selbst bestätigen. |
 | [Fahrtänderungen](../module/trip-changes.md) | Hinweise zu Gleiswechseln, Haltausfällen/Wiederherstellungen und Verspätungsänderungen ab fünf Minuten. Optional TTS. |
 | [Fahrtbenachrichtigung](../module/trip-progress.md) | Linie, nächster Halt, verbleibende Halte, Zielzeit und Quelle; API 36 ProgressStyle, systemabhängige Live-Update-Hervorhebung und Sperrbildschirm-Privatsphäre. |
-| [Homescreen-Widget](../module/widget.md) | Linie, nächster Halt/Ziel, Zeit, Gleis und Verspätung aus dem Tracking-Service. |
+| [Homescreen-Widget](../module/widget.md) | Linie, nächster Halt/Ziel, Zeit samt Quelle, Gleis und positive/negative Zeitabweichung aus dem Tracking-Service. |
 | [Feed](../module/feed.md) | Freunde-/Global-Feed, Aktualisierung, weitere Seiten, Likes und Einstieg in Profile/Fahrtdetails. |
 | [Profile](../module/profile.md) und [Nutzersuche](../module/user-search.md) | Eigenes Profil mit Statistik und letzten Fahrten, fremde Profile mit Historie sowie Folgen/Entfolgen und private Folgeanfragen. |
 | [Meldungen](../module/notifications.md) | Benachrichtigungen mit Ungelesen-Badge, Aktualisierung und Gelesenmarkierung. |
@@ -37,7 +38,7 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 05.10.2026. Erre
 - GPS steuert Stationsalarme. Es gibt keine Kartenansicht, keine Fußweg-/Straßennavigation und keinen Reisebetrieb ohne Anmeldung/Check-in.
 - Es gibt keine Ticketverwaltung, Wear-OS-App, Pendelstrecken-/Favoritenverwaltung oder gesonderten Dienstmodus.
 - Die Transitous-Live-Karte aus PR #35 wurde nicht übernommen; der PR ist geschlossen und ungemergt. Im geprüften App-Code existiert kein Transitous-Client.
-- Echtzeitfelder stammen aus der Träwelling-API. GPS-Nähe ist keine genaue Ankunftsprognose; Gerätesignale, Audioausgabe und kurze Halte müssen weiterhin auf echten Fahrten geprüft werden.
+- Provider-Echtzeitfelder stammen aus der Träwelling-API und bleiben erhalten. GPS-Zeiten sind lokale Anzeigeprognosen und können bei ungeeigneten Koordinaten oder Bewegungsverläufen trotz Signal auf API/Plan zurückfallen. GPS-Nähe allein liefert keine genaue ETA; Gerätesignale, Prognosegüte, Audioausgabe und kurze Halte müssen weiterhin auf echten Fahrten geprüft werden.
 
 ## Verwandte Seiten
 

@@ -2,13 +2,15 @@
 
 ## Zweck
 
-Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und meldet den nächsten Halt per Notification, Widget und optionaler Sprachausgabe. Er vergleicht frische API-Daten für Änderungshinweise und liefert das gemeinsame Haltemodell der Fortschrittsbenachrichtigung. Bei fehlendem brauchbarem Standort nutzt er gekennzeichnete Fahrplanangaben. Dies ist ein Stationsalarm, keine Turn-by-Turn-Streckenführung.
+Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und meldet den nächsten Halt per Notification, Widget und optionaler Sprachausgabe. Er vergleicht frische API-Daten für Änderungshinweise, berechnet lokale GPS-Zeitprognosen und liefert das gemeinsame Haltemodell der Fortschrittsbenachrichtigung. Bei fehlendem brauchbarem Standort nutzt er gekennzeichnete API-/Fahrplanangaben. Dies ist ein Stationsalarm, keine Turn-by-Turn-Streckenführung.
 
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/service/TripTrackingService.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/StationTrackingEngine.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/SpeechDeliveryQueue.kt`
 - `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
@@ -40,7 +42,7 @@ Das Repository liefert Status und Stopovers. `checkedInRoute` grenzt die Route a
 
 Ein erster Fix fern aller Stationen macht einen bereits zeitbasiert vorgerückten Cursor nicht zu einer bestätigten GPS-Zuordnung. Er bleibt nach Cache-Restaurierung korrigierbar und wird bis zur räumlichen Bestätigung als `Fahrplan · ungefähr` angezeigt. Ein späterer eindeutiger stationsnaher Fix kann ihn zum passenden Besuch zurückführen.
 
-`trackingLiveState` veröffentlicht Cursor, Besuchsschlüssel, passenden Rohhalt, Ankunfts-/Abschlussstatus und Quelle als prozesslokalen `StateFlow`. Der Zustand wird beim Fahrtwechsel und Service-Ende entfernt. Er enthält keine Geräteposition und wird nicht in einem neuen DataStore-Key gespeichert. Die [Status-Detail-Timeline](./status-detail.md) übernimmt ihn nur für die eigene, angezeigte aktive Fahrt.
+`trackingLiveState` veröffentlicht Cursor, Besuchsschlüssel, passenden Halt, Ankunfts-/Abschlussstatus, Fortschrittsquelle und optional `gpsTimes` als prozesslokalen `StateFlow`. Der Zustand wird beim Fahrtwechsel und Service-Ende entfernt. Er enthält keine Geräteposition und wird nicht in einem neuen DataStore-Key gespeichert. Die [Status-Detail-Timeline](./status-detail.md) übernimmt ihn nur für die eigene, angezeigte aktive Fahrt.
 
 ## GPS-Trigger und Fortschritt
 
@@ -76,11 +78,17 @@ Vor dem ersten zuverlässigen Fix können vergangene Zwischenhalte anhand ihrer 
 
 Bewusstes Ausschalten von `GPS verwenden` aktiviert dagegen den Zeitmodus und erlaubt dessen Fortschritt. Ein temporärer Standortausfall wird damit nicht gleichgesetzt. Beim erneuten Aktivieren kann GPS den vorläufigen Zeitcursor wieder verankern.
 
-Der Fahrplan-Rückfall bestätigt niemals die Zielankunft und beendet die Fahrt nicht automatisch. Bei dauerhaft fehlendem GPS muss der Nutzer die Fahrt über `Beenden` abschließen. Notification und Widget zeigen `Fahrplan · ungefähr`; bei vergangener/fehlender Zielzeit oder fehlendem aktuellen Halt zusätzlich `Fahrt manuell beenden`. Die TTS-Ansage beginnt mit `Voraussichtlich`.
+Der Fahrplan-Rückfall bestätigt niemals die Zielankunft und beendet die Fahrt nicht automatisch. Bei dauerhaft fehlendem GPS muss der Nutzer die Fahrt über `Beenden` abschließen. Die Notification erklärt den ungefähren Fortschritt als `Fahrplan · ungefähr`; bei vergangener/fehlender Zielzeit oder fehlendem aktuellen Halt zusätzlich `Fahrt manuell beenden`. Das Widget kennzeichnet die aufgelöste Zeitquelle separat und verwendet den Fortschritts-/Beendenhinweis, wenn keine Zeit auflösbar ist. Die TTS-Ansage beginnt mit `Voraussichtlich`.
+
+## GPS-Zeitprognosen
+
+Nach der Engine-Auswertung verarbeitet `GpsJourneyTimeEstimator` den passenden Fix und die Plan-Ankunft/-Abfahrt der eingegrenzten Route. Geeignete Beobachtungen liefern lokale Istzeiten oder einen konservativen Versatz der kommenden Planzeiten. Eine gerichtete Fixfolge und die geplante Fahrzeit stützen die räumliche Interpolation; Luftlinie geteilt durch Momentangeschwindigkeit ist keine ETA-Methode.
+
+`JourneyTimeResolver` verwendet je Ereignis frische eindeutig zugeordnete GPS-Zeit, sonst manuelle Zeit, parsebare API-Echtzeit und schließlich Planzeit. Notification, Widget, Fahrtdetail und Sperrbildschirm verwenden denselben Resolver und kennzeichnen die Zeitquelle. Standortqualität, Korridor und fehlende Daten können die GPS-Zeit verwerfen, während der räumlich etablierte Besuchscursor erhalten bleibt. Schwellen, stabile Ankunftsbeobachtung, längere Halte und Quellenentscheidung stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 ## Persistenz und Offlinebetrieb
 
-`trip_tracking_state` speichert ein versioniertes JSON mit Status-ID, Check-in, zuletzt gültiger eingegrenzter Haltfolge und `TrackingProgress` (Cursor, Besuchsschlüssel, innerer Ankunftsstatus, `gpsEstablished`, erfolgreich eingereihte Ansageschlüssel und Abschlussstatus). Standortfixes und Bewegungshistorie bleiben ausschließlich im Speicher; es wird keine GPS-Historie an Träwelling gesendet.
+`trip_tracking_state` speichert ein versioniertes JSON mit Status-ID, Check-in, zuletzt gültiger eingegrenzter Haltfolge und `TrackingProgress` (Cursor, Besuchsschlüssel, innerer Ankunftsstatus, `gpsEstablished`, erfolgreich eingereihte Ansageschlüssel und Abschlussstatus). Standortfixes, Bewegungshistorie, GPS-Istzeiten und GPS-Prognosen bleiben ausschließlich im Speicher; es wird keine GPS-Historie an Träwelling gesendet und kein automatischer Status-PUT ausgelöst.
 
 Nach mindestens einem erfolgreichen Laden kann diese Route bei API-Ausfällen und nach Service-Neustart wiederverwendet werden. Ohne gültigen Cache und ohne erfolgreiche API-Antwort existiert keine auswertbare Haltfolge. Fortschritt wird nur für die noch aktive Status-ID gespeichert; Fahrtwechsel, Logout und bestätigtes Beenden entfernen den zugehörigen Cache.
 
@@ -92,7 +100,7 @@ TTS benötigt die separate Option `Haltestellen ansagen` und Audiofokus. Sprache
 
 Bei Zielankunft wartet der Service auf eine bereits laufende oder gerade eingereihte Zielansage. Erst deren Abschluss, Fehler-/Stop-Callback oder spätestens ein 15-Sekunden-Timeout beendet den Service; die eigene Zielansage wird nicht sofort durch `stopTracking` abgeschnitten.
 
-Notification und Widget erhalten Linie, nächsten Halt, Ziel, Zeit, Gleis und positive Verspätung. Der Quellenhinweis `GPS` beziehungsweise `Fahrplan · ungefähr` steht auch im Widget-Namen des nächsten Halts. GPS-Annäherung ersetzt die zeitlichen Angaben für Ankunft und Gleis nicht.
+Notification und Widget erhalten Linie, nächsten Halt, Ziel, aufgelöste Zeit, Gleis sowie positive oder negative Abweichung zur Planzeit. Die Zeitquelle wird als `GPS beobachtet`, `GPS-Schätzung`, `Manuell`, `API-Echtzeit` oder `Fahrplan` gekennzeichnet. Gleisinformation bleibt aus den API-Feldern; GPS-Prognosen erzeugen keine Gleisdaten.
 
 ## Fahrtänderungen und Fortschrittsanzeige
 
@@ -128,6 +136,7 @@ Beim Beenden werden Location-Callbacks, Polling und TTS gestoppt. Aktive Status-
 - [Fahrterkennung](./ride-recognition.md)
 - [Fahrtänderungen](./trip-changes.md)
 - [Reisefortschritt](./trip-progress.md)
+- [GPS-Zeiten](./gps-zeiten.md)
 - [Settings](./settings.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [Widget](./widget.md)

@@ -12,6 +12,7 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 - TODO: Nach dem Nutzerbericht zu `1.7.0` den Übergang Maubisstraße → Rathaus mit dem korrigierten [GPS-Stationsalarm](./module/trip-tracking.md) erneut auf einer echten Fahrt prüfen. Unklar: Die genaue Ursache der fehlenden Rathaus-Ansage ist ohne Standort-/Audioverlauf nicht bewiesen. Weitere Prüfungen umfassen Tunnel, nahe Halte, Vorbeifahrt und Rundfahrten; Luftlinie ist keine genaue Ankunftsprognose.
 - TODO: Auf Android-Geräten präzise/grobe/entzogene Freigabe, ausgeschaltete Ortung, Display-aus-Betrieb, `START_STICKY`, Wiederanlauf mit Cache und Audiofokus prüfen. Hier steht kein physisches Testgerät zur Verfügung; der Fahrplan-Rückfall beendet die Fahrt bewusst nicht automatisch.
 - TODO: Die [Status-Timeline](./module/status-detail.md) mit großer Schrift und mehrzeiligen Zeiten visuell prüfen: genau eine Besuchsmarkierung, durchgehende Linie, konsistente Haltepunkte und keine Fortschrittsübernahme aus einer anderen Fahrt.
+- TODO: [GPS-Zeiten](./module/gps-zeiten.md) auf echten Fahrten mit Verfrühung, Verspätung, längerem Halt, Tunnel, Kurven und Wiederkehr des Signals prüfen. Header, Halte, Widget und Samsung-Sperrbildschirm müssen dieselbe geeignete Zeitquelle verwenden. Die konservative räumliche Interpolation ist kein Nachweis der tatsächlichen Prognosegüte.
 
 - TODO: Die [Fahrterkennung](./module/ride-recognition.md) auf realen Fahrten einschließlich paralleler Linien, Kurven, GPS-Lücken, Logout und aktiver Fahrt prüfen. Android-Freigaben, tatsächliche Erkennungsgüte sowie Akku-/API-Verbrauch sind keine Ergebnisse der reinen Engine-Tests.
 - TODO: [Änderungshinweise](./module/trip-changes.md) mit realen API-Änderungen, deaktivierten Benachrichtigungen und konkurrierenden TTS-Ansagen prüfen. Ohne Providerwerte gibt es keine Änderungserklärung.
@@ -22,6 +23,7 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 - [Index](./index.md)
 - [Tests](./entwicklung/tests.md)
 - [TripTracking](./module/trip-tracking.md)
+- [GPS-Zeiten](./module/gps-zeiten.md)
 - [StatusDetail](./module/status-detail.md)
 - [Secrets und Sicherheit](./konfiguration/secrets-und-sicherheit.md)
 - [Fahrterkennung](./module/ride-recognition.md)

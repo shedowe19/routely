@@ -82,6 +82,7 @@ Code ist die Quelle der Wahrheit. Das Wiki erklärt die Quelle der Wahrheit.
 - [Profile](./module/profile.md)
 - [StatusDetail](./module/status-detail.md)
 - [TripTracking](./module/trip-tracking.md)
+- [GPS-Zeiten](./module/gps-zeiten.md)
 - [Fahrterkennung](./module/ride-recognition.md)
 - [Fahrtänderungen](./module/trip-changes.md)
 - [Reisefortschritt und Live Updates](./module/trip-progress.md)

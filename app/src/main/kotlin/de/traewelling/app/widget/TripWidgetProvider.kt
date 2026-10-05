@@ -6,6 +6,7 @@ import android.appwidget.AppWidgetProvider
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
+import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 import de.traewelling.app.MainActivity
@@ -20,15 +21,16 @@ class TripWidgetProvider : AppWidgetProvider() {
             val nextStop = intent.getStringExtra("nextStop") ?: ""
             val destination = intent.getStringExtra("destination") ?: ""
             val time = intent.getStringExtra("time") ?: ""
+            val timeSource = intent.getStringExtra("timeSource") ?: ""
             val platform = intent.getStringExtra("platform") ?: ""
-            val delay = intent.getIntExtra("delay", -1)
+            val delay = if (intent.hasExtra("delay")) intent.getIntExtra("delay", 0) else null
 
             val appWidgetManager = AppWidgetManager.getInstance(context)
             val thisWidget = ComponentName(context, TripWidgetProvider::class.java)
             val appWidgetIds = appWidgetManager.getAppWidgetIds(thisWidget)
 
             for (appWidgetId in appWidgetIds) {
-                updateAppWidget(context, appWidgetManager, appWidgetId, lineName, nextStop, destination, time, platform, delay)
+                updateAppWidget(context, appWidgetManager, appWidgetId, lineName, nextStop, destination, time, timeSource, platform, delay)
             }
         }
     }
@@ -42,6 +44,7 @@ class TripWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_delay, View.GONE)
             views.setViewVisibility(R.id.widget_platform, View.GONE)
             views.setViewVisibility(R.id.widget_time, View.GONE)
+            views.setViewVisibility(R.id.widget_time_source, View.GONE)
 
             val pendingIntent = PendingIntent.getActivity(
                 context, 0, Intent(context, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE
@@ -59,8 +62,9 @@ class TripWidgetProvider : AppWidgetProvider() {
         nextStop: String,
         destination: String,
         time: String,
+        timeSource: String,
         platform: String,
-        delay: Int
+        delay: Int?
     ) {
         val views = RemoteViews(context.packageName, R.layout.trip_widget)
 
@@ -79,6 +83,9 @@ class TripWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_time, View.GONE)
         }
 
+        views.setViewVisibility(R.id.widget_time_source, if (timeSource.isBlank()) View.GONE else View.VISIBLE)
+        views.setTextViewText(R.id.widget_time_source, timeSource)
+
         if (platform.isNotBlank()) {
             views.setViewVisibility(R.id.widget_platform, View.VISIBLE)
             views.setTextViewText(R.id.widget_platform, "Gl. $platform")
@@ -86,9 +93,10 @@ class TripWidgetProvider : AppWidgetProvider() {
             views.setViewVisibility(R.id.widget_platform, View.GONE)
         }
 
-        if (delay > 0) {
+        if (delay != null && delay != 0) {
             views.setViewVisibility(R.id.widget_delay, View.VISIBLE)
-            views.setTextViewText(R.id.widget_delay, "+$delay")
+            views.setTextViewText(R.id.widget_delay, if (delay > 0) "+$delay" else delay.toString())
+            views.setTextColor(R.id.widget_delay, if (delay > 0) Color.rgb(255, 68, 68) else Color.rgb(0, 176, 140))
         } else {
             views.setViewVisibility(R.id.widget_delay, View.GONE)
         }

@@ -75,7 +75,7 @@ Für am 30.09.2026 ausgelaufene Felder gibt es keine weitere Kompatibilitätsgar
 
 ## Abhängigkeiten und Cache
 
-UI und Hintergrunddienst verwenden dieselben Stations-, Zeit- und Identitätshelfer aus `Models.kt`. Manuelle Zeitkorrekturen werden in `arrivalReal` beziehungsweise `departureReal` übernommen; Notification, TTS und Widget erhalten die daraus berechneten Daten.
+UI und Hintergrunddienst verwenden dieselben Stations- und Identitätshelfer aus `Models.kt`. Der Tracking-Service berücksichtigt manuelle Zeiten in seiner internen Route. Die aktuelle aktive Reiseanzeige löst Zeiten zusätzlich über `JourneyTimeResolver` auf: lokale GPS-Zeit, manuelle Zeit, parsebare API-Echtzeit, Plan. Das Fahrtdetail hält Providerwerte und manuelle Zeiten getrennt; GPS-Prognosen ersetzen keine API-Felder und erfordern keine neue API. Details: [GPS-Zeiten](../module/gps-zeiten.md).
 
 Eine Room-Schemamigration ist nicht erforderlich. Alte `statusJson`-Cache-Einträge dürfen ihren früheren Namen noch anzeigen (`legacyName` als privater Rückfall), liefern aber keine Station-ID aus dem alten Stopover-`id`. Neue Netzwerkantworten aktualisieren den Cache mit der verschachtelten Stationsstruktur.
 
@@ -122,4 +122,5 @@ Die im separaten Transitous-PR #35 hinzugefügten Kotlin-Dateien wurden zusätzl
 - [Check-in](../module/checkin.md)
 - [StatusDetail](../module/status-detail.md)
 - [TripTracking](../module/trip-tracking.md)
+- [GPS-Zeiten](../module/gps-zeiten.md)
 - [Tests](../entwicklung/tests.md)

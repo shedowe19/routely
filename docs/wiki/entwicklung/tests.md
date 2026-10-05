@@ -51,6 +51,16 @@ Der erste vollständige GPS-Prüflauf für Commit `672051411cc1f76bf910c0262b8fb
 
 Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Der Nutzerbericht aus einer Fahrt mit `1.7.0` und die daraus abgeleitete erneute Geräteprüfung sind unter [TripTracking](../module/trip-tracking.md) dokumentiert. Die aktuellen Korrekturen wurden hier nicht auf einem physischen Gerät erprobt. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration; der Timeline-Maler erfordert zusätzlich eine visuelle Prüfung mit großer Schrift.
 
+## GPS-Zeiten: neue Prüfziele
+
+Die [GPS-Zeiterweiterung](../module/gps-zeiten.md) ergänzt synthetische Kotlin-Regressionen ohne Android oder Netzwerk:
+
+- `GpsJourneyTimeEstimatorTest`: früher/später räumlicher Planversatz, Mindestbeobachtung, gerichtete Bewegung, Jitter, falsche Richtung, Korridor, stabile erste Ankunft, spätes Warten, keine erfundene Frühabfahrt, fehlende Geschwindigkeit, schnelle Vorbeifahrt und unterstützte Abfahrtsbeobachtung auch auf langen Segmenten. Weitere Fälle prüfen alte/ungenaue/ungültige Fixes, doppelte oder rückläufige Zeitstempel, Cache-Ablauf, Invalidierung, Neustart, Plan-/Routen-/Koordinatenänderung, Streichungen, fehlende Segmentdaten, wiederholte Besuche und unveränderte Providerdaten/Fortschrittswerte.
+- `JourneyTimeResolverTest`: GPS vor manueller Zeit/API/Plan, beobachtet gegenüber geschätzt, sofortiger API-Rückfall nach Ablauf, getrennte Ankunft-/Abfahrtsauflösung, ungültige Felder, Besuchsidentität, erhaltene Verfrühungen, unveränderte Rohhalte und Bearbeitungswerte. Die lokale manuelle Timeline-Projektion wird auf eindeutige Besuche, beide Ereignisse, ungültige Zeiten und mehrdeutige Zuordnung geprüft.
+- `TripProgressModelTest`: gemeinsame GPS-Zielzeit und API-/manueller Rückfall zusätzlich zum bestehenden Haltefortschritt.
+
+Der Quellstand ergänzt 42 Estimator- und 22 Resolver-Tests sowie sechs weitere Fortschrittsmodell-Fälle. Diese Prüfziele sind getrennt von historischen erfolgreichen Läufen zu bewerten. Ein erfolgreicher älterer Begleiter-Build belegt die neue Zeitprognose nicht; den passenden aktuellen Commit und CI-Lauf prüfen. Reale Prognosegüte, Kurven/Tunnel, Signalwiederkehr und einheitliche Quellenwechsel in Header, Haltliste, Widget und Samsung-Sperrbildschirm bleiben Gerätetests.
+
 ## Begleiter-Erweiterung: neue Prüfziele
 
 Die Erweiterung um [Fahrterkennung](../module/ride-recognition.md), [Fahrtänderungen](../module/trip-changes.md) und [Reisefortschritt](../module/trip-progress.md) ergänzt folgende reine Kotlin-Regressionen:
@@ -95,6 +105,7 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 - [Build](./build.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
 - [TripTracking](../module/trip-tracking.md)
+- [GPS-Zeiten](../module/gps-zeiten.md)
 - [StatusDetail](../module/status-detail.md)
 - [Fahrterkennung](../module/ride-recognition.md)
 - [Fahrtänderungen](../module/trip-changes.md)

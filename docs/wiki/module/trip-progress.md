@@ -6,13 +6,14 @@ Die laufende Fahrtbenachrichtigung zeigt nächsten Halt, verbleibende Halte, Zie
 
 ## Kontext
 
-`TripTrackingService` erstellt das Fortschrittsmodell aus der eingecheckten Haltfolge und demselben `TrackingLiveState`, den die Fahrtdetail-Timeline verwendet. Die Anzeige ist keine separate Navigation und keine GPS-basierte Restzeitprognose.
+`TripTrackingService` erstellt das Fortschrittsmodell aus der eingecheckten Haltfolge und demselben `TrackingLiveState`, den die Fahrtdetail-Timeline verwendet. Der Balken zählt Halte; die Zielzeit nutzt getrennt davon den gemeinsamen Zeitresolver einschließlich lokaler GPS-Prognosen. Die Anzeige ist keine separate Navigation.
 
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/service/TripProgressModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TripProgressNotificationBuilder.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TripTrackingService.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/navigation/NavigationRequest.kt`
 - `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 - `app/src/main/AndroidManifest.xml`
@@ -23,7 +24,7 @@ Gezählt werden konkrete geordnete Haltbesuche bis zum eingecheckten Ziel. Der E
 
 Fortschritt basiert auf Halten, nicht auf Entfernung oder Fahrzeit. Unbekannte Zuordnung bleibt unbestimmt. GPS- und Fahrplanquelle werden gekennzeichnet; eine rein zeitbasierte Zielposition setzt den Balken nicht auf vollständig erreicht. Erst das bestehende bestätigte GPS-Zielkriterium erlaubt den Abschluss. Ein gestrichener Zielhalt wird ausdrücklich benannt.
 
-Die Zielzeit stammt aus vorhandener API-Echtzeit, sonst aus dem Fahrplan. „Noch n Halte“ und der Fortschrittsbalken sind kein Nachweis einer verlässlichen ETA.
+Die Zielzeit stammt über `JourneyTimeResolver` aus frischer zugeordneter GPS-Beobachtung/-Schätzung, sonst manueller Zielzeit, parsebarer API-Echtzeit oder Fahrplan. Die jeweilige Zeitquelle steht direkt bei der Zielankunft. Bei ungeeignetem GPS fällt die Uhrzeit zurück, ohne den Besuchscursor neu zu erfinden. „Noch n Halte“ und der Fortschrittsbalken sind kein Nachweis der Prognosegüte; Grenzen der konservativen Interpolation stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 ## Android-Darstellung
 
@@ -63,6 +64,7 @@ Die Aktionen `Fahrt öffnen` beziehungsweise Tippen öffnen das passende Fahrtde
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)
+- [GPS-Zeiten](./gps-zeiten.md)
 - [StatusDetail](./status-detail.md)
 - [Settings](./settings.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)

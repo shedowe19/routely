@@ -21,7 +21,8 @@ data class TrackingStop(
     val effectiveDepartureMillis: Long?,
     val cancelled: Boolean = false,
     val isOrigin: Boolean = false,
-    val isDestination: Boolean = false
+    val isDestination: Boolean = false,
+    val plannedDepartureMillis: Long? = null
 )
 
 data class LocationFix(

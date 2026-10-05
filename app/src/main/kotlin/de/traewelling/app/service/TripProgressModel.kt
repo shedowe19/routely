@@ -6,7 +6,7 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
- * Progress counts ordered stopover visits, not distance or an estimated GPS ETA.
+ * Progress counts ordered stopover visits. Arrival times use the shared resolver.
  * The origin is excluded and a cancelled stop is never counted as a remaining halt.
  */
 data class TripProgressModel(
@@ -52,7 +52,9 @@ data class TripProgressModel(
             stops: List<StopStation>,
             tracking: TrackingLiveState,
             destinationName: String? = null,
-            zoneId: ZoneId = ZoneId.systemDefault()
+            zoneId: ZoneId = ZoneId.systemDefault(),
+            manualDestinationArrival: String? = null,
+            nowMillis: Long = System.currentTimeMillis()
         ): TripProgressModel {
             val destination = stops.lastOrNull()
             val countedIndices = stops.indices.filter { it > 0 && stops[it].cancelled != true }
@@ -77,11 +79,12 @@ data class TripProgressModel(
                 else -> countedIndices.size - passed
             }
             val arrival = destination?.takeUnless { it.cancelled == true }?.let {
-                val real = parseInstant(it.arrivalReal) ?: parseInstant(it.departureReal)
-                val planned = parseInstant(it.arrivalPlanned) ?: parseInstant(it.departurePlanned)
-                (real ?: planned)?.let { time ->
-                    "Ankunft Ziel: ${time.atZone(zoneId).format(DateTimeFormatter.ofPattern("HH:mm"))} " +
-                        if (real != null) "(Echtzeit)" else "(Fahrplan)"
+                val gps = tracking.gpsTimes.takeIf { tracking.source == TrackingSource.GPS }
+                val resolved = JourneyTimeResolver.arrival(it, gps, nowMillis, manualDestinationArrival)
+                    ?: JourneyTimeResolver.departure(it, gps, nowMillis)
+                resolved?.let { time ->
+                    "Ankunft Ziel: ${Instant.ofEpochMilli(time.millis).atZone(zoneId).format(DateTimeFormatter.ofPattern("HH:mm"))} " +
+                        "(${time.sourceLabel})"
                 }
             }
             return TripProgressModel(
@@ -103,8 +106,5 @@ data class TripProgressModel(
         private fun stopKey(stop: StopStation, index: Int): String = stop.uuid
             ?: "${stop.stationId ?: "unknown"}:${stop.arrivalPlanned}:${stop.departurePlanned}:$index"
 
-        private fun parseInstant(value: String?): Instant? = value?.let {
-            runCatching { Instant.parse(it) }.getOrNull()
-        }
     }
 }

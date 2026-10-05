@@ -46,6 +46,8 @@ Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications
 
 Die Status-Detail-Timeline nutzt für die eigene aktive Fahrt einen gemeinsamen Besuchscursor des Tracking-Service. GPS-Ankunft, Annäherung und ungefähre Fahrplanposition erhalten unterschiedliche Markierungen; die durchgehende Verbindungslinie verwendet denselben Fortschritt wie die Haltepunkte. Einzelheiten stehen unter [StatusDetail](../module/status-detail.md).
 
+Header und Haltzeiten verwenden den gemeinsamen `JourneyTimeResolver` einschließlich frischer lokaler [GPS-Zeiten](../module/gps-zeiten.md). Jede Zeit kennzeichnet beobachtet, geschätzt, manuell, API-Echtzeit oder Fahrplan. GPS-Verlust wechselt die Zeitquelle, ohne für eine etablierte eigene Fahrt einen neuen Uhrzeitcursor zu erfinden. Fremde oder frühere Fahrten erhalten keine aktuellen GPS-Prognosen; das Bearbeitungsformular bleibt ebenfalls ohne GPS-Werte.
+
 ## Verwandte Seiten
 
 - [Komponenten](./komponenten.md)
