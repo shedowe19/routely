@@ -42,11 +42,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -62,9 +67,10 @@ private data class CachedTripTrackingState(
 )
 
 class TripTrackingService : Service(), TextToSpeech.OnInitListener {
-    // Main confinement makes API refreshes, location callbacks and cursor changes atomic.
+    // The mutex also covers suspension points between cursor mutation and publication/persistence.
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main.immediate + serviceJob)
+    private val trackingMutex = Mutex()
     private val gson = Gson()
     private lateinit var prefs: PreferencesManager
     private lateinit var repo: TraewellingRepository
@@ -96,10 +102,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
     private var audioFocusRequest: AudioFocusRequest? = null
-    private val activeUtterances = mutableSetOf<String>()
+    private val speechDeliveries = SpeechDeliveryQueue()
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
         if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-            tts?.stop()
+            serviceScope.launch { tts?.stop() }
         }
     }
 
@@ -110,37 +116,48 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
         serviceScope.launch {
-            gpsPreferenceEnabled = prefs.getGpsTrackingEnabled()
-            radiusMeters = prefs.getAnnouncementRadiusMeters()
             val selectedEngine = prefs.getTtsEngine()
             tts = if (selectedEngine == null) TextToSpeech(this@TripTrackingService, this@TripTrackingService)
                 else TextToSpeech(this@TripTrackingService, this@TripTrackingService, selectedEngine)
         }
         serviceScope.launch {
             prefs.gpsTrackingEnabled.distinctUntilChanged().collect { enabled ->
-                gpsPreferenceEnabled = enabled
-                // Re-enabling needs an explicit, permission-checked start from the visible Activity.
-                if (!enabled) {
-                    gpsRequestedByActivity = false
-                    engine?.setGpsEnabled(false)
-                    disableLocationUpdates()
-                    if (currentStatusId != null) promoteToForeground(false)
+                trackingMutex.withLock {
+                    gpsPreferenceEnabled = enabled
+                    // Re-enabling needs an explicit, permission-checked start from the visible Activity.
+                    if (!enabled) {
+                        gpsRequestedByActivity = false
+                        engine?.setGpsEnabled(false)
+                        disableLocationUpdates()
+                        currentStatusId?.let { statusId ->
+                            promoteToForeground(false)
+                            engine?.onTimetable(System.currentTimeMillis())?.let {
+                                applyUpdate(it, statusId, generation)
+                            }
+                        }
+                    }
                 }
             }
         }
         serviceScope.launch {
             prefs.announcementRadiusMeters.distinctUntilChanged().collect { radius ->
-                radiusMeters = radius
-                engine?.setRadiusMeters(radius)
+                trackingMutex.withLock {
+                    radiusMeters = radius
+                    engine?.setRadiusMeters(radius)
+                }
             }
         }
         serviceScope.launch {
-            prefs.activeStatusId.distinctUntilChanged().collect { activeId ->
-                val trackedId = currentStatusId
-                if (trackedId != null && trackedId != activeId && pendingRequestedStatusId != activeId) {
-                    finishService(trackedId)
-                } else if (trackedId != null && activeId == null) {
-                    finishService(trackedId)
+            prefs.activeStatusId.distinctUntilChanged().collect {
+                trackingMutex.withLock {
+                    // A queued emission may predate a trip switch that held this mutex.
+                    val activeId = prefs.activeStatusId.first()
+                    val trackedId = currentStatusId
+                    if (trackedId != null && trackedId != activeId && pendingRequestedStatusId != activeId) {
+                        finishService(trackedId)
+                    } else if (trackedId != null && activeId == null) {
+                        finishService(trackedId)
+                    }
                 }
             }
         }
@@ -149,51 +166,38 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     override fun onInit(status: Int) {
         if (status != TextToSpeech.SUCCESS) return
         serviceScope.launch {
-            configureSpeech()
-            isTtsInitialized = true
             tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
                 override fun onDone(utteranceId: String?) {
-                    serviceScope.launch {
-                        utteranceId?.let { activeUtterances.remove(it) }
-                        abandonAudioFocus()
-                        completeAfterSpeech(utteranceId)
-                    }
+                    handleSpeechFinished(utteranceId, successful = true)
                 }
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    serviceScope.launch {
-                        utteranceId?.let { activeUtterances.remove(it) }
-                        abandonAudioFocus()
-                        completeAfterSpeech(utteranceId)
-                    }
+                    handleSpeechFinished(utteranceId, successful = false)
                 }
                 override fun onError(utteranceId: String?, errorCode: Int) {
-                    serviceScope.launch {
-                        utteranceId?.let { activeUtterances.remove(it) }
-                        abandonAudioFocus()
-                        completeAfterSpeech(utteranceId)
-                    }
+                    handleSpeechFinished(utteranceId, successful = false)
                 }
                 override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                    serviceScope.launch {
-                        utteranceId?.let { activeUtterances.remove(it) }
-                        abandonAudioFocus()
-                        completeAfterSpeech(utteranceId)
-                    }
+                    handleSpeechFinished(utteranceId, successful = false)
                 }
             })
-            pendingAnnouncement?.let { (stop, source) ->
-                pendingAnnouncement = null
-                if (engine?.getProgress()?.nextStopKey != stop.key) return@let
-                val utterance = speakStop(stop, source)
-                if (utterance != null) {
-                    engine?.acknowledgeAnnouncement(stop.key)
-                    currentStatusId?.let { saveProgress(it) }
-                }
-                if (completionStatusId != null) {
-                    completionUtteranceId = utterance
-                    if (utterance == null) completionStatusId?.let { stopTracking(it) }
+            trackingMutex.withLock {
+                configureSpeech()
+                tts?.setAudioAttributes(speechAudioAttributes())
+                isTtsInitialized = true
+                pendingAnnouncement?.let { (stop, source) ->
+                    pendingAnnouncement = null
+                    if (engine?.getProgress()?.nextStopKey != stop.key) return@let
+                    val utterance = speakStop(stop, source)
+                    if (utterance != null) {
+                        engine?.acknowledgeAnnouncement(stop.key)
+                        currentStatusId?.let { saveProgress(it) }
+                    }
+                    if (completionStatusId != null) {
+                        completionUtteranceId = utterance?.takeIf(speechDeliveries::contains)
+                        if (completionUtteranceId == null) completionStatusId?.let { stopTracking(it) }
+                    }
                 }
             }
         }
@@ -207,7 +211,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (intent?.action == ACTION_STOP) {
             serviceScope.launch {
                 val expectedId = currentStatusId ?: prefs.activeStatusId.first()
-                if (expectedId != null) stopTracking(expectedId) else finishService(null)
+                trackingMutex.withLock {
+                    if (expectedId != null) stopTracking(expectedId) else finishService(null)
+                }
             }
             return START_NOT_STICKY
         }
@@ -218,22 +224,24 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             stopSelf(startId)
             return START_NOT_STICKY
         }
-        engine?.setGpsEnabled(gpsPreferenceEnabled)
-        if (!gpsRequestedByActivity) {
-            engine?.invalidateLocation()
-            disableLocationUpdates()
-        }
         serviceScope.launch {
             val statusId = requestedId ?: prefs.activeStatusId.first()
-            val activeId = prefs.activeStatusId.first()
-            if (thisCommand != commandVersion) return@launch
-            if (statusId == null || activeId != statusId) {
-                pendingRequestedStatusId = null
-                if (currentStatusId == null) finishService(null)
-                return@launch
+            trackingMutex.withLock {
+                val activeId = prefs.activeStatusId.first()
+                if (thisCommand != commandVersion) return@withLock
+                if (statusId == null || activeId != statusId) {
+                    pendingRequestedStatusId = null
+                    if (currentStatusId == null) finishService(null)
+                    return@withLock
+                }
+                engine?.setGpsEnabled(gpsPreferenceEnabled)
+                if (!gpsRequestedByActivity) {
+                    engine?.invalidateLocation()
+                    disableLocationUpdates()
+                }
+                startTracking(statusId)
+                if (thisCommand == commandVersion) pendingRequestedStatusId = null
             }
-            startTracking(statusId)
-            if (thisCommand == commandVersion) pendingRequestedStatusId = null
         }
         return START_STICKY
     }
@@ -268,6 +276,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (currentStatusId != statusId) {
             generation++
             currentStatusId = statusId
+            mutableTrackingLiveState.value = null
             stopping = false
             trackingJob?.cancel()
             tickJob?.cancel()
@@ -282,7 +291,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             lastSavedJson = null
             pendingAnnouncement = null
             tts?.stop()
-            activeUtterances.clear()
+            speechDeliveries.clear()
             abandonAudioFocus()
             restoreCachedTrip(statusId)
         }
@@ -309,13 +318,16 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             val expectedGeneration = generation
             tickJob = serviceScope.launch {
                 while (isActive && generation == expectedGeneration && currentStatusId == statusId) {
-                    if (!hasPreciseLocation() && callback != null) {
-                        gpsRequestedByActivity = false
-                        engine?.invalidateLocation()
-                        disableLocationUpdates()
-                        promoteToForeground(false)
+                    trackingMutex.withLock {
+                        if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return@withLock
+                        if (!hasPreciseLocation() && callback != null) {
+                            gpsRequestedByActivity = false
+                            engine?.invalidateLocation()
+                            disableLocationUpdates()
+                            promoteToForeground(false)
+                        }
+                        engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
                     }
-                    engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
                     delay(TICK_INTERVAL_MILLIS)
                 }
             }
@@ -343,20 +355,23 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val checkin = status.checkin ?: return
         val tripId = checkin.trip ?: return
         val stops = repo.getStopovers(tripId).getOrNull() ?: return
-        if (generation != expectedGeneration || currentStatusId != statusId || stopping) return
         val route = checkedInRoute(stops, checkin)
         if (route.isEmpty()) return
-        cachedCheckin = checkin
-        cachedStops = route
-        val trackingStops = toTrackingStops(route, checkin)
-        val existingEngine = engine
-        if (existingEngine == null) engine = StationTrackingEngine(trackingStops, radiusMeters = radiusMeters)
-        else existingEngine.updateRoute(trackingStops)
-        val currentEngine = engine ?: return
-        currentEngine.setGpsEnabled(gpsPreferenceEnabled)
-        val update = latestLocation?.takeIf { isFreshLocation(it) }?.let { currentEngine.onLocation(toFix(it), System.currentTimeMillis()) }
-            ?: currentEngine.onTimetable(System.currentTimeMillis())
-        applyUpdate(update, statusId, expectedGeneration)
+        trackingMutex.withLock {
+            if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return@withLock
+            cachedCheckin = checkin
+            cachedStops = route
+            val trackingStops = toTrackingStops(route, checkin)
+            val existingEngine = engine
+            if (existingEngine == null) engine = StationTrackingEngine(trackingStops, radiusMeters = radiusMeters)
+            else existingEngine.updateRoute(trackingStops)
+            val currentEngine = engine ?: return@withLock
+            currentEngine.setGpsEnabled(gpsPreferenceEnabled)
+            val update = latestLocation?.takeIf { isFreshLocation(it) }?.let {
+                currentEngine.onLocation(toFix(it), System.currentTimeMillis())
+            } ?: currentEngine.onTimetable(System.currentTimeMillis())
+            applyUpdate(update, statusId, expectedGeneration)
+        }
     }
 
     private fun checkedInRoute(stops: List<StopStation>, checkin: CheckinInfo): List<StopStation> {
@@ -423,35 +438,45 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             return
         }
         if (callback != null && locationIntervalMillis == intervalMillis) return
-        disableLocationUpdates()
+        disableLocationUpdates(clearLocation = false)
         locationIntervalMillis = intervalMillis
         val callbackGeneration = generation
         val callbackStatusId = currentStatusId ?: return
         val nextCallback = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
-                if (callback !== this || generation != callbackGeneration || currentStatusId != callbackStatusId || stopping) return
-                if (!hasPreciseLocation()) {
-                    gpsRequestedByActivity = false
-                    engine?.invalidateLocation()
-                    disableLocationUpdates()
-                    promoteToForeground(false)
-                    return
-                }
-                for (location in result.locations) {
-                    if (!isFreshLocation(location)) continue
-                    latestLocation = location
-                    val currentEngine = engine ?: continue
-                    val update = currentEngine.onLocation(toFix(location), System.currentTimeMillis())
-                    serviceScope.launch { applyUpdate(update, callbackStatusId, callbackGeneration) }
-                    val stop = update.stop
-                    val distance = if (stop?.latitude != null && stop.longitude != null) {
-                        val target = Location("station").apply { latitude = stop.latitude; longitude = stop.longitude }
-                        location.distanceTo(target)
-                    } else Float.POSITIVE_INFINITY
-                    val nextInterval = if (distance <= 3_000f) NEAR_INTERVAL_MILLIS else FAR_INTERVAL_MILLIS
-                    if (locationIntervalMillis != nextInterval) {
-                        requestLocationUpdates(nextInterval)
-                        break
+                val emittingCallback = this
+                val locations = result.locations.sortedBy { it.elapsedRealtimeNanos }
+                serviceScope.launch {
+                    trackingMutex.withLock {
+                        if (callback !== emittingCallback || !isCurrentTracking(callbackStatusId, callbackGeneration) ||
+                            completionStatusId != null || !gpsRequestedByActivity || !gpsPreferenceEnabled
+                        ) return@withLock
+                        if (!hasPreciseLocation()) {
+                            gpsRequestedByActivity = false
+                            engine?.invalidateLocation()
+                            disableLocationUpdates()
+                            promoteToForeground(false)
+                            return@withLock
+                        }
+                        var nextInterval = locationIntervalMillis
+                        for (location in locations) {
+                            if (!isCurrentTracking(callbackStatusId, callbackGeneration) || completionStatusId != null) break
+                            if (!isFreshLocation(location)) continue
+                            latestLocation = location
+                            val currentEngine = engine ?: continue
+                            val update = currentEngine.onLocation(toFix(location), System.currentTimeMillis())
+                            applyUpdate(update, callbackStatusId, callbackGeneration)
+                            val stop = update.stop
+                            val distance = if (stop?.latitude != null && stop.longitude != null) {
+                                val target = Location("station").apply { latitude = stop.latitude; longitude = stop.longitude }
+                                location.distanceTo(target)
+                            } else Float.POSITIVE_INFINITY
+                            nextInterval = if (distance <= 3_000f) NEAR_INTERVAL_MILLIS else FAR_INTERVAL_MILLIS
+                        }
+                        // Changing frequency must not discard the remaining fixes in this batch.
+                        if (isCurrentTracking(callbackStatusId, callbackGeneration) && completionStatusId == null &&
+                            locationIntervalMillis != nextInterval && nextInterval > 0L
+                        ) requestLocationUpdates(nextInterval)
                     }
                 }
             }
@@ -474,18 +499,18 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun disableLocationUpdates() {
+    private fun disableLocationUpdates(clearLocation: Boolean = true) {
         val oldCallback = callback
         callback = null
         locationIntervalMillis = 0L
-        latestLocation = null
+        if (clearLocation) latestLocation = null
         if (oldCallback != null) {
             runCatching { locationClient.removeLocationUpdates(oldCallback) }
         }
     }
 
     private suspend fun applyUpdate(update: TrackingUpdate, statusId: Int, expectedGeneration: Long) {
-        if (generation != expectedGeneration || currentStatusId != statusId || stopping) return
+        if (!isCurrentTracking(statusId, expectedGeneration)) return
         if (completionStatusId != null) return
         val checkin = cachedCheckin ?: return
         val nextStop = update.stop
@@ -495,6 +520,16 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val rawStop = nextStop?.let { target ->
             cachedStops.withIndex().firstOrNull { (index, raw) -> stopKey(raw, index) == target.key }?.value
         }
+        val progress = engine?.getProgress() ?: return
+        mutableTrackingLiveState.value = TrackingLiveState(
+            statusId = statusId,
+            nextStopKey = progress.nextStopKey,
+            nextIndex = progress.nextIndex,
+            stop = rawStop,
+            arrivedAtCurrent = progress.arrivedAtCurrent,
+            completed = progress.completed,
+            source = update.source
+        )
         val platform = rawStop?.arrivalPlatformReal ?: rawStop?.arrivalPlatformPlanned ?: rawStop?.platform
         val platformText = platform?.takeIf { it.isNotBlank() }?.let { " • Gl. $it" } ?: ""
         val destinationTime = nextStop?.effectiveArrivalMillis ?: nextStop?.effectiveDepartureMillis
@@ -520,6 +555,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         var queuedUtterance: String? = null
         update.announcement?.let { announcedStop ->
             val speechEnabled = prefs.getTtsEnabled()
+            if (!isCurrentTracking(statusId, expectedGeneration)) return
             if (speechEnabled && isTtsInitialized) queuedUtterance = speakStop(announcedStop, update.source)
             if (queuedUtterance == null) {
                 engine?.releaseAnnouncement(announcedStop.key)
@@ -527,15 +563,19 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             }
         }
         saveProgress(statusId)
-        if (generation != expectedGeneration || currentStatusId != statusId || stopping) return
+        if (!isCurrentTracking(statusId, expectedGeneration)) return
         if (update.destinationReached) {
             val existingDestinationUtterance = update.stop?.takeIf { it.isDestination }
-                ?.let { "stop:${it.key}" }?.takeIf { it in activeUtterances }
-            if (queuedUtterance != null || existingDestinationUtterance != null || pendingAnnouncement != null) {
-                awaitFinalSpeech(statusId, queuedUtterance ?: existingDestinationUtterance)
+                ?.let { speechDeliveries.find(statusId, expectedGeneration, it.key)?.utteranceId }
+            val activeQueuedUtterance = queuedUtterance?.takeIf(speechDeliveries::contains)
+            if (activeQueuedUtterance != null || existingDestinationUtterance != null || pendingAnnouncement != null) {
+                awaitFinalSpeech(statusId, activeQueuedUtterance ?: existingDestinationUtterance)
             } else stopTracking(statusId)
         }
     }
+
+    private fun isCurrentTracking(statusId: Int, expectedGeneration: Long): Boolean =
+        generation == expectedGeneration && currentStatusId == statusId && !stopping
 
     private suspend fun saveProgress(statusId: Int) {
         val checkin = cachedCheckin ?: return
@@ -557,10 +597,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private suspend fun speakStop(stop: TrackingStop, source: TrackingSource): String? {
         val statusId = currentStatusId ?: return null
-        val utteranceId = "stop:${stop.key}"
-        if (utteranceId in activeUtterances) return utteranceId
+        val expectedGeneration = generation
+        speechDeliveries.find(statusId, expectedGeneration, stop.key)?.let { return it.utteranceId }
         configureSpeech()
-        if (currentStatusId != statusId || stopping || !prefs.getTtsEnabled()) return null
+        if (!prefs.getTtsEnabled() || !isCurrentTracking(statusId, expectedGeneration)) return null
         val checkin = cachedCheckin ?: return null
         val platformStop = cachedStops.withIndex().firstOrNull { (index, raw) -> stopKey(raw, index) == stop.key }?.value
         val platform = platformStop?.arrivalPlatformReal ?: platformStop?.arrivalPlatformPlanned ?: platformStop?.platform
@@ -572,12 +612,30 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             else -> "${approximate}Nächste Haltestelle in Kürze: ${stop.name}$platformText."
         }
         if (!requestAudioFocus()) return null
-        return if (tts?.speak(announcement, TextToSpeech.QUEUE_ADD, null, utteranceId) == TextToSpeech.SUCCESS) {
-            activeUtterances += utteranceId
-            utteranceId
+        val delivery = speechDeliveries.begin(statusId, expectedGeneration, stop.key)
+        return if (tts?.speak(announcement, TextToSpeech.QUEUE_ADD, null, delivery.utteranceId) == TextToSpeech.SUCCESS) {
+            delivery.utteranceId
         } else {
-            abandonAudioFocus()
+            speechDeliveries.finish(delivery.utteranceId)
+            if (speechDeliveries.isEmpty) abandonAudioFocus()
             null
+        }
+    }
+
+    private fun handleSpeechFinished(utteranceId: String?, successful: Boolean) {
+        if (utteranceId == null) return
+        serviceScope.launch {
+            trackingMutex.withLock {
+                val delivery = speechDeliveries.finish(utteranceId) ?: return@withLock
+                // QUEUE_ADD entries share the focus until the last entry has finished.
+                if (speechDeliveries.isEmpty) abandonAudioFocus()
+                if (!isCurrentTracking(delivery.statusId, delivery.generation)) return@withLock
+                if (!successful && engine?.getProgress()?.nextStopKey == delivery.stopKey) {
+                    engine?.releaseAnnouncement(delivery.stopKey)
+                    saveProgress(delivery.statusId)
+                }
+                completeAfterSpeech(utteranceId)
+            }
         }
     }
 
@@ -590,7 +648,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         completionJob?.cancel()
         completionJob = serviceScope.launch {
             delay(FINAL_SPEECH_TIMEOUT_MILLIS)
-            if (completionStatusId == statusId && currentStatusId == statusId) stopTracking(statusId)
+            trackingMutex.withLock {
+                if (completionStatusId == statusId && currentStatusId == statusId) stopTracking(statusId)
+            }
         }
     }
 
@@ -611,7 +671,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val manager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val request = audioFocusRequest ?: AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK)
-                .setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+                .setAudioAttributes(speechAudioAttributes())
                 .setOnAudioFocusChangeListener(audioFocusListener)
                 .build().also { audioFocusRequest = it }
             manager.requestAudioFocus(request) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
@@ -620,6 +680,11 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             manager.requestAudioFocus(audioFocusListener, AudioManager.STREAM_MUSIC, AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK) == AudioManager.AUDIOFOCUS_REQUEST_GRANTED
         }
     }
+
+    private fun speechAudioAttributes(): AudioAttributes = AudioAttributes.Builder()
+        .setUsage(AudioAttributes.USAGE_ASSISTANCE_NAVIGATION_GUIDANCE)
+        .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+        .build()
 
     private fun abandonAudioFocus() {
         val manager = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -676,9 +741,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         disableLocationUpdates()
         pendingAnnouncement = null
         tts?.stop()
-        activeUtterances.clear()
+        speechDeliveries.clear()
         abandonAudioFocus()
         currentStatusId = null
+        mutableTrackingLiveState.value = null
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf(lastStartId)
     }
@@ -688,7 +754,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         abandonAudioFocus()
         serviceJob.cancel()
         tts?.stop()
-        activeUtterances.clear()
+        speechDeliveries.clear()
+        mutableTrackingLiveState.value = null
         tts?.shutdown()
         super.onDestroy()
     }
@@ -696,6 +763,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        private val mutableTrackingLiveState = MutableStateFlow<TrackingLiveState?>(null)
+        val trackingLiveState: StateFlow<TrackingLiveState?> = mutableTrackingLiveState.asStateFlow()
         private const val CHANNEL_ID = "TripTrackingChannel"
         private const val NOTIFICATION_ID = 1001
         private const val API_POLL_INTERVAL_MILLIS = 60_000L

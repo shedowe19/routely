@@ -43,6 +43,8 @@ Ein Wechsel beziehungsweise Löschen der aktiven Status-ID entfernt den Tracking
 
 Der Tracking-Cache enthält Status-ID, Check-in, Haltfolge und `TrackingProgress`. Gespeichert werden aktueller Besuch, `gpsEstablished` zur Unterscheidung von GPS- und vorläufigem Zeitcursor sowie erfolgreich eingereihte Ansageschlüssel. Positionen und Bewegungshistorie werden nicht persistiert. Der Marker einer Standortanfrage ist keine erteilte Berechtigung: Diese wird bei jedem sichtbaren Start erneut geprüft.
 
+Ein TTS-Fehler beziehungsweise Abbruch kann den noch aktuellen Ansageschlüssel wieder freigeben; der Service speichert diesen korrigierten Fortschritt. Der für die Status-Timeline bereitgestellte `trackingLiveState` bleibt dagegen ausschließlich im Prozessspeicher und führt keinen zusätzlichen DataStore-Key ein. Das Tracking-Cacheformat bleibt Version 1.
+
 ### TTS-Einstellungen
 
 | Key            | Flow-Typ        | Beschreibung                      |
@@ -82,4 +84,5 @@ Für nicht-reaktive Kontexte gibt es suspend-Funktionen:
 - [Auth](../module/auth.md)
 - [Config-Dateien](./config-dateien.md)
 - [TripTracking](../module/trip-tracking.md)
+- [StatusDetail](../module/status-detail.md)
 - [Settings](../module/settings.md)

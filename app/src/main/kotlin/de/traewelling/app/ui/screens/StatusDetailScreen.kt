@@ -22,8 +22,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -227,7 +230,7 @@ private fun StatusDetailContent(
     val checkin = status.checkin
     val stopovers = uiState.stopovers
 
-    // Real-time ticking for smooth progress bar updates
+    // The clock is used only when this status has no local tracker.
     var now by remember { mutableStateOf(ZonedDateTime.now()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -251,6 +254,9 @@ private fun StatusDetailContent(
     }
     val destinationIdx = remember(stopovers, destination) {
         stopovers.indexOfFirst { it.matchesStopover(destination) }
+    }
+    val timelineProgress = remember(stopovers, now, uiState.trackingState, destinationIdx) {
+        resolveStopTimelineProgress(stopovers, now.toInstant().toEpochMilli(), uiState.trackingState, destinationIdx)
     }
 
     val isLoading = uiState.isLoading
@@ -342,7 +348,11 @@ private fun StatusDetailContent(
                                         fontWeight = FontWeight.Bold
                                     )
                                     Text(
-                                        "Live-Fortschritt entlang deiner Fahrt",
+                                        when (timelineProgress.source) {
+                                            TimelinePositionSource.GPS -> "Fortschritt per GPS"
+                                            TimelinePositionSource.TIMETABLE -> "Fahrplan-Schätzung · ungefähre Position"
+                                            TimelinePositionSource.WAITING -> "Position wird ermittelt"
+                                        },
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                     )
@@ -372,9 +382,6 @@ private fun StatusDetailContent(
                 val isDestination = index == destinationIdx
                 val isInRange = originIdx >= 0 && destinationIdx >= originIdx && index in originIdx..destinationIdx
 
-                val prevStop = stopovers.getOrNull(index - 1)
-                val nextStop = stopovers.getOrNull(index + 1)
-
                 AnimatedVisibility(
                     visible = isVisible,
                     enter = fadeIn(
@@ -386,9 +393,7 @@ private fun StatusDetailContent(
                 ) {
                     StopoverItem(
                         stop = stop,
-                        prevStop = prevStop,
-                        nextStop = nextStop,
-                        now = now,
+                        progress = timelineProgress,
                         index = index,
                         originIndex = originIdx,
                         destinationIndex = destinationIdx,
@@ -692,9 +697,7 @@ private fun TimeRow(label: String, planned: String?, real: String?) {
 @Composable
 private fun StopoverItem(
     stop: StopStation,
-    prevStop: StopStation?,
-    nextStop: StopStation?,
-    now: ZonedDateTime,
+    progress: StopTimelineProgress,
     index: Int,
     originIndex: Int,
     destinationIndex: Int,
@@ -706,62 +709,10 @@ private fun StopoverItem(
     isDestination: Boolean,
     isInRange: Boolean
 ) {
-    // Determine times for this stop
-    val stopZdt = remember(stop) { 
-        val timeStr = stop.effectiveDeparture ?: stop.effectiveArrival
-        try { timeStr?.let { ZonedDateTime.parse(it) } } catch (e: Exception) { null }
-    }
-
-    // Determine times for next stop
-    val nextZdt = remember(nextStop) { 
-        val timeStr = nextStop?.effectiveArrival ?: nextStop?.effectiveDeparture
-        try { timeStr?.let { ZonedDateTime.parse(it) } } catch (e: Exception) { null }
-    }
-    
-    // Determine times for previous stop (to handle the incoming line)
-    val prevZdt = remember(prevStop) {
-        val timeStr = prevStop?.effectiveDeparture ?: prevStop?.effectiveArrival
-        try { timeStr?.let { ZonedDateTime.parse(it) } } catch (e: Exception) { null }
-    }
-
-    // Progress for the segment STARTING at this stop and going to the next
-    var rawOutgoingProgress = 0f
-    if (stopZdt != null && nextZdt != null) {
-        if (now.isAfter(stopZdt) && now.isBefore(nextZdt)) {
-            val total = java.time.Duration.between(stopZdt, nextZdt).toMillis()
-            val elapsed = java.time.Duration.between(stopZdt, now).toMillis()
-            rawOutgoingProgress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-        } else if (now.isAfter(nextZdt)) {
-            rawOutgoingProgress = 1f
-        }
-    }
-    
-    // Progress for the segment COMING FROM the previous stop to this one
-    var rawIncomingProgress = 0f
-    if (prevZdt != null && stopZdt != null) {
-        if (now.isAfter(prevZdt) && now.isBefore(stopZdt)) {
-            val total = java.time.Duration.between(prevZdt, stopZdt).toMillis()
-            val elapsed = java.time.Duration.between(prevZdt, now).toMillis()
-            rawIncomingProgress = (elapsed.toFloat() / total.toFloat()).coerceIn(0f, 1f)
-        } else if (now.isAfter(stopZdt)) {
-            rawIncomingProgress = 1f
-        }
-    }
-
-    val outgoingProgress by animateFloatAsState(
-        targetValue = rawOutgoingProgress,
-        animationSpec = tween(durationMillis = 1000, easing = LinearEasing),
-        label = "outgoingProgress"
-    )
-
-    val incomingProgress by animateFloatAsState(
-        targetValue = rawIncomingProgress,
-        animationSpec = tween(durationMillis = 1000, easing = LinearEasing),
-        label = "incomingProgress"
-    )
-
-    val isPast = stopZdt?.isBefore(now) ?: false
-    val trainIsHere = stopZdt != null && now.isAfter(stopZdt.minusMinutes(1)) && now.isBefore(stopZdt.plusMinutes(1))
+    val isPast = index <= progress.passedThroughIndex
+    val badge = progress.badgeFor(index)
+    val isHighlighted = badge != null
+    var headerHeightPx by remember { mutableIntStateOf(0) }
 
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
     val activeLineColor = TealAccent
@@ -769,7 +720,7 @@ private fun StopoverItem(
     val dotColor = when {
         isOrigin -> TealAccent
         isDestination -> AmberAccent
-        isPast || trainIsHere -> TealAccent.copy(alpha = 0.7f)
+        isPast || isHighlighted -> TealAccent.copy(alpha = 0.7f)
         isInRange -> TealAccent.copy(alpha = 0.35f)
         stop.cancelled == true -> ErrorRed
         else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
@@ -777,19 +728,19 @@ private fun StopoverItem(
 
     val textAlpha = when {
         isOrigin || isDestination -> 1f
-        isPast || trainIsHere -> 1f
+        isPast || isHighlighted -> 1f
         isInRange -> 0.8f
         else -> 0.45f
     }
     val stopContainerColor = when {
-        trainIsHere -> TealAccent.copy(alpha = 0.12f)
+        isHighlighted -> TealAccent.copy(alpha = 0.12f)
         isOrigin -> TealAccent.copy(alpha = 0.08f)
         isDestination -> AmberAccent.copy(alpha = 0.10f)
         isInRange -> MaterialTheme.colorScheme.primary.copy(alpha = 0.035f)
         else -> Color.Transparent
     }
     val stopBorderColor = when {
-        trainIsHere -> TealAccent.copy(alpha = 0.35f)
+        isHighlighted -> TealAccent.copy(alpha = 0.35f)
         isOrigin -> TealAccent.copy(alpha = 0.20f)
         isDestination -> AmberAccent.copy(alpha = 0.25f)
         else -> Color.Transparent
@@ -801,86 +752,47 @@ private fun StopoverItem(
     val isTopTraveled = originIndex != -1 && destinationIndex != -1 && index > originIndex && index <= destinationIndex
     val isBottomTraveled = originIndex != -1 && destinationIndex != -1 && index >= originIndex && index < destinationIndex
 
+    val isImportant = isOrigin || isDestination || isLast || isFirst || isActualFirst || isActualLast
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .height(IntrinsicSize.Min)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.Top
-    ) {
-        // Timeline column
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .width(24.dp)
-                .fillMaxHeight()
-        ) {
-            // Top line (Incoming segment from previous stop)
-            if (!isActualFirst) {
-                Box(
-                    Modifier
-                        .width(if (isTopTraveled) 4.dp else 2.dp)
-                        .height(16.dp)
-                ) {
-                    // Background track
-                    Box(Modifier.fillMaxSize().background(if (isCancelled) lineColor.copy(alpha = 0.5f) else lineColor))
-                    // Progress handling
-                    if (incomingProgress > 0.8f) {
-                        val partProgress = ((incomingProgress - 0.8f) / 0.2f).coerceIn(0f, 1f)
-                        Box(Modifier.fillMaxWidth().fillMaxHeight(partProgress).background(activeLineColor))
-                    } else if (isPast || trainIsHere) {
-                        Box(Modifier.fillMaxSize().background(activeLineColor))
-                    }
-                }
-            } else {
-                Spacer(Modifier.height(16.dp))
-            }
-            
-            // Dot with ring effect for important stops
-            val isImportant = isOrigin || isDestination || isLast || isFirst || isActualFirst || isActualLast
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.size(if (isImportant) 18.dp else 14.dp)) {
-                if (isImportant && !isCancelled) {
-                    Box(
-                        Modifier
-                            .size(18.dp)
-                            .background(dotColor.copy(alpha = 0.2f), CircleShape)
+            .padding(horizontal = 16.dp)
+            .drawBehind {
+                val x = 12.dp.toPx()
+                // Follow the actual header height so larger fonts and expanded
+                // arrival/departure rows cannot detach a dot from its station.
+                val y = (16.dp.toPx() + headerHeightPx / 2f).coerceIn(0f, size.height)
+                if (!isActualFirst) {
+                    drawLine(
+                        color = if (index <= progress.passedThroughIndex) activeLineColor else lineColor,
+                        start = Offset(x, 0f),
+                        end = Offset(x, y),
+                        strokeWidth = if (isTopTraveled) 3.dp.toPx() else 2.dp.toPx()
                     )
                 }
-                Box(
-                    Modifier
-                        .size(if (isImportant || trainIsHere) 12.dp else 8.dp)
-                        .background(if (isCancelled) dotColor.copy(alpha = 0.5f) else dotColor, CircleShape)
+                if (!isActualLast) {
+                    drawLine(
+                        color = if (index < progress.passedThroughIndex) activeLineColor else lineColor,
+                        start = Offset(x, y),
+                        end = Offset(x, size.height),
+                        strokeWidth = if (isBottomTraveled) 3.dp.toPx() else 2.dp.toPx()
+                    )
+                }
+                if ((isImportant || isHighlighted) && !isCancelled) {
+                    drawCircle(dotColor.copy(alpha = 0.22f), 9.dp.toPx(), Offset(x, y))
+                }
+                drawCircle(
+                    color = if (isCancelled) dotColor.copy(alpha = 0.5f) else dotColor,
+                    radius = if (isImportant || isHighlighted) 6.dp.toPx() else 4.dp.toPx(),
+                    center = Offset(x, y)
                 )
-                if (trainIsHere) {
-                    Box(Modifier.size(5.dp).background(Color.White, CircleShape))
+                if (isHighlighted) {
+                    drawCircle(Color.White, 2.5.dp.toPx(), Offset(x, y))
                 }
-            }
-            
-            // Bottom line (Outgoing segment to next stop)
-            if (!isActualLast) {
-                Box(
-                    Modifier
-                        .width(if (isBottomTraveled) 4.dp else 2.dp)
-                        .weight(1f) 
-                ) {
-                    // Background track
-                    Box(Modifier.fillMaxSize().background(if (isCancelled) lineColor.copy(alpha = 0.5f) else lineColor))
-                    
-                    // Active progress track
-                    if (outgoingProgress > 0f) {
-                        val partProgress = (outgoingProgress / 0.8f).coerceIn(0f, 1f)
-                        Box(
-                            Modifier
-                                .fillMaxWidth()
-                                .fillMaxHeight(partProgress)
-                                .background(activeLineColor)
-                        )
-                    }
-                }
-            } else {
-                Spacer(Modifier.height(16.dp))
-            }
-        }
+            },
+        verticalAlignment = Alignment.Top
+    ) {
+        Spacer(Modifier.width(24.dp))
 
         Spacer(Modifier.width(12.dp))
 
@@ -895,7 +807,7 @@ private fun StopoverItem(
                 .padding(horizontal = 12.dp, vertical = 10.dp)
         ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().onSizeChanged { headerHeightPx = it.height },
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -1054,7 +966,7 @@ private fun StopoverItem(
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 modifier = Modifier.padding(top = 2.dp)
             ) {
-                if (trainIsHere) {
+                if (isHighlighted) {
                     Surface(
                         color = TealAccent.copy(alpha = 0.14f),
                         shape = RoundedCornerShape(4.dp),
@@ -1072,7 +984,7 @@ private fun StopoverItem(
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
-                                "AKTUELL",
+                                badge.orEmpty(),
                                 style = MaterialTheme.typography.labelSmall,
                                 color = TealDark,
                                 fontWeight = FontWeight.Bold

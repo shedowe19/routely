@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.service.TrackingLiveState
+import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -26,6 +28,7 @@ data class StatusDetailUiState(
     val lastUpdated: Long = 0,
     val isDeleting: Boolean = false,
     val isOwnStatus: Boolean = false,
+    val trackingState: TrackingLiveState? = null,
 
     // Editing state
     val isEditing: Boolean = false,
@@ -49,7 +52,31 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     private var autoRefreshJob: Job? = null
     private var currentStatusId: Int? = null
 
+    init {
+        viewModelScope.launch {
+            combine(
+                TripTrackingService.trackingLiveState,
+                prefs.activeStatusId,
+                _uiState.map { it.status?.id to it.isOwnStatus }.distinctUntilChanged()
+            ) { tracking, activeStatusId, viewedStatus ->
+                tracking?.takeIf {
+                    viewedStatus.second && it.statusId == viewedStatus.first && it.statusId == activeStatusId
+                }
+            }.collect { tracking ->
+                _uiState.update { state ->
+                    state.copy(trackingState = tracking?.takeIf {
+                        state.isOwnStatus && state.status?.id == it.statusId && currentStatusId == it.statusId
+                    })
+                }
+            }
+        }
+    }
+
     fun loadStatusDetail(statusId: Int) {
+        if (currentStatusId != statusId) {
+            autoRefreshJob?.cancel()
+            _uiState.value = StatusDetailUiState()
+        }
         currentStatusId = statusId
 
         viewModelScope.launch {
@@ -57,7 +84,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
             // Load status detail
             repo.getStatusDetail(statusId)
-                .onSuccess { status ->
+                .onSuccess statusLoaded@ { status ->
+                    if (currentStatusId != statusId) return@statusLoaded
                     // Enrich status with manual times from the checkin right away
                     val checkin = status.checkin
                     val origin = checkin?.origin?.let {
@@ -82,7 +110,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                     if (tripId != null) {
                         val enrichedCheckin = enrichedStatus.checkin
                         repo.getStopovers(tripId)
-                            .onSuccess { stops ->
+                            .onSuccess stopsLoaded@ { stops ->
+                                if (currentStatusId != statusId) return@stopsLoaded
                                 val enrichedStops = enrichStops(stops, origin, destination)
                                 
                                 val finalOrigin = enrichedStops.find { it.matchesStopover(origin) } ?: origin
@@ -104,6 +133,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                 }
                             }
                             .onFailure { e ->
+                                if (currentStatusId != statusId) return@onFailure
                                 _uiState.update {
                                     it.copy(isLoading = false, error = "Halte konnten nicht geladen werden: ${e.message}")
                                 }
@@ -113,13 +143,14 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                     }
                 }
                 .onFailure { e ->
+                    if (currentStatusId != statusId) return@onFailure
                     _uiState.update {
                         it.copy(isLoading = false, error = "Status nicht gefunden: ${e.message}")
                     }
                 }
 
             // Start auto-refresh for live delay data
-            startAutoRefresh(statusId)
+            if (currentStatusId == statusId) startAutoRefresh(statusId)
         }
     }
 
@@ -134,8 +165,10 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private suspend fun refreshSilently(statusId: Int) {
+        if (currentStatusId != statusId) return
         // Silently update — no loading spinner
-        repo.getStatusDetail(statusId).onSuccess { status ->
+        repo.getStatusDetail(statusId).onSuccess statusRefreshed@ { status ->
+            if (currentStatusId != statusId) return@statusRefreshed
             // Enrich status with manual times from the checkin right away
             val checkin = status.checkin
             val origin = checkin?.origin?.let {
@@ -157,7 +190,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             val tripId = enrichedStatus.checkin?.trip
             if (tripId != null) {
                 val enrichedCheckin = enrichedStatus.checkin
-                repo.getStopovers(tripId).onSuccess { stops ->
+                repo.getStopovers(tripId).onSuccess stopsRefreshed@ { stops ->
+                    if (currentStatusId != statusId) return@stopsRefreshed
                     val enrichedStops = enrichStops(stops, origin, destination)
 
                     val finalOrigin = enrichedStops.find { it.matchesStopover(origin) } ?: origin
@@ -421,7 +455,11 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     private fun checkIfOwnStatus(status: Status) {
         viewModelScope.launch {
             repo.getCurrentUser().onSuccess { currentUser ->
-                _uiState.update { it.copy(isOwnStatus = status.user?.id == currentUser.id) }
+                _uiState.update {
+                    if (currentStatusId == status.id && it.status?.id == status.id) {
+                        it.copy(isOwnStatus = status.user?.id == currentUser.id)
+                    } else it
+                }
             }
         }
     }

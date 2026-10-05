@@ -193,12 +193,21 @@ class StationTrackingEngine(
             // permanently and prevent a later safe near-station correction.
             if (anchored || state.nextIndex == 0) establishGpsCursor()
         }
+        var advanced = false
         if (mayBootstrapOrigin && oldFix != null) {
-            if (bootstrapDepartedOrigin(oldFix, fix, nowMillis)) mayBootstrapOrigin = false
+            advanced = bootstrapDepartedOrigin(oldFix, fix, nowMillis)
+            if (advanced) mayBootstrapOrigin = false
         }
-        if (oldFix != null && recoverPassedStopAfterGap(oldFix, fix)) {
-            return TrackingUpdate(currentStop(), sourceForCurrent(nowMillis))
-        }
+        if (!advanced && oldFix != null) advanced = recoverPassedStopAfterGap(oldFix, fix)
+        return observeCurrentStop(fix, oldFix, nowMillis, canAdvance = !advanced)
+    }
+
+    private fun observeCurrentStop(
+        fix: LocationFix,
+        previousFix: LocationFix?,
+        nowMillis: Long,
+        canAdvance: Boolean
+    ): TrackingUpdate {
         skipCancelled()
         if (state.completed) return finishedUpdate(TrackingSource.GPS)
         val stop = currentStop() ?: return TrackingUpdate(null, sourceForCurrent(nowMillis))
@@ -207,6 +216,14 @@ class StationTrackingEngine(
         if (observedKey != stop.key) {
             resetObservation()
             observedKey = stop.key
+            // A freshly selected successor still has movement evidence in the
+            // preceding fix. Reusing that pair avoids losing its announcement
+            // when both stops fall within a single sampling interval.
+            previousDistance = previousFix?.takeIf {
+                fix.timeMillis - it.timeMillis in 1..MAX_FIX_AGE_MILLIS
+            }?.let {
+                distanceMeters(it.latitude, it.longitude, stop.latitude!!, stop.longitude!!)
+            }
         }
         val distance = distanceMeters(fix.latitude, fix.longitude, stop.latitude!!, stop.longitude!!)
         val previous = previousDistance
@@ -219,9 +236,12 @@ class StationTrackingEngine(
 
         val retryPending = stop.key in releasedAnnouncements &&
             (approachConfirmed || state.arrivedAtCurrent)
-        val announcement = if ((approachingNow || retryPending) && distance <= announcementRadius() &&
-            stop.key !in state.announcedKeys
-        ) announce(stop) else null
+        // Reserve an event only once we know this visit remains selected. A
+        // departing visit must not consume the successor's one event per fix.
+        val announcementCandidate = stop.takeIf {
+            (approachingNow || retryPending) && distance <= announcementRadius() &&
+                stop.key !in state.announcedKeys
+        }
 
         // The accuracy circle must fit inside the arrival zone. The destination
         // uses a wider zone for station/platform geometry, plus slow movement
@@ -246,25 +266,31 @@ class StationTrackingEngine(
             state = state.copy(arrivedAtCurrent = true, completed = true)
             establishGpsCursor()
             previousDistance = distance
-            return TrackingUpdate(stop, TrackingSource.GPS, announcement, destinationReached = true)
+            return TrackingUpdate(stop, TrackingSource.GPS,
+                announcementCandidate?.let(::announce), destinationReached = true)
         }
 
         val rising = previous != null && distance > previous + approachChange
         val riseFromMinimum = distance - (minimumDistance ?: distance)
+        val towardSuccessor = previousFix != null &&
+            movingTowardSuccessor(stop, previousFix, fix, distance, riseFromMinimum)
         val leftArrival = !stop.isDestination && state.arrivedAtCurrent && rising &&
-            distance > DEPARTURE_RADIUS_METERS && riseFromMinimum >= DEPARTURE_INCREASE_METERS
+            (distance > DEPARTURE_RADIUS_METERS || towardSuccessor) &&
+            riseFromMinimum >= DEPARTURE_INCREASE_METERS
         val fastPass = !stop.isOrigin && !stop.isDestination && approachConfirmed && rising &&
             (minimumDistance ?: Double.MAX_VALUE) <= FAST_PASS_RADIUS_METERS &&
-            distance > DEPARTURE_RADIUS_METERS && riseFromMinimum >= FAST_PASS_INCREASE_METERS
-        if (leftArrival || fastPass) {
+            (towardSuccessor ||
+                (distance > DEPARTURE_RADIUS_METERS && riseFromMinimum >= FAST_PASS_INCREASE_METERS))
+        if (canAdvance && (leftArrival || fastPass)) {
             establishGpsCursor()
             advance()
-            // One fix can advance only one visit. In particular, overlapping
-            // station bubbles cannot announce every nearby stop at once.
-            return TrackingUpdate(currentStop(), sourceForCurrent(nowMillis), announcement)
+            // One fix advances at most one non-cancelled visit, then assesses
+            // that successor immediately. Close stops do not have to wait for
+            // a fixed 220 m bubble around the preceding stop to be left.
+            return observeCurrentStop(fix, previousFix, nowMillis, canAdvance = false)
         }
         previousDistance = distance
-        return TrackingUpdate(stop, sourceForCurrent(nowMillis), announcement)
+        return TrackingUpdate(stop, sourceForCurrent(nowMillis), announcementCandidate?.let(::announce))
     }
 
     @Synchronized
@@ -350,8 +376,13 @@ class StationTrackingEngine(
         val priorToNext = distanceMeters(previous.latitude, previous.longitude, nextLatitude, nextLongitude)
         val betweenStops = distanceMeters(originLatitude, originLongitude, nextLatitude, nextLongitude)
         val supportedMovement = max(DEPARTURE_INCREASE_METERS, fix.accuracyMeters + previous.accuracyMeters)
-        if (fromOrigin > DEPARTURE_RADIUS_METERS + fix.accuracyMeters &&
-            fromOrigin - priorFromOrigin >= supportedMovement && priorToNext - toNext >= supportedMovement &&
+        val trendChange = max(5.0, fix.accuracyMeters * 0.1)
+        val departureMovement = max(fromOrigin - priorFromOrigin,
+            fromOrigin - (minimumDistance ?: priorFromOrigin))
+        if ((fromOrigin > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
+                toNext + 2 * fix.accuracyMeters < fromOrigin) &&
+            departureMovement >= supportedMovement && fromOrigin - priorFromOrigin >= trendChange &&
+            priorToNext - toNext >= trendChange &&
             toNext < betweenStops && fromOrigin + toNext <= betweenStops + MIDWAY_CORRIDOR_MARGIN_METERS
         ) {
             establishGpsCursor()
@@ -395,8 +426,13 @@ class StationTrackingEngine(
         val priorToNext = distanceMeters(previous.latitude, previous.longitude, nextLatitude, nextLongitude)
         val betweenStops = distanceMeters(latitude, longitude, nextLatitude, nextLongitude)
         val movement = max(DEPARTURE_INCREASE_METERS, fix.accuracyMeters + previous.accuracyMeters)
-        if (fromStop > DEPARTURE_RADIUS_METERS + fix.accuracyMeters &&
-            fromStop - priorFromStop >= movement && priorToNext - toNext >= movement &&
+        val trendChange = max(5.0, fix.accuracyMeters * 0.1)
+        val departureMovement = max(fromStop - priorFromStop,
+            fromStop - (minimumDistance ?: priorFromStop))
+        if ((fromStop > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
+                toNext + 2 * fix.accuracyMeters < fromStop) &&
+            departureMovement >= movement && fromStop - priorFromStop >= trendChange &&
+            priorToNext - toNext >= trendChange &&
             toNext < betweenStops && fromStop + toNext <= betweenStops + MIDWAY_CORRIDOR_MARGIN_METERS
         ) {
             establishGpsCursor()
@@ -404,6 +440,32 @@ class StationTrackingEngine(
             return true
         }
         return false
+    }
+
+    /** Ordered-neighbour evidence handles overlapping bus-stop departure zones. */
+    private fun movingTowardSuccessor(
+        stop: TrackingStop,
+        previous: LocationFix,
+        fix: LocationFix,
+        fromStop: Double,
+        riseFromMinimum: Double
+    ): Boolean {
+        if (fix.timeMillis - previous.timeMillis !in 1..MAX_FIX_AGE_MILLIS) return false
+        val next = route.drop(state.nextIndex + 1).firstOrNull { !it.cancelled } ?: return false
+        if (!hasCoordinates(stop) || !hasCoordinates(next)) return false
+        val nextLatitude = next.latitude ?: return false
+        val nextLongitude = next.longitude ?: return false
+        val toNext = distanceMeters(fix.latitude, fix.longitude, nextLatitude, nextLongitude)
+        val priorToNext = distanceMeters(previous.latitude, previous.longitude, nextLatitude, nextLongitude)
+        val supportedMovement = max(DEPARTURE_INCREASE_METERS,
+            (fix.accuracyMeters + previous.accuracyMeters) / 2)
+        // A decreasing distance alone can be GPS jitter or a nearby parallel
+        // platform. Require supported movement and an unambiguous next stop.
+        val approachingNext = priorToNext - toNext >= max(5.0, fix.accuracyMeters * 0.1)
+        // Small, frequent fixes can accumulate the departure evidence from the
+        // closest observed position. A sparse pair can provide it directly.
+        return approachingNext && max(priorToNext - toNext, riseFromMinimum) >= supportedMovement &&
+            toNext + 2 * fix.accuracyMeters < fromStop
     }
 
     private fun currentStop(): TrackingStop? = route.getOrNull(state.nextIndex)

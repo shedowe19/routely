@@ -15,6 +15,8 @@ Dokumentiert, wie die App getestet wird.
 - Die Modelltests prüfen verschachtelte Stationen, optionale Kennungen, IBNR/RIL100, numerische und UUID-Operator-IDs, echte und geplante Zeiten, berechnete Abfahrtsverspätungen, Stopover-Erkennung bei wiederholten Stationsbesuchen, Deduplizierung einschließlich verschiedener Stopover-UUIDs und die neuen Check-in-Erfolgs- und Konfliktantworten.
 - Statusänderungs-Tests prüfen die gemeinsame Übertragung von `destinationId` und `destinationArrivalPlanned` sowie das Weglassen beider Felder bei reinen Textänderungen.
 - `StationTrackingEngineTest` verwendet synthetische Positionen und eine feste Uhr ohne Android oder Netzwerk. Geprüft werden GPS bei Verspätung, Annäherung gegenüber Ankunft, Richtungs-/Abfahrtsfortschritt, ungültige beziehungsweise alte Fixes, Signalunterbrechungen, Fahrplan-Rückfall, Radien, Rundfahrten, Ansagemarkierungen nach Neustart und per Gson restaurierte Route/Fortschritt.
+- `StopTimelineProgressTest` prüft genau einen markierten Besuch, überlappende Zeiten, GPS vor der Fahrplanzeit, die Zuordnung einer Teilroute zur vollständigen Timeline, wiederholte Stationsbesuche, unbekannte Cursor, gestrichene Halte und Abschluss am eingecheckten Ziel.
+- `SpeechDeliveryQueueTest` prüft die Zuordnung eindeutiger Ansageversuche, mehrere wartende Ansagen, Wiederholungen und verspätete Callbacks früherer Fahrten. Die Klasse testet das Bookkeeping; sie ersetzt keinen Android-Audiofokustest.
 - Unit-Tests liegen unter `app/src/test`; Instrumentierungstests unter `app/src/androidTest` sind noch nicht vorhanden.
 - API-nahe Tests mit echten Tokens sind derzeit nicht als automatisierte Tests eingerichtet. Falls sie ergänzt werden, müssen Tokens lokal und nicht versioniert bereitgestellt werden.
 
@@ -43,11 +45,11 @@ GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56
 
 ## Prüfung der GPS-Erweiterung
 
-Die aktuelle Testsuite umfasst 35 Regressionen in `StationTrackingEngineTest` und 28 API-Regressionen, insgesamt 63. Geprüft werden unter anderem verspätete Fahrten, schnelle Zielvorbeifahrt gegenüber langsamer/stabiler Ankunft, vorläufige Zeitcursor nach Cache-Restaurierung, späten Start am Ursprung, getrennten GPS-aus-/Ausfallmodus, Rundfahrten sowie freigegebene und bestätigte Ansageschlüssel. Der zusätzliche Startfall verhindert, dass ein erster GPS-Fix fern aller Stationen einen vorläufigen Zeitcursor festschreibt.
+Der aktuelle Quellstand enthält 88 Unit-Tests: 47 Engine-, 9 Timeline-, 4 Ansagequeue- und 28 API-Tests. Gegenüber den ursprünglichen 35 Engine-Regressionen sichern zwölf zusätzliche Fälle kurze Halteabstände, frühe richtungsabhängige Übergabe, dieselbe Fixfolge für den Folgehalt, kumulierte Bewegung bei häufigen Standortupdates, Signallücken sowie unveränderte Zielankunftskriterien ab. Ein erster GPS-Fix fern aller Stationen darf weiterhin keinen vorläufigen Zeitcursor festschreiben.
 
-Der erste vollständige GPS-Prüflauf für Commit `672051411cc1f76bf910c0262b8fbe8710844363` war am 05.10.2026 erfolgreich: 62 Tests (34 GPS und 28 API), Android-Debug-Build und APK-Upload. Nachweis: [GitHub-Actions-Lauf 37349706390](https://github.com/shedowe19/routely/actions/runs/37349706390). Dieser historische Lauf enthält die zuletzt ergänzte 35. GPS-Regression noch nicht. Den aktuellen Prüfstand des gesamten PR zeigt [PR #36: Checks](https://github.com/shedowe19/routely/pull/36/checks).
+Der erste vollständige GPS-Prüflauf für Commit `672051411cc1f76bf910c0262b8fbe8710844363` war am 05.10.2026 erfolgreich: 62 Tests (34 GPS und 28 API), Android-Debug-Build und APK-Upload. Nachweis: [GitHub-Actions-Lauf 37349706390](https://github.com/shedowe19/routely/actions/runs/37349706390). Dieser historische Lauf enthält die späteren Startup-, Kurzhalte-, Timeline- und Ansagequeue-Regressionen noch nicht. Aktuelle Ergebnisse zeigt der Workflow [API Compatibility](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml); die Quellanzahl allein ist kein Nachweis eines erfolgreichen Laufs.
 
-Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Echte Zug-/Busfahrten und Android-Geräteprüfungen stehen aus; hier ist kein physisches Testgerät verfügbar. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration.
+Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Der Nutzerbericht aus einer Fahrt mit `1.7.0` und die daraus abgeleitete erneute Geräteprüfung sind unter [TripTracking](../module/trip-tracking.md) dokumentiert. Die aktuellen Korrekturen wurden hier nicht auf einem physischen Gerät erprobt. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration; der Timeline-Maler erfordert zusätzlich eine visuelle Prüfung mit großer Schrift.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
@@ -79,3 +81,4 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 - [Build](./build.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
 - [TripTracking](../module/trip-tracking.md)
+- [StatusDetail](../module/status-detail.md)

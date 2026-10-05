@@ -8,6 +8,8 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 
 - `app/src/main/kotlin/de/traewelling/app/service/TripTrackingService.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/StationTrackingEngine.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/SpeechDeliveryQueue.kt`
 - `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
 - `app/src/main/AndroidManifest.xml`
@@ -30,11 +32,15 @@ Das Manifest deklariert `location|dataSync` sowie `FOREGROUND_SERVICE_LOCATION`.
 
 Die LocationRequest-Mindestintervalle liegen bei 5 beziehungsweise 2 Sekunden; Android behandelt Anfragen als Best-Effort-Vorgaben. Die GPS-Auswertung läuft unabhängig vom API-Polling.
 
+Standort-Batches werden vollständig in zeitlicher Reihenfolge verarbeitet. Ein gemeinsamer Mutex schützt Engine-Mutation und Übernahme des Ergebnisses einschließlich Notification, UI-Fortschritt, TTS und Persistenz gegenüber Tick, Routen- und Einstellungsänderungen. Netzwerkzugriffe liegen außerhalb dieser Sperre.
+
 Das Repository liefert Status und Stopovers. `checkedInRoute` grenzt die Route anhand von `matchesStopover` auf Einstieg bis Ziel ein; nicht auflösbare Grenzen ersetzen keine gültige Route. Manuelle Check-in-Zeiten werden in Echtzeitfelder übernommen. `TrackingStop` enthält Name, Koordinaten und Plan-/Echtzeit der Station sowie einen Besuchsschlüssel: bevorzugt Stopover-UUID, sonst Station-ID, Planzeiten und Routenindex.
 
 `StationTrackingEngine` ist reine Kotlin-Logik ohne Android- oder Netzwerkzugriffe. Sie prüft die geordnete Haltfolge und bewahrt den aktuellen Besuch bei API-Aktualisierungen über seinen Schlüssel. Es wird nicht beliebig der global nächstgelegene Bahnhof ausgewählt. Ein noch rein zeitbasierter Cursor bleibt vorläufig: Der erste brauchbare GPS-Fix kann ihn bei einem eindeutigen nahen Halt räumlich neu verankern, auch bei großer Verspätung. Mehrdeutige Stationsbesuche werden nicht beliebig ausgewählt.
 
 Ein erster Fix fern aller Stationen macht einen bereits zeitbasiert vorgerückten Cursor nicht zu einer bestätigten GPS-Zuordnung. Er bleibt nach Cache-Restaurierung korrigierbar und wird bis zur räumlichen Bestätigung als `Fahrplan · ungefähr` angezeigt. Ein späterer eindeutiger stationsnaher Fix kann ihn zum passenden Besuch zurückführen.
+
+`trackingLiveState` veröffentlicht Cursor, Besuchsschlüssel, passenden Rohhalt, Ankunfts-/Abschlussstatus und Quelle als prozesslokalen `StateFlow`. Der Zustand wird beim Fahrtwechsel und Service-Ende entfernt. Er enthält keine Geräteposition und wird nicht in einem neuen DataStore-Key gespeichert. Die [Status-Detail-Timeline](./status-detail.md) übernimmt ihn nur für die eigene, angezeigte aktive Fahrt.
 
 ## GPS-Trigger und Fortschritt
 
@@ -42,11 +48,13 @@ Ein brauchbarer Fix hat gültige Koordinaten, höchstens 100 Meter gemeldete Ung
 
 Die Entfernung zum aktuellen Halt muss erkennbar sinken, bevor der Ansageradius einen Trigger erzeugt. Der Eintritt in diesen Radius erledigt den Halt nicht. Zwischenankunft erfordert `Entfernung + Ungenauigkeit <= 120 m` und einen bestätigten Annäherungstrend oder zwei frische innere Fixes; der Einstieg kann schon im inneren Bereich als erreicht gelten.
 
-Nach innerer Ankunft wird erst beim anschließenden Entfernen über 220 Meter mit Hysterese zum nächsten Besuch gewechselt. Für Zwischenhalte gibt es zusätzlich eine konservative Vorbeifahrt-Erkennung anhand Annäherung, minimaler Distanz und anschließendem Entfernen. Wiederholte Besuche derselben Station bleiben durch ihre Besuchsschlüssel getrennt; ausgefallene Halte werden übersprungen.
+Nach innerer Ankunft wird beim anschließenden Entfernen mit Hysterese zum nächsten Besuch gewechselt. 220 Meter bleiben die allgemeine Abfahrtsgrenze. Bei dicht aufeinanderfolgenden Halten ist ein früherer Wechsel möglich: Frische Fixes müssen das Entfernen vom beobachteten Halt und die Annäherung an dessen geordneten Nachfolger zeigen; der Nachfolger muss um mehr als die doppelte aktuelle Ungenauigkeit näher liegen. Die Bewegung muss mindestens 35 Meter beziehungsweise die Genauigkeitsschwelle stützen. Kleine Bewegungen können sich seit der geringsten beobachteten Entfernung summieren, statt jeweils 35 Meter zwischen zwei Fixes zu verlangen.
+
+Für Zwischenhalte gibt es zusätzlich eine konservative Vorbeifahrt-Erkennung anhand Annäherung, minimaler Distanz und anschließendem Entfernen. Nach einem Wechsel bewertet dieselbe frische Fixfolge sofort den Nachfolger, damit dessen Ansage bei kurzen Busabständen nicht erst auf ein weiteres Update warten muss. Ein Fix rückt höchstens einen nicht gestrichenen Besuch vor. Wiederholte Stationsbesuche bleiben durch ihre Schlüssel getrennt; ausgefallene Halte werden übersprungen.
 
 Am Ziel gilt ein eigener Bereich von 300 Metern einschließlich Ungenauigkeit. Ankunft benötigt zwei frische innere Fixes und eine aktuell gemeldete Geschwindigkeit höchstens 3 m/s oder mindestens zehn Sekunden stabilen Aufenthalt um einen Anker von etwa 20–30 Metern. Ein bestätigter stationärer Aufenthalt benötigt keinen vorherigen Annäherungstrend. Schnelle Vorbeifahrt, ein erster Fix nahe am Ziel und vergangene Planzeit allein beenden die Fahrt nicht. Auch diese räumliche Heuristik beweist keinen tatsächlichen Fahrzeughalt.
 
-Beim späten Trackingstart können zwei frische Bewegungsfixes die Abfahrt vom Ursprung herleiten, wenn sie im plausiblen Korridor weg vom Ursprung und auf den nächsten Halt zeigen. Nach einer Signallücke kann ein bereits angenäherter Zwischenhalt ähnlich wieder eingeordnet werden. Das Ziel wird durch diese Abfahrts-/Vorbeifahrtlogik nicht übersprungen.
+Beim späten Trackingstart können frische Bewegungsfixes die Abfahrt vom Ursprung herleiten, wenn sie im plausiblen Korridor weg vom Ursprung und auf den nächsten Halt zeigen. Nach einer Signallücke kann ein bereits angenäherter Zwischenhalt ähnlich wieder eingeordnet werden. Dabei wird Bewegung erneut gesammelt; ein altes Entfernungsminimum vor der Lücke reicht nicht aus. Das Ziel wird durch diese Abfahrts-/Vorbeifahrtlogik nicht übersprungen und benötigt weiterhin eigene Ankunftsbeobachtungen.
 
 ### Ansageradius
 
@@ -80,6 +88,8 @@ Nach mindestens einem erfolgreichen Laden kann diese Route bei API-Ausfällen un
 
 TTS benötigt die separate Option `Haltestellen ansagen` und Audiofokus. Sprache und Stimme kommen aus den Einstellungen. Ein Ansageschlüssel wird nur nach erfolgreichem Einreihen mit `TextToSpeech.SUCCESS` dauerhaft bestätigt. Bei ausgeschalteter/nicht bereiter TTS, verweigertem Audiofokus oder fehlgeschlagenem Einreihen wird er für erneuten Versuch freigegeben. Eine während der Initialisierung wartende Ansage wird nur abgespielt, wenn ihr Besuch noch aktuell ist.
 
+`SpeechDeliveryQueue` ordnet jede eingereihte Ansage einer eindeutigen ID aus Status-ID, Service-Generation und laufender Nummer zu. Späte oder doppelte Callbacks können dadurch keinen neueren Versuch entfernen. Audiofokus bleibt erhalten, bis die letzte wartende Ansage endet. Bei `onError` oder `onStop` wird der zugehörige Besuch nur dann wieder freigegeben und gespeichert, wenn er noch aktuell ist; ein bereits verlassener Halt wird nicht erneut angesagt.
+
 Bei Zielankunft wartet der Service auf eine bereits laufende oder gerade eingereihte Zielansage. Erst deren Abschluss, Fehler-/Stop-Callback oder spätestens ein 15-Sekunden-Timeout beendet den Service; die eigene Zielansage wird nicht sofort durch `stopTracking` abgeschnitten.
 
 Notification und Widget erhalten Linie, nächsten Halt, Ziel, Zeit, Gleis und positive Verspätung. Der Quellenhinweis `GPS` beziehungsweise `Fahrplan · ungefähr` steht auch im Widget-Namen des nächsten Halts. GPS-Annäherung ersetzt die zeitlichen Angaben für Ankunft und Gleis nicht.
@@ -94,8 +104,9 @@ Beim Beenden werden Location-Callbacks, Polling und TTS gestoppt. Aktive Status-
 
 ## Validierung und offene Fragen
 
-- Der erste vollständige GPS-Prüflauf mit 62 Tests, Android-Debug-Build und APK-Upload war erfolgreich. Die aktuelle Suite umfasst zusätzlich die 35. GPS-Regression; historische Nachweise und aktuelle PR-Checks stehen unter [Tests](../entwicklung/tests.md).
-- TODO: Echte Zug-/Busfahrten mit Tunnel, nahen Stationen, Vorbeifahrt, Rundfahrten, grober Standortfreigabe, ausgeschaltetem Display und Neustart validieren. Hier steht kein physisches Testgerät zur Verfügung.
+- Ein Nutzerbericht zu `1.7.0` meldet bei einer etwa zwei Minuten verfrühten Fahrt eine korrekte Ansage von Maubisstr. und die fehlende Ansage des folgenden Halts Rathaus. Der Screenshot zeigte mehrere `AKTUELL`-Markierungen und unterbrochene Timeline-Segmente. Das Zeitfenster je Zeile erklärt die mehrfachen Markierungen; überlappende Abfahrtsbereiche und die Ansagezustellung werden durch die Änderungen abgesichert. Unklar: Ohne Fix-/Audioverlauf ist die konkrete Ursache der fehlenden Ansage nicht bewiesen.
+- Historische erfolgreiche Prüfläufe und der aktuelle automatisierte Prüfumfang stehen unter [Tests](../entwicklung/tests.md).
+- TODO: Den korrigierten kurzen Haltübergang einschließlich Rathaus erneut auf einer echten Fahrt prüfen. Weitere Fälle: Tunnel, Vorbeifahrt, Rundfahrten, grobe Standortfreigabe, ausgeschaltetes Display und Neustart. Hier steht kein physisches Testgerät zur Verfügung.
 - TODO: Radius- und Hysteresewerte nach diesen Fahrten bewerten; reine Nähe ist kein Nachweis eines Fahrzeughalts.
 
 ## Offizielle Quellen
@@ -111,6 +122,7 @@ Beim Beenden werden Location-Callbacks, Polling und TTS gestoppt. Aktive Status-
 - [Settings](./settings.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [Widget](./widget.md)
+- [StatusDetail](./status-detail.md)
 - [Datenmodell](../daten/datenmodell.md)
 - [Datenfluss](../architektur/datenfluss.md)
 - [Externe Abhängigkeiten](../architektur/externe-abhaengigkeiten.md)

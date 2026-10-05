@@ -39,7 +39,10 @@ Zusätzliche Screens werden als Stack navigiert:
 
 Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications nutzen `StateMessage` für Lade-, Fehler- und Empty-States. Dadurch sind die visuellen Zustände über die wichtigsten Screens konsistent.
 
+Die Status-Detail-Timeline nutzt für die eigene aktive Fahrt einen gemeinsamen Besuchscursor des Tracking-Service. GPS-Ankunft, Annäherung und ungefähre Fahrplanposition erhalten unterschiedliche Markierungen; die durchgehende Verbindungslinie verwendet denselben Fortschritt wie die Haltepunkte. Einzelheiten stehen unter [StatusDetail](../module/status-detail.md).
+
 ## Verwandte Seiten
 
 - [Komponenten](./komponenten.md)
 - [Settings](../module/settings.md)
+- [StatusDetail](../module/status-detail.md)

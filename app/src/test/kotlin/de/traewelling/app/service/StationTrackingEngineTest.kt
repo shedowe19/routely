@@ -580,6 +580,237 @@ class StationTrackingEngineTest {
         assertEquals(setOf("first", "current"), engine.getProgress().announcedKeys)
     }
 
+    @Test
+    fun earlyBusAnnouncesTheNextCloseStopBeforeLeavingThePrevious220MeterZone() {
+        val engine = StationTrackingEngine(listOf(
+            stop("maubis", arrival = now + 2 * MINUTE),
+            stop("rathaus", positionMeters = 180.0, stationId = 2, arrival = now + 3 * MINUTE),
+            stop("martinus", positionMeters = 600.0, stationId = 3)
+        ))
+        engine.onLocation(fix(-350.0, now, speed = 8.0), now)
+        val maubis = engine.onLocation(fix(-250.0, now + 5 * SECOND, speed = 8.0), now + 5 * SECOND)
+        engine.onLocation(fix(0.0, now + 25 * SECOND, speed = 0.0), now + 25 * SECOND)
+        engine.onLocation(fix(80.0, now + 35 * SECOND, speed = 8.0), now + 35 * SECOND)
+
+        val rathaus = engine.onLocation(fix(120.0, now + 40 * SECOND, speed = 8.0), now + 40 * SECOND)
+        val repeated = engine.onLocation(fix(150.0, now + 43 * SECOND, speed = 8.0), now + 43 * SECOND)
+
+        assertEquals("maubis", maubis.announcement?.key)
+        assertEquals("rathaus", rathaus.stop?.key)
+        assertEquals("rathaus", rathaus.announcement?.key)
+        assertEquals(TrackingSource.GPS, rathaus.source)
+        assertNull(repeated.announcement)
+        assertEquals(setOf("maubis", "rathaus"), engine.getProgress().announcedKeys)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun frequentSlowBusFixesAccumulateDepartureEvidenceForACloseSuccessor() {
+        val engine = StationTrackingEngine(listOf(
+            stop("current"),
+            stop("close-next", positionMeters = 180.0, stationId = 2)
+        ))
+        engine.onLocation(fix(-250.0, now), now)
+        engine.onLocation(fix(-80.0, now + 20 * SECOND), now + 20 * SECOND)
+        engine.onLocation(fix(0.0, now + 30 * SECOND), now + 30 * SECOND)
+        val announcements = mutableListOf<String>()
+        listOf(24.0, 48.0, 72.0, 96.0, 120.0, 144.0).forEachIndexed { index, position ->
+            val time = now + (33 + index * 3) * SECOND
+            val update = engine.onLocation(fix(position, time, speed = 8.0), time)
+            update.announcement?.key?.let(announcements::add)
+        }
+
+        assertEquals(listOf("close-next"), announcements)
+        assertEquals("close-next", engine.getProgress().nextStopKey)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun sparseFixAtTheFollowingBusStopAnnouncesItInTheSameUpdate() {
+        val engine = StationTrackingEngine(listOf(
+            stop("first"),
+            stop("close-next", positionMeters = 140.0, stationId = 2),
+            stop("later", positionMeters = 600.0, stationId = 3)
+        ))
+        engine.onLocation(fix(-300.0, now), now)
+        engine.onLocation(fix(-80.0, now + 10 * SECOND), now + 10 * SECOND)
+        engine.onLocation(fix(0.0, now + 20 * SECOND), now + 20 * SECOND)
+
+        val next = engine.onLocation(fix(160.0, now + 32 * SECOND, speed = 12.0), now + 32 * SECOND)
+
+        assertEquals("close-next", next.stop?.key)
+        assertEquals("close-next", next.announcement?.key)
+        assertEquals(1, engine.getProgress().nextIndex)
+        assertFalse(next.destinationReached)
+    }
+
+    @Test
+    fun sparseMovementPastAnObservedStopDoesNotWaitForABusStopDwell() {
+        val engine = StationTrackingEngine(listOf(
+            stop("passed"),
+            stop("close-next", positionMeters = 180.0, stationId = 2),
+            stop("later", positionMeters = 600.0, stationId = 3)
+        ))
+        engine.onLocation(fix(-350.0, now, speed = 12.0), now)
+        engine.onLocation(fix(-150.0, now + 15 * SECOND, speed = 12.0), now + 15 * SECOND)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+
+        val next = engine.onLocation(fix(160.0, now + 40 * SECOND, speed = 12.0), now + 40 * SECOND)
+
+        assertEquals("close-next", next.stop?.key)
+        assertEquals("close-next", next.announcement?.key)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun sparseDepartureFixAlsoAnnouncesANormalDistanceSuccessor() {
+        val engine = StationTrackingEngine(listOf(
+            stop("first"),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(-400.0, now), now)
+        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+
+        val next = engine.onLocation(fix(1_800.0, now + 27 * SECOND, speed = 70.0), now + 27 * SECOND)
+
+        assertEquals("next", next.stop?.key)
+        assertEquals("next", next.announcement?.key)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun overlappingArrivalZonesAndInaccurateJitterDoNotAdvanceTheVisit() {
+        val engine = StationTrackingEngine(listOf(
+            stop("current"),
+            stop("close-next", positionMeters = 180.0, stationId = 2)
+        ))
+        engine.onLocation(fix(-300.0, now), now)
+        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+
+        val ambiguous = engine.onLocation(fix(95.0, now + 3 * SECOND), now + 3 * SECOND)
+        val inaccurate = engine.onLocation(fix(140.0, now + 4 * SECOND, accuracy = 100.0), now + 4 * SECOND)
+        val jitter = engine.onLocation(fix(130.0, now + 5 * SECOND, accuracy = 100.0), now + 5 * SECOND)
+
+        assertEquals("current", ambiguous.stop?.key)
+        assertEquals("current", inaccurate.stop?.key)
+        assertEquals("current", jitter.stop?.key)
+        assertEquals(0, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun movingAwayFromBothStopsCannotUseTheCloseSuccessorShortcut() {
+        val engine = StationTrackingEngine(listOf(
+            stop("current"),
+            stop("close-next", positionMeters = 180.0, stationId = 2)
+        ))
+        engine.onLocation(fix(-300.0, now), now)
+        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+
+        val oppositeDirection = engine.onLocation(fix(-160.0, now + 10 * SECOND), now + 10 * SECOND)
+
+        assertEquals("current", oppositeDirection.stop?.key)
+        assertNull(oppositeDirection.announcement)
+        assertEquals(0, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun closeDestinationDoesNotCompleteDuringFastTransitionOrPass() {
+        val engine = StationTrackingEngine(listOf(
+            stop("current"),
+            stop("destination", positionMeters = 180.0, stationId = 2, destination = true)
+        ))
+        engine.onLocation(fix(-300.0, now), now)
+        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+
+        val fastTransition = engine.onLocation(fix(140.0, now + 12 * SECOND, speed = 12.0), now + 12 * SECOND)
+        assertEquals("destination", fastTransition.announcement?.key)
+        assertFalse(fastTransition.destinationReached)
+        assertFalse(engine.getProgress().completed)
+
+        val movingPast = engine.onLocation(fix(230.0, now + 20 * SECOND, speed = 12.0), now + 20 * SECOND)
+        assertFalse(movingPast.destinationReached)
+        val stopped = engine.onLocation(fix(180.0, now + 30 * SECOND, speed = 0.0), now + 30 * SECOND)
+        assertTrue(stopped.destinationReached)
+        assertTrue(engine.getProgress().completed)
+    }
+
+    @Test
+    fun closeSuccessorRecoveryAfterAnOutageEvaluatesItsAnnouncementImmediately() {
+        val engine = StationTrackingEngine(listOf(
+            stop("observed"),
+            stop("close-next", positionMeters = 180.0, stationId = 2)
+        ))
+        engine.onLocation(fix(-350.0, now), now)
+        engine.onLocation(fix(-150.0, now + 5 * SECOND), now + 5 * SECOND)
+
+        val firstAfterGap = engine.onLocation(fix(80.0, now + 45 * SECOND), now + 45 * SECOND)
+        assertEquals("observed", firstAfterGap.stop?.key)
+        val secondAfterGap = engine.onLocation(fix(140.0, now + 50 * SECOND), now + 50 * SECOND)
+
+        assertEquals("close-next", secondAfterGap.stop?.key)
+        assertEquals("close-next", secondAfterGap.announcement?.key)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun lateStartBetweenCloseStopsUsesAccumulatedFreshDepartureMovement() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", arrival = now - 5 * MINUTE, origin = true),
+            stop("close-next", positionMeters = 180.0, stationId = 2, arrival = now + 2 * MINUTE)
+        ))
+        engine.onLocation(fix(130.0, now, speed = 6.7), now)
+        val second = engine.onLocation(fix(150.0, now + 3 * SECOND, speed = 6.7), now + 3 * SECOND)
+        assertEquals("origin", second.stop?.key)
+
+        val third = engine.onLocation(fix(170.0, now + 6 * SECOND, speed = 6.7), now + 6 * SECOND)
+
+        assertEquals("close-next", third.stop?.key)
+        assertEquals("close-next", third.announcement?.key)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun closeStopRecoveryAccumulatesSmallFreshFixesAfterAGap() {
+        val engine = StationTrackingEngine(listOf(
+            stop("observed"),
+            stop("close-next", positionMeters = 180.0, stationId = 2)
+        ))
+        engine.onLocation(fix(-350.0, now), now)
+        engine.onLocation(fix(-150.0, now + 5 * SECOND), now + 5 * SECOND)
+        engine.onLocation(fix(130.0, now + 45 * SECOND, speed = 6.7), now + 45 * SECOND)
+        val second = engine.onLocation(fix(150.0, now + 48 * SECOND, speed = 6.7), now + 48 * SECOND)
+        assertEquals("observed", second.stop?.key)
+
+        val third = engine.onLocation(fix(170.0, now + 51 * SECOND, speed = 6.7), now + 51 * SECOND)
+
+        assertEquals("close-next", third.stop?.key)
+        assertEquals("close-next", third.announcement?.key)
+        assertEquals(1, engine.getProgress().nextIndex)
+    }
+
+    @Test
+    fun closeStopsKeepSeparateVisitKeysAcrossAReturnToTheSameStation() {
+        val engine = StationTrackingEngine(listOf(
+            stop("first-visit", origin = true),
+            stop("middle", positionMeters = 180.0, stationId = 2),
+            stop("return-visit", destination = true)
+        ))
+        val announcements = mutableListOf<String>()
+        val positions = listOf(-350.0, -250.0, 0.0, 120.0, 180.0, 60.0, 0.0)
+        positions.forEachIndexed { index, position ->
+            val time = now + index * 5 * SECOND
+            engine.onLocation(fix(position, time), time).announcement?.key?.let(announcements::add)
+        }
+
+        assertEquals(listOf("first-visit", "middle", "return-visit"), announcements)
+        assertEquals(setOf("first-visit", "middle", "return-visit"), engine.getProgress().announcedKeys)
+        assertTrue(engine.getProgress().completed)
+    }
+
     private fun stop(
         key: String,
         positionMeters: Double = 0.0,
