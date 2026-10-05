@@ -1,6 +1,8 @@
 name: API Compatibility
 
 on:
+  push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
 
@@ -38,8 +40,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run unit tests and build debug APK
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace
+      - name: Run unit tests and build debug and release APKs
+        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace
 
       - name: Upload debug APK for device testing
         uses: actions/upload-artifact@v4
@@ -47,6 +49,21 @@ jobs:
           name: routely-debug-apk
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
+
+      - name: Upload unsigned release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: routely-release-unsigned-apk
+          path: app/build/outputs/apk/release/app-release-unsigned.apk
+          if-no-files-found: error
+
+      - name: Upload release lint reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-lint-results
+          path: app/build/reports/lint-results*
+          if-no-files-found: warn
 
       - name: Upload JUnit results
         if: always()

@@ -7,6 +7,7 @@ Dokumentation wichtiger 3rd-Party-Bibliotheken und Dienste.
 ## Abhängigkeiten
 
 - **Jetpack Libraries**: Compose, Navigation, ViewModel, Room, Datastore.
+- **AndroidX Fragment**: `androidx.fragment:fragment:1.7.1` wird explizit über `libs.androidx.fragment` eingebunden. Play Services 21.2.0 fordert alte Fragment-Versionen transitiv an; die direkte Abhängigkeit erfüllt die ActivityResult-Mindestversion 1.3.0 und behebt den Release-Lint-Konflikt. Details: [Build](../entwicklung/build.md).
 - **Network**: `com.squareup.retrofit2:retrofit`, `com.squareup.okhttp3:okhttp`.
 - **JSON Parsing**: `com.google.code.gson:gson`
 - **Image Loading**: `io.coil-kt:coil-compose`

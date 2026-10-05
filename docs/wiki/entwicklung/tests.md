@@ -8,6 +8,7 @@ Dokumentiert, wie die App getestet wird.
 
 - **Unit-Tests ausführen**: `./gradlew :app:testDebugUnitTest`.
 - **API-Regressionen und Debug-Build zusammen prüfen**: `./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`.
+- **Vollständiger CI-Prüfumfang einschließlich Release**: `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace`.
 - **Coroutines testen**: Nutzung von `TestScope` und `runTest` in Unit-Tests für ViewModels oder asynchrone Repositories.
 - Der Unit-Test `TraewellingApiServiceTest` prüft den Retrofit-Vertrag für den Abfahrts-Endpunkt, damit die Route nicht versehentlich wieder unter `/api/v1/trains/station/...` geführt wird.
 - `ApiCompatibilityTest` lädt Fixtures aus `app/src/test/resources/traewelling/`. Die Antworten lassen auslaufende Kompatibilitätsfelder bewusst weg und unterscheiden Stopover-ID und Station-ID.
@@ -25,7 +26,16 @@ Dokumentiert, wie die App getestet wird.
 
 ## Automatisierte Prüfung
 
-`.github/workflows/api-compatibility.yml` führt die Unit-Tests und den Debug-Build bei Pull Requests sowie bei manuellem Start aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. JUnit-Ergebnisse und HTML-Testberichte werden als `api-compatibility-test-results` gespeichert. Nach erfolgreichem Build wird `app/build/outputs/apk/debug/app-debug.apk` als `routely-debug-apk` für Geräteprüfungen bereitgestellt.
+`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt.
+
+| Artefakt | Inhalt |
+| --- | --- |
+| `api-compatibility-test-results` | JUnit-Ergebnisse und HTML-Testberichte |
+| `routely-debug-apk` | Debug-APK für Geräteprüfungen nach erfolgreichem Build |
+| `routely-release-unsigned-apk` | Unsignierte Release-APK nach erfolgreichem Build |
+| `release-lint-results` | Vorhandene Release-Lint-Berichte, auch bei fehlgeschlagenem Build |
+
+Die Ursache und der explizite Fragment-Versionsfix für den fehlgeschlagenen `1.7.0`-Release-Build stehen unter [Build](./build.md). Bisherige Debug-Nachweise enthalten keinen Release-Lint-Nachweis für diesen Fix; aktuelle Ergebnisse des erweiterten Prüfumfangs stehen unter [API Compatibility](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml). Signierung und Veröffentlichung erfolgen weiterhin ausschließlich im manuellen Workflow `android.yml`.
 
 ## Ergebnis der Migration vom 05.10.2026
 
