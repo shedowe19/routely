@@ -10,6 +10,7 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 - `./gradlew assembleRelease` - Release-Build erstellen
 - `./gradlew compileDebugKotlin` - Kotlin-Code kompilieren ohne vollen Build
 - `./gradlew build` - Vollständiger Build
+- `./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace` - API-Regressionstests und Debug-APK gemeinsam prüfen
 
 ## Build-Konfiguration
 
@@ -20,6 +21,8 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 - **Zeilenenden**: `.gitattributes` erzwingt LF für `gradlew` und zentrale Projekttextdateien, damit der Unix-Wrapper in Linux-basierten CI-Umgebungen ausführbar bleibt.
 
 ## GitHub Actions CI/CD (Deployment)
+
+Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pull Requests, Pushes auf `codex/traewelling-api-2026` und manuell. Er führt Android-Unit-Tests und `assembleDebug` mit JDK 17, Android-SDK 34 und Build Tools 34.0.0 aus. Er benötigt keine Signierungssecrets und erstellt kein Release. Testberichte werden als Workflow-Artefakt gespeichert; den aktuellen Prüfstand beschreibt [Tests](./tests.md).
 
 Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.github/workflows/android.yml`).
 
@@ -35,3 +38,5 @@ Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.gi
 
 - [Setup](./setup.md)
 - [Config-Dateien](../konfiguration/config-dateien.md)
+- [Tests](./tests.md)
+- [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)

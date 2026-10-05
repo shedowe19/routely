@@ -35,6 +35,8 @@ Zusätzlich kann er TTS-Ankündigungen (Text-to-Speech) für die nächsten Halte
 4. Prüft ob Ziel erreicht (Zeit vergangen + kein weiterer Halt)
 5. Aktualisiert Notification und sendet Widget-Broadcast
 
+Stationsnamen und Stationsreferenzen kommen aus dem verschachtelten `station`-Objekt der Stopovers. Für Einstieg und Ziel nutzt der Service `matchesStopover`, damit wiederholte Halte an derselben Station nicht zusammenfallen. Zeitberechnungen verwenden `effectiveArrival` und `effectiveDeparture` (Echtzeit, sonst Planzeit); manuelle Check-in-Zeiten werden in die Echtzeitfelder übernommen. Diese Angaben versorgen auch Notification, TTS und Widget.
+
 ### TTS (Text-to-Speech)
 
 - Spricht Ankündigungen wenn `TTS_ENABLED` in Preferences
@@ -68,3 +70,5 @@ Broadcast an `TripWidgetProvider` mit:
 
 - [Check-in](./checkin.md)
 - [Architektur Überblick](../architektur/ueberblick.md)
+- [Datenmodell](../daten/datenmodell.md)
+- [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)

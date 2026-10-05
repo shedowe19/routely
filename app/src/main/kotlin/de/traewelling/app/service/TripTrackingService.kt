@@ -45,7 +45,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
-    private var lastAnnouncedStopId: Int? = null
+    private var lastAnnouncedStopId: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -156,39 +156,35 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
         val status = statusResult.getOrNull() ?: return
         val checkin = status.checkin ?: return
-val tripId = checkin.trip ?: return
+        val tripId = checkin.trip ?: return
 
         val stopoversResult = repo.getStopovers(tripId)
         if (stopoversResult.isFailure) return
 
         val stopovers = stopoversResult.getOrNull() ?: return
 
-val origin = checkin.origin
+        val origin = checkin.origin
         val destination = checkin.destination
 
-        val originIndex = stopovers.indexOfFirst {
-            it.id == origin?.id ||
-            (it.name == origin?.name && it.name != null) ||
-            (it.evaIdentifier == origin?.evaIdentifier && it.evaIdentifier != null)
-        }
-        val destIndex = stopovers.indexOfFirst {
-            it.id == destination?.id ||
-            (it.name == destination?.name && it.name != null) ||
-            (it.evaIdentifier == destination?.evaIdentifier && it.evaIdentifier != null)
-        }
+        val originIndex = stopovers.indexOfFirst { it.matchesStopover(origin) }
+        val destIndex = stopovers.indexOfFirst { it.matchesStopover(destination) }
 
         val validStopovers = if (originIndex != -1) {
-            val endIdx = if (destIndex != -1) destIndex + 1 else stopovers.size
+            val endIdx = if (destIndex >= originIndex) destIndex + 1 else stopovers.size
             stopovers.subList(originIndex, endIdx)
         } else {
             stopovers
         }
 
-        // Enrich stopovers with manual times
+        // Merge manual times while keeping each visit's stopover identity.
         val enrichedStops = validStopovers.map { stop ->
-            when (stop.id) {
-                origin?.id -> if (origin != null) origin.copy(departureReal = checkin.manualDeparture ?: origin.departureReal) else stop
-                destination?.id -> if (destination != null) destination.copy(arrivalReal = checkin.manualArrival ?: destination.arrivalReal) else stop
+            when {
+                stop.matchesStopover(origin) -> stop.copy(
+                    departureReal = checkin.manualDeparture ?: origin?.departureReal ?: stop.departureReal
+                )
+                stop.matchesStopover(destination) -> stop.copy(
+                    arrivalReal = checkin.manualArrival ?: destination?.arrivalReal ?: stop.arrivalReal
+                )
                 else -> stop
             }
         }
@@ -197,8 +193,8 @@ val origin = checkin.origin
 
         // Find next stop
         val nextStop = enrichedStops.firstOrNull { stop ->
-            val arrTimeStr = stop.arrivalReal ?: stop.arrivalPlanned ?: stop.arrival
-            val depTimeStr = stop.departureReal ?: stop.departurePlanned ?: stop.departure
+            val arrTimeStr = stop.effectiveArrival
+            val depTimeStr = stop.effectiveDeparture
             val timeStr = arrTimeStr ?: depTimeStr ?: ""
 
             if (timeStr.isNotBlank()) {
@@ -214,7 +210,7 @@ val origin = checkin.origin
         }
 
         // Check if destination is reached
-        val destTimeStr = destination?.arrivalReal ?: destination?.arrivalPlanned ?: destination?.arrival ?: ""
+        val destTimeStr = checkin.manualArrival ?: destination?.effectiveArrival ?: ""
         var isDestinationReached = false
         if (destTimeStr.isNotBlank()) {
             try {
@@ -231,13 +227,13 @@ val origin = checkin.origin
         }
 
         val lineName = checkin.lineName ?: "Zug"
-        val nextStopName = nextStop?.name ?: destination?.name ?: "Unbekannt"
+        val nextStopName = nextStop?.stationName ?: destination?.stationName ?: "Unbekannt"
         val platform = nextStop?.arrivalPlatformReal ?: nextStop?.arrivalPlatformPlanned ?: nextStop?.platform
         val platformText = if (!platform.isNullOrBlank()) " • Gl. $platform" else ""
 
-        val destName = destination?.name ?: ""
+        val destName = destination?.stationName ?: ""
 
-        val timeStr = nextStop?.arrivalReal ?: nextStop?.arrivalPlanned ?: nextStop?.arrival ?: ""
+        val timeStr = nextStop?.effectiveArrival ?: nextStop?.effectiveDeparture ?: ""
         val localTime = if (timeStr.isNotBlank()) {
             try {
                  ZonedDateTime.parse(timeStr).withZoneSameInstant(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
@@ -251,7 +247,9 @@ val origin = checkin.origin
 
         // Handle TTS Announcement
         if (isTtsInitialized && prefs.getTtsEnabled() && nextStop != null) {
-            val stopId = nextStop.id
+            val stopId = nextStop.uuid ?: nextStop.stationId?.let { stationId ->
+                "$stationId:${nextStop.arrivalPlanned}:${nextStop.departurePlanned}"
+            }
             if (stopId != null && stopId != lastAnnouncedStopId) {
                 if (timeStr.isNotBlank()) {
                     try {
@@ -274,10 +272,10 @@ val origin = checkin.origin
                             }
 
                             val platformAnnouncement = if (!platform.isNullOrBlank()) " auf Gleis $platform" else ""
-                            val isDestination = nextStop.id == destination?.id
+                            val isDestination = nextStop.matchesStopover(destination)
                             val originStop = checkin.origin
                             val isOrigin = if (originStop != null) {
-                                nextStop.id == originStop.id || (nextStop.name == originStop.name && originStop.name != null)
+                                nextStop.matchesStopover(originStop)
                             } else {
                                 lastAnnouncedStopId == null
                             }
@@ -324,7 +322,7 @@ val origin = checkin.origin
 
     private fun calculateDelay(stop: de.traewelling.app.data.model.StopStation?): Int? {
         if (stop == null) return null
-        val plannedStr = stop.arrivalPlanned ?: stop.arrival ?: return null
+        val plannedStr = stop.arrivalPlanned ?: return null
         val realStr = stop.arrivalReal ?: return null
 
         try {

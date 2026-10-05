@@ -27,6 +27,7 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 - **Station Search**: `GET /api/v1/trains/station/autocomplete/{query}` – Suche von Haltestellen per Text.
 - **Nearby Stations**: `GET /api/v1/stations` (mit Bounding-Box über `min_lat`, `max_lat`, `min_lon`, `max_lon`) oder `GET /api/v1/trains/station/nearby` – Haltestellen in der Nähe. _Hinweis: `nearby` liefert immer nur einen Bahnhof, `stations` ist für Umkreissuche._
 - **Departures**: `GET /api/v1/station/{id}/departures` – Abfahrtsmonitor. Benötigt die numerische ID, nicht den Namen!
+  Die ID ist die interne Träwelling-Station-ID, keine IBNR oder Stopover-ID.
 
 **3. Fahrtdetails & Haltestellen (Trip-Infos)**
 
@@ -50,6 +51,12 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 
 Token Exchange und Refreshing laufen über den `OAuthApiService` in `TraewellingApiService.kt` (`POST /oauth/token`).
 
+## Kompatibilitätsstand
+
+Am 05.10.2026 wurden alle vorhandenen Retrofit-Routen und ihre konsumierten Antwortfelder gegen den Träwelling-API-Changelog sowie die Routen und Ressourcen von Upstream `develop` geprüft. Die vorhandenen Pfade bleiben gültig; die notwendigen Änderungen betreffen insbesondere Stationsdaten in Stopovers, Zeitfelder, Operator-IDs und Check-in-Konflikte.
+
+Die [Kompatibilitätsprüfung](./traewelling-kompatibilitaet.md) dokumentiert den geprüften Upstream-Commit, die Migration und bewusst ungenutzte neue APIs. Neue optionale Endpunkte ersetzen nicht automatisch die bestehenden App-Funktionen.
+
 ## Logging und Tokens
 
 `RetrofitClient` setzt den Bearer-Token als `Authorization`-Header. Netzwerk-Logging ist im Release-Build deaktiviert und im Debug-Build auf `BASIC` begrenzt; `Authorization` wird redaktiert.
@@ -58,5 +65,6 @@ Token Exchange und Refreshing laufen über den `OAuthApiService` in `Traewelling
 
 - [Interne Schnittstellen](./interne-schnittstellen.md)
 - [Externe Schnittstellen](./externe-schnittstellen.md)
+- [Träwelling-API-Kompatibilität](./traewelling-kompatibilitaet.md)
 - [Check-in](../module/checkin.md)
 - [Secrets und Sicherheit](../konfiguration/secrets-und-sicherheit.md)

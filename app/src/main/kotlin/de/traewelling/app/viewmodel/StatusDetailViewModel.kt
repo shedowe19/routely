@@ -34,6 +34,7 @@ data class StatusDetailUiState(
     val editDeparture: String = "",
     val editArrival: String = "",
     val editDestinationId: Int? = null,
+    val editDestinationStop: StopStation? = null,
     val editVisibility: Int = 0
 )
 
@@ -84,8 +85,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             .onSuccess { stops ->
                                 val enrichedStops = enrichStops(stops, origin, destination)
                                 
-                                val finalOrigin = enrichedStops.find { it.id == origin?.id } ?: origin
-                                val finalDestination = enrichedStops.find { it.id == destination?.id } ?: destination
+                                val finalOrigin = enrichedStops.find { it.matchesStopover(origin) } ?: origin
+                                val finalDestination = enrichedStops.find { it.matchesStopover(destination) } ?: destination
                                 val finalStatus = enrichedStatus.copy(
                                     checkin = enrichedCheckin.copy(
                                         origin = finalOrigin,
@@ -159,8 +160,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 repo.getStopovers(tripId).onSuccess { stops ->
                     val enrichedStops = enrichStops(stops, origin, destination)
 
-                    val finalOrigin = enrichedStops.find { it.id == origin?.id } ?: origin
-                    val finalDestination = enrichedStops.find { it.id == destination?.id } ?: destination
+                    val finalOrigin = enrichedStops.find { it.matchesStopover(origin) } ?: origin
+                    val finalDestination = enrichedStops.find { it.matchesStopover(destination) } ?: destination
                     val finalStatus = enrichedStatus.copy(
                         checkin = enrichedCheckin.copy(
                             origin = finalOrigin,
@@ -182,9 +183,13 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     private fun enrichStops(stops: List<StopStation>, origin: StopStation?, destination: StopStation?): List<StopStation> {
         val mappedStops = stops.map { stop ->
-            when (stop.id) {
-                origin?.id -> if (origin?.id != null) origin else stop
-                destination?.id -> if (destination?.id != null) destination else stop
+            when {
+                stop.matchesStopover(origin) -> stop.copy(
+                    departureReal = origin?.departureReal ?: stop.departureReal
+                )
+                stop.matchesStopover(destination) -> stop.copy(
+                    arrivalReal = destination?.arrivalReal ?: stop.arrivalReal
+                )
                 else -> stop
             }
         }
@@ -203,20 +208,20 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             var delayUpdated = false
 
             val plannedArrivalZdt = try { stop.arrivalPlanned?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed arrivalPlanned time for stop ${stop.id}: ${stop.arrivalPlanned}", e)
+                Log.w("StatusDetailViewModel", "Malformed arrivalPlanned time for stop ${stop.uuid ?: stop.stationId}: ${stop.arrivalPlanned}", e)
                 null
             }
             val realArrivalZdt = try { stop.arrivalReal?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed arrivalReal time for stop ${stop.id}: ${stop.arrivalReal}", e)
+                Log.w("StatusDetailViewModel", "Malformed arrivalReal time for stop ${stop.uuid ?: stop.stationId}: ${stop.arrivalReal}", e)
                 null
             }
 
             val plannedDepartureZdt = try { stop.departurePlanned?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed departurePlanned time for stop ${stop.id}: ${stop.departurePlanned}", e)
+                Log.w("StatusDetailViewModel", "Malformed departurePlanned time for stop ${stop.uuid ?: stop.stationId}: ${stop.departurePlanned}", e)
                 null
             }
             val realDepartureZdt = try { stop.departureReal?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed departureReal time for stop ${stop.id}: ${stop.departureReal}", e)
+                Log.w("StatusDetailViewModel", "Malformed departureReal time for stop ${stop.uuid ?: stop.stationId}: ${stop.departureReal}", e)
                 null
             }
 
@@ -330,7 +335,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 editBody = status.body ?: "",
                 editDeparture = status.checkin?.origin?.departureReal ?: status.checkin?.origin?.departurePlanned ?: "",
                 editArrival = status.checkin?.destination?.arrivalReal ?: status.checkin?.destination?.arrivalPlanned ?: "",
-                editDestinationId = status.checkin?.destination?.id,
+                editDestinationId = status.checkin?.destination?.stationId,
+                editDestinationStop = status.checkin?.destination,
                 editVisibility = status.visibility ?: 0
             )
         }
@@ -352,8 +358,14 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         _uiState.update { it.copy(editArrival = time) }
     }
 
-    fun updateEditDestination(stationId: Int) {
-        _uiState.update { it.copy(editDestinationId = stationId) }
+    fun updateEditDestination(stop: StopStation) {
+        _uiState.update {
+            it.copy(
+                editDestinationId = stop.stationId,
+                editDestinationStop = stop,
+                editArrival = stop.effectiveArrival ?: ""
+            )
+        }
     }
 
     fun updateEditVisibility(visibility: Int) {
@@ -363,14 +375,25 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     fun saveStatusEdit() {
         val statusId = currentStatusId ?: return
         val state = _uiState.value
-        
+        val destination = state.editDestinationStop
+        val originalDestination = state.status?.checkin?.destination
+        val destinationChanged = destination != originalDestination &&
+            destination?.matchesStopover(originalDestination) != true
+        if (destinationChanged && (destination?.stationId == null || destination?.arrivalPlanned.isNullOrBlank())) {
+            _uiState.update {
+                it.copy(error = "Für das neue Ziel fehlen eine gültige Stations-ID oder die geplante Ankunftszeit.")
+            }
+            return
+        }
+
         viewModelScope.launch {
             _uiState.update { it.copy(isUpdating = true) }
             
             val request = de.traewelling.app.data.model.UpdateStatusRequest(
                 body = state.editBody,
                 visibility = state.editVisibility,
-                destination = state.editDestinationId,
+                destination = if (destinationChanged) destination?.stationId else null,
+                destinationArrivalPlanned = if (destinationChanged) destination?.arrivalPlanned else null,
                 departure = state.editDeparture,
                 arrival = state.editArrival
             )

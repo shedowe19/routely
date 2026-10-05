@@ -1,0 +1,37 @@
+{
+  "data": {
+    "id": 530,
+    "uuid": "baec4235-3cb6-4d3c-8f76-d17081c22e53",
+    "tripId": "test-provider:re1:2026-10-05",
+    "lineName": "RE 1",
+    "category": "regional",
+    "operator": {
+      "id": "81379d66-6f6a-462b-a0f0-68208b2cf9f1",
+      "uuid": "81379d66-6f6a-462b-a0f0-68208b2cf9f1",
+      "name": "Test Regionalbahn"
+    },
+    "stopovers": [
+      {
+        "id": 91001,
+        "uuid": "5f4a5ae8-0bd4-42a8-b1c3-8b53494343ad",
+        "station": {"id": 80, "name": "Schwerin Hbf"},
+        "departurePlanned": "2026-10-05T08:54:00Z",
+        "departureReal": "2026-10-05T08:57:00Z"
+      },
+      {
+        "id": 91002,
+        "uuid": "2d9f3c6e-418c-4080-8b35-152922a90842",
+        "station": {"id": 82, "name": "Schwerin Mitte"},
+        "arrivalPlanned": "2026-10-05T08:56:00Z",
+        "departurePlanned": "2026-10-05T08:57:00Z"
+      },
+      {
+        "id": 91004,
+        "uuid": "230d0be6-e2c6-49d7-b173-65dc173b70e6",
+        "station": {"id": 81, "name": "Hamburg Hbf"},
+        "arrivalPlanned": "2026-10-05T10:26:00Z",
+        "arrivalReal": null
+      }
+    ]
+  }
+}

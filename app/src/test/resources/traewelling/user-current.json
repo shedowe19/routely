@@ -1,0 +1,19 @@
+{
+  "data": {
+    "id": 42,
+    "uuid": "78b1027f-0710-42b1-a8f4-5909f1b75d6f",
+    "username": "test-traveller",
+    "displayName": "Test Traveller",
+    "profilePicture": "https://example.com/avatar.png",
+    "bio": "Mit der Bahn unterwegs",
+    "privateProfile": false,
+    "totalDistance": 116000,
+    "totalDuration": 92,
+    "points": 17,
+    "pointsEnabled": true,
+    "mastodon": {
+      "server": "example.social",
+      "user_id": "12345"
+    }
+  }
+}

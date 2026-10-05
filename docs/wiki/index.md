@@ -39,6 +39,7 @@ Code ist die Quelle der Wahrheit. Das Wiki erklärt die Quelle der Wahrheit.
 - [API Überblick](./api/ueberblick.md)
 - [Interne Schnittstellen](./api/interne-schnittstellen.md)
 - [Externe Schnittstellen](./api/externe-schnittstellen.md)
+- [Träwelling-API-Kompatibilität](./api/traewelling-kompatibilitaet.md)
 
 ## Daten
 

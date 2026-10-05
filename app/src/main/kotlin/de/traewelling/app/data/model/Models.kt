@@ -1,6 +1,8 @@
 package de.traewelling.app.data.model
 
 import com.google.gson.annotations.SerializedName
+import java.time.Duration
+import java.time.Instant
 
 // ─── Auth ────────────────────────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ data class User(
     val blocked: Boolean?,
     @SerializedName("userInvisibleToMe") val userInvisibleToMe: Boolean?,
     @SerializedName("pointsEnabled") val pointsEnabled: Boolean?,
+    // Full UserResource still includes this; LightUserResource uses mastodon instead.
     @SerializedName("mastodonUrl") val mastodonUrl: String?,
     val mastodon: MastodonInfo?
 )
@@ -104,6 +107,7 @@ data class CheckinInfo(
     val destination: StopStation?,
     val operator: StopOperator?,
     val trip: Int?,
+    val tripUuid: String?,
     val number: String?,
     @SerializedName("routeColor") val routeColor: String?,
     @SerializedName("routeTextColor") val routeTextColor: String?,
@@ -113,44 +117,79 @@ data class CheckinInfo(
 )
 
 data class StopOperator(
-    val id: Int?,
+    // Gson accepts both legacy numeric IDs and the new UUID IDs as strings.
+    val id: String?,
     val name: String?,
-    val uuid: String?
+    val uuid: String?,
+    val identifiers: List<StationIdentifier>? = null
 )
 
-// ─── Flat stop / station object ───────────────────────────────────────────────
-// Used in: checkin.origin/destination, trip stopovers, and autocomplete
+// ─── Stations and stopovers ───────────────────────────────────────────────────
+
+data class StationIdentifier(
+    val type: String?,
+    val identifier: String?,
+    val name: String? = null,
+    val origin: String? = null
+)
 
 data class TrainStation(
-    val id: Int?,
-    val ibnr: Long?,
-    val name: String?,
-    @SerializedName("rilIdentifier") val rilIdentifier: String?,
-    val latitude: Double?,
-    val longitude: Double?
-)
+    val id: Int? = null,
+    val uuid: String? = null,
+    val name: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val identifiers: List<StationIdentifier>? = null
+) {
+    fun identifier(type: String): String? =
+        identifiers?.firstOrNull { it.type == type }?.identifier
 
-/** Flat stop with schedule times — used in checkin origin/destination AND as trip stopover */
+    val ibnr: Long? get() = identifier("de_db_ibnr")?.toLongOrNull()
+    val rilIdentifier: String? get() = identifier("de_db_ril100")
+}
+
+/** A stopover has its own identity; station identity is always read from station. */
 data class StopStation(
-    val id: Int?,
-    val name: String?,
-    @SerializedName("rilIdentifier")    val rilIdentifier: String?,
-    @SerializedName("evaIdentifier")    val evaIdentifier: String?,
-    val arrival: String?,
-    @SerializedName("arrivalPlanned")   val arrivalPlanned: String?,
-    @SerializedName("arrivalReal")      val arrivalReal: String?,
-    val departure: String?,
-    @SerializedName("departurePlanned") val departurePlanned: String?,
-    @SerializedName("departureReal")    val departureReal: String?,
-    val platform: String?,
-    @SerializedName("arrivalPlatformPlanned")   val arrivalPlatformPlanned: String?,
-    @SerializedName("arrivalPlatformReal")      val arrivalPlatformReal: String?,
-    @SerializedName("departurePlatformPlanned") val departurePlatformPlanned: String?,
-    @SerializedName("departurePlatformReal")    val departurePlatformReal: String?,
-    val cancelled: Boolean?,
-    @SerializedName("isArrivalDelayed")   val isArrivalDelayed: Boolean?,
-    @SerializedName("isDepartureDelayed") val isDepartureDelayed: Boolean?
-)
+    val id: Int? = null,
+    val uuid: String? = null,
+    val station: TrainStation? = null,
+    // Old cached statuses can still display a name; this is never used as station identity.
+    @SerializedName("name") private val legacyName: String? = null,
+    @SerializedName("arrivalPlanned")   val arrivalPlanned: String? = null,
+    @SerializedName("arrivalReal")      val arrivalReal: String? = null,
+    @SerializedName("departurePlanned") val departurePlanned: String? = null,
+    @SerializedName("departureReal")    val departureReal: String? = null,
+    val platform: String? = null,
+    @SerializedName("arrivalPlatformPlanned")   val arrivalPlatformPlanned: String? = null,
+    @SerializedName("arrivalPlatformReal")      val arrivalPlatformReal: String? = null,
+    @SerializedName("departurePlatformPlanned") val departurePlatformPlanned: String? = null,
+    @SerializedName("departurePlatformReal")    val departurePlatformReal: String? = null,
+    val cancelled: Boolean? = null,
+    @SerializedName("isArrivalDelayed")   val isArrivalDelayed: Boolean? = null,
+    @SerializedName("isDepartureDelayed") val isDepartureDelayed: Boolean? = null
+) {
+    val stationId: Int? get() = station?.id
+    val stationName: String? get() = station?.name ?: legacyName
+    val effectiveArrival: String? get() = arrivalReal ?: arrivalPlanned
+    val effectiveDeparture: String? get() = departureReal ?: departurePlanned
+
+    fun stationIdentifier(type: String): String? = station?.identifier(type)
+
+    /** Distinguish repeated visits to the same station on a circular route. */
+    fun matchesStopover(other: StopStation?): Boolean {
+        if (other == null) return false
+        if (uuid != null && other.uuid != null) return uuid == other.uuid
+        if (stationId == null || stationId != other.stationId) return false
+        val departureMatches = departurePlanned != null && other.departurePlanned != null &&
+            sameInstant(departurePlanned, other.departurePlanned)
+        val arrivalMatches = arrivalPlanned != null && other.arrivalPlanned != null &&
+            sameInstant(arrivalPlanned, other.arrivalPlanned)
+        return departureMatches || arrivalMatches
+    }
+}
+
+private fun sameInstant(first: String, second: String): Boolean =
+    first == second || runCatching { Instant.parse(first) == Instant.parse(second) }.getOrDefault(false)
 
 // ─── User Search ──────────────────────────────────────────────────────────────
 
@@ -176,26 +215,26 @@ data class DepartureTrip(
     val direction: String?,
     @SerializedName("plannedWhen") val plannedWhen: String?,
     @SerializedName("when")        val realWhen: String?,
-    val delay: Int?,               // minutes
     val platform: String?,
     @SerializedName("plannedPlatform") val plannedPlatform: String?,
-    val cancelled: Boolean?
-)
+    val cancelled: Boolean?,
+    val station: TrainStation? = null
+) {
+    val delayMinutes: Int? get() = runCatching {
+        if (realWhen == null || plannedWhen == null) return null
+        Duration.between(Instant.parse(plannedWhen), Instant.parse(realWhen)).toMinutes().toInt()
+    }.getOrNull()
+}
 
 data class HafasLine(
     val name: String?,
     @SerializedName("fahrtNr") val fahrtNr: String?,
     val product: String?,          // "nationalExpress", "regional", "suburban", "bus", etc.
-    val mode: String?,
-    val operator: HafasOperator?
-)
-
-data class HafasOperator(
-    val name: String?
+    val mode: String?
 )
 
 // ─── Trip Details (GET /api/v1/trains/trip) ───────────────────────────────────
-// Stopovers are flat StopStation objects (no nested "stop" object!)
+// Stopovers embed station details in "station".
 
 data class TripResponse(
     val data: TripDetails?
@@ -205,8 +244,10 @@ data class TripDetails(
     val id: Int?,
     val lineName: String?,
     val category: String?,
-    /** Each item is a flat StopStation — id and name are at top level */
-    val stopovers: List<StopStation>?
+    val stopovers: List<StopStation>?,
+    val uuid: String? = null,
+    val tripId: String? = null,
+    val operator: StopOperator? = null
 )
 
 // ─── Check-in Request ─────────────────────────────────────────────────────────
@@ -238,6 +279,7 @@ data class UpdateStatusRequest(
     @SerializedName("visibility")      val visibility: Int? = null,
     @SerializedName("business")        val business: Int? = null,
     @SerializedName("destinationId")   val destination: Int? = null,
+    @SerializedName("destinationArrivalPlanned") val destinationArrivalPlanned: String? = null,
     @SerializedName("manualDeparture") val departure: String? = null,
     @SerializedName("manualArrival")   val arrival: String? = null
 )
@@ -247,6 +289,20 @@ data class CheckInResult(
     val points: CheckInPoints?
 )
 
+data class CheckInConflictResponse(val data: CheckInConflictData?)
+
+data class CheckInConflictData(val conflicts: List<Status>?)
+
+class CheckInConflictException(val conflicts: List<Status>) : IllegalStateException(
+    if (conflicts.isEmpty()) "Diese Fahrt überschneidet sich mit einem bestehenden Check-in."
+    else "Diese Fahrt überschneidet sich mit: " + conflicts.joinToString { status ->
+        val line = status.checkin?.lineName ?: "Fahrt"
+        val destination = status.checkin?.destination?.stationName
+        if (destination.isNullOrBlank()) "$line (Status ${status.id})"
+        else "$line nach $destination (Status ${status.id})"
+    }
+)
+
 data class CheckInPoints(
     val points: Int?,
     val calculation: PointsCalculation?
@@ -254,7 +310,7 @@ data class CheckInPoints(
 
 data class PointsCalculation(
     val base: Int?,
-    val bonus: Int?,
+    val reason: Int?,
     val distance: Int?,
     val factor: Double?
 )
@@ -299,7 +355,7 @@ data class StopoversResponse(
 /**
  * Deduplicates a list of stops. The API sometimes returns duplicate consecutive stops
  * (e.g. "Nettetal Kaldenkirchen Bf" and "Kaldenkirchen" with the same times).
- * This function merges consecutive stops with matching planned times, preferring the
+ * This function merges consecutive visits to the same station with matching planned times, preferring the
  * entry that has platform information or a shorter name.
  */
 fun List<StopStation>.deduplicate(): List<StopStation> {
@@ -314,7 +370,10 @@ fun List<StopStation>.deduplicate(): List<StopStation> {
         val arrivalMatch = last?.arrivalPlanned == stop.arrivalPlanned
         val departureMatch = last?.departurePlanned == stop.departurePlanned
 
-        if (last != null && hasTimes && arrivalMatch && departureMatch) {
+        val sameStation = stop.stationId != null && last?.stationId == stop.stationId
+        val compatibleIdentity = stop.uuid == null || last?.uuid == null || stop.uuid == last.uuid
+
+        if (last != null && sameStation && compatibleIdentity && hasTimes && arrivalMatch && departureMatch) {
             val lastHasPlatform = last.platform != null || last.arrivalPlatformPlanned != null || last.departurePlatformPlanned != null
             val stopHasPlatform = stop.platform != null || stop.arrivalPlatformPlanned != null || stop.departurePlatformPlanned != null
 
@@ -323,8 +382,8 @@ fun List<StopStation>.deduplicate(): List<StopStation> {
                 result[result.size - 1] = stop
             } else if (lastHasPlatform == stopHasPlatform) {
                 // If both or neither have platform, prefer the shorter name
-                val lastNameLen = last.name?.length ?: Int.MAX_VALUE
-                val stopNameLen = stop.name?.length ?: Int.MAX_VALUE
+                val lastNameLen = last.stationName?.length ?: Int.MAX_VALUE
+                val stopNameLen = stop.stationName?.length ?: Int.MAX_VALUE
                 if (stopNameLen < lastNameLen) {
                     result[result.size - 1] = stop
                 }

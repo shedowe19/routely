@@ -193,13 +193,13 @@ fun StatusCard(
                             // Stations
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    checkin.origin?.name ?: "–",
+                                    checkin.origin?.stationName ?: "–",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Spacer(Modifier.height(12.dp))
                                 Text(
-                                    checkin.destination?.name ?: "–",
+                                    checkin.destination?.stationName ?: "–",
                                     style = MaterialTheme.typography.bodyMedium,
                                     fontWeight = FontWeight.SemiBold
                                 )

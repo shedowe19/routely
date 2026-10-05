@@ -25,17 +25,30 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 2. **Abfahrtsauswahl:**
    - Sobald ein Startbahnhof gewählt ist, werden die Abfahrten geladen (`GET /api/v1/station/{id}/departures`).
    - Die `id` des Bahnhofs (numerisch) muss verwendet werden.
+   - Liefert die ausgewählte Abfahrt ein eigenes `station`-Objekt, ist diese tatsächliche Abfahrtsstation für den Einstieg maßgeblich; sie kann vom zuvor gesuchten Bahnhof abweichen.
 
 3. **Zielauswahl (Trip Detail):**
    - Wählt der Nutzer eine Abfahrt, muss der Zielbahnhof bestimmt werden.
    - Dazu wird die gesamte Route der Fahrt geladen (`GET /api/v1/trains/trip` mit `hafasTripId` und `lineName`).
    - Die App zeigt die Liste der kommenden Haltestellen an.
+   - Stationsdaten stammen aus `stopover.station`. Start und Ziel nutzen `stationId`, Namen nutzen `stationName`, Kennungen nutzen `stationIdentifier(type)`.
+   - Konkrete Halte werden über `matchesStopover` unterschieden, damit mehrere Besuche desselben Bahnhofs auf einer Fahrt nicht verwechselt werden.
 
 4. **Der eigentliche Check-in:**
    - Wenn Start, Fahrt und Ziel bekannt sind, wird der Check-in durchgeführt.
    - `POST /api/v1/trains/checkin` mit `CheckInRequest` (Start, Ziel, Fahrt-ID, Reisegrund, etc.).
    - Der Reisegrund wird über das API-Feld `business` gesendet. Die App verwendet `TravelReason.PRIVATE` (`0`) als Standard und erlaubt die Auswahl von `BUSINESS` (`1`) und `COMMUTE` (`2`).
    - Manuelle Verspätungs-Overrides (`manualDeparture`, `manualArrival`), die die API zurückgibt, müssen direkt ins Datenmodell gemerged werden, um UI-Flackern zu vermeiden.
+
+Abfahrten zeigen `direction` als Fahrtrichtung und nutzen `delayMinutes`, berechnet aus `when - plannedWhen`. Bei fehlender Echtzeit wird die Planzeit angezeigt. Ein Betreiber wird aus `TripDetails.operator` beziehungsweise `CheckinInfo.operator` gelesen; das veraltete `line.operator` wird nicht vorausgesetzt.
+
+Der Check-in überträgt weiterhin numerische interne Station-IDs für `start` und `destination` und den Provider-Identifier für `tripId`. Eine Stopover-ID, IBNR oder Trip-UUID darf diese Werte nicht ersetzen.
+
+## Zeitfelder und Konflikte
+
+Für einen Halt gelten `effectiveDeparture = departureReal ?: departurePlanned` und `effectiveArrival = arrivalReal ?: arrivalPlanned`. Die Legacy-Felder `departure` und `arrival` sind keine Datenquelle mehr.
+
+Ein erfolgreicher Check-in enthält `data.status` und `data.points`. Bei HTTP 409 liest das Repository `data.conflicts`, erzeugt eine `CheckInConflictException` und nennt die betroffenen Linien, Ziele und Status-IDs. Die auslaufenden Felder `message.status_id` und `message.lineName` werden nicht verwendet. Eine leere Konfliktliste führt zu einer allgemeinen Überschneidungsmeldung.
 
 ## Reisegrund
 
@@ -68,3 +81,4 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 - [API Überblick](../api/ueberblick.md)
 - [Externe Schnittstellen](../api/externe-schnittstellen.md)
 - [Datenmodell](../daten/datenmodell.md)
+- [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
