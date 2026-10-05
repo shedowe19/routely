@@ -28,11 +28,30 @@ Dokumentiert, wie die App getestet wird.
 
 ## Ergebnis der Migration vom 05.10.2026
 
-GitHub Actions hat am 05.10.2026 für Commit `4186a4e69850840556980109c6f4696d5e557cbe` alle 28 Unit-Tests und den vollständigen Android-Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). Der Prüfstand umfasst 27 neue Modelltests und den vorhandenen Retrofit-Endpunkttest. Die JUnit- und HTML-Berichte sind im Workflow-Artefakt gespeichert. Ein authentifizierter Live-Test gegen eine Träwelling-Serverinstanz ist damit nicht abgedeckt.
+GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56c1cfa4` alle 28 Unit-Tests und den vollständigen Android-Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). Der Prüfstand umfasst 27 neue Modelltests und den vorhandenen Retrofit-Endpunkttest. Die JUnit- und HTML-Berichte sind im Workflow-Artefakt gespeichert.
+
+## Authentifizierte Live-Prüfung vom 05.10.2026
+
+Zusätzlich wurden 16 lesende Anfragen gegen `https://traewelling.de` durchgeführt. Alle lieferten HTTP 200; die geprüften Antwortstrukturen entsprachen dem erwarteten Vertrag. Die folgenden Pfade haben jeweils das Präfix `/api/v1/`:
+
+| Bereich | Geprüfte GET-Endpunkte |
+| --- | --- |
+| Nutzer | `auth/user`, `user/{username}`, `user/{username}/statuses`, `user/search/{query}` |
+| Feeds und Statistik | `dashboard`, `statuses`, `statistics` |
+| Benachrichtigungen | `notifications`, `notifications/unread/count` |
+| Stationssuche | `trains/station/autocomplete/{query}`, `trains/station/nearby`, `stations` mit Bounding-Box |
+| Abfahrt und Fahrt | `station/{id}/departures`, `trains/trip` |
+| Status und Halte | `status/{id}?withIdentifiers=true`, `stopovers/{tripId}` |
+
+Bestätigt wurden insbesondere verschachtelte Stationsobjekte bei Abfahrten und Fahrthalte mit eigenen UUIDs, Plan-/Echtzeitfelder sowie die Map-Struktur der Stopovers-Antwort. Die UUIDs von Einstieg und Ziel des Status stimmten mit den entsprechenden Halten aus `stopovers` überein.
+
+Die Produktion lieferte weiterhin einige deprecated Felder wie `train`, `userDetails`, `delay` und `stop`; Operatoren enthielten eine numerische `id` und eine `uuid` als String. Der Produktionsstand unterscheidet sich somit vom geprüften Upstream-`develop`. Routely verwendet weiterhin die neuen Felder und berücksichtigt beide Operator-ID-Formate.
+
+Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konfliktantworten (201/409) und Statusänderungen per PUT wurden über Vertrag und Unit-Test-Fixtures geprüft, nicht durch schreibende Live-Aufrufe. Es wurden keine Daten erstellt, geändert oder gelöscht, keine Benachrichtigungen als gelesen markiert und kein Logout ausgelöst. Der Token blieb im Prozessspeicher; Zugangsdaten und persönliche Antwortdaten wurden nicht ins Repository oder Wiki übernommen.
 
 ## Offene Fragen
 
-- TODO: Festlegen, ob Integrationstests gegen die Träwelling-API eingerichtet werden sollen und wie lokale Test-Tokens sicher eingespeist werden.
+- TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.
 
 ## Verwandte Seiten
 

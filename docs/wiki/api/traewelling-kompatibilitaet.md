@@ -51,7 +51,7 @@ Alle folgenden Pfade haben das Präfix `/api/v1/`; OAuth verwendet `/oauth/token
 
 | Bereich | Befund im Ausgangsstand | Aktueller Zugriff |
 | --- | --- | --- |
-| Status | `checkin` und `user` waren bereits korrekt | Keine Abhängigkeit von den am 27.09.2026 entfernten `train` und `userDetails` |
+| Status | `checkin` und `user` waren bereits korrekt | Keine Abhängigkeit von den laut Changelog am 27.09.2026 in Upstream entfernten `train` und `userDetails`; die am 05.10.2026 geprüfte Produktion lieferte beide noch |
 | Mastodon | Gleichnamige Felder in verschiedenen Ressourcen müssen getrennt beurteilt werden | `LightUserResource.mastodonUrl` wurde upstream entfernt und wird vom Status-Kurzmodell nicht benutzt. Das vollständige `User`-/Auth-Modell darf das weiterhin gültige `mastodonUrl` behalten; Light-User-Antworten unterstützen `mastodon.server` |
 | Stationkennungen | Alte `ibnr`, `rilIdentifier`, `evaIdentifier` wurden vorausgesetzt | `identifiers` mit `de_db_ibnr` und `de_db_ril100`; fehlende Kennungen sind erlaubt |
 | Haltstation | Flache Stopover-`id` und `name` wurden als Stationdaten verwendet | `stationId` aus `station.id`, `stationName` aus `station.name`, Kennungen aus `station.identifiers` |
@@ -106,8 +106,10 @@ Die im separaten Transitous-PR #35 hinzugefügten Kotlin-Dateien wurden zusätzl
 ## Validierung und offene Fragen
 
 - Automatisierte Regressionstests und der Debug-Build sind unter [Tests](../entwicklung/tests.md) und [Build](../entwicklung/build.md) beschrieben.
-- GitHub Actions hat am 05.10.2026 für Commit `4186a4e69850840556980109c6f4696d5e557cbe` alle 28 Unit-Tests und den vollständigen Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). JSON-Fixtures, Wiki-Dateilinks und `git diff --check` sind ebenfalls geprüft.
-- Kein authentifizierter Live-Test gegen das Produktionskonto wurde durchgeführt. Ein Quellcode- und Fixture-Abgleich beweist keine Verfügbarkeit oder Korrektheit einer laufenden Serverinstanz.
+- GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56c1cfa4` alle 28 Unit-Tests und den vollständigen Debug-Build erfolgreich ausgeführt (`./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`). JSON-Fixtures, Wiki-Dateilinks und `git diff --check` sind ebenfalls geprüft.
+- Am 05.10.2026 wurden außerdem 16 authentifizierte GET-Anfragen gegen `https://traewelling.de` geprüft: alle HTTP 200, alle geprüften Antwortstrukturen passend. Verschachtelte Stationen, Stopover-UUIDs, Plan-/Echtzeit und die Stopovers-Map wurden bestätigt; Einstieg und Ziel eines Status waren über dieselben UUIDs in der Haltliste auffindbar. Die vollständige Endpunktliste steht unter [Tests](../entwicklung/tests.md).
+- Die geprüfte Produktion lieferte noch deprecated Felder und numerische Operator-IDs neben UUIDs. Der Live-Server entspricht daher nicht vollständig dem geprüften `develop`-Stand; die Migration stützt sich weiterhin auf die neuen Felder.
+- Die Live-Prüfung war ausschließlich lesend. Check-in 201/409 und Status-PUT sind durch Quellvertrag und Fixtures abgesichert, wurden aber nicht live ausgelöst. Tokens und persönliche Antwortdaten wurden nicht ins Repository oder Wiki übernommen.
 - TODO: Regelmäßig neue Changelog-Einträge und den tatsächlich eingesetzten Upstream-Vertrag prüfen; dieser Audit ist eine Momentaufnahme.
 
 ## Verwandte Seiten
