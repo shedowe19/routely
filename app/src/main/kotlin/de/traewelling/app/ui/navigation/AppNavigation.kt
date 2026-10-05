@@ -39,9 +39,28 @@ fun MainNavigation(
     statusDetailViewModel: StatusDetailViewModel,
     userSearchViewModel: UserSearchViewModel,
     settingsViewModel: SettingsViewModel,
-    onRequestGpsPermission: () -> Unit
+    onRequestGpsPermission: () -> Unit,
+    onStartRideRecognition: () -> Unit,
+    onStopRideRecognition: () -> Unit,
+    onOpenLiveUpdateSettings: () -> Unit,
+    navigationRequest: NavigationRequest? = null,
+    onNavigationRequestConsumed: (Long) -> Unit = {}
 ) {
     val navController = rememberNavController()
+
+    LaunchedEffect(navigationRequest?.token) {
+        val request = navigationRequest ?: return@LaunchedEffect
+        val statusId = request.statusId
+        if (statusId != null && statusId > 0) {
+            navController.navigate("statusDetail/$statusId") { launchSingleTop = true }
+            onNavigationRequestConsumed(request.token)
+        } else if (request.showCheckIn) {
+            checkInViewModel.reset()
+            if (!navController.popBackStack(Screen.Main.route, false)) {
+                navController.navigate(Screen.Main.route) { launchSingleTop = true }
+            }
+        }
+    }
 
     NavHost(
         navController    = navController,
@@ -54,6 +73,13 @@ fun MainNavigation(
             val tabs = listOf(Screen.Feed, Screen.CheckIn, Screen.Notifications, Screen.Profile)
             val pagerState = rememberPagerState(pageCount = { tabs.size })
             val coroutineScope = rememberCoroutineScope()
+            LaunchedEffect(navigationRequest?.token) {
+                val request = navigationRequest
+                if (request?.showCheckIn == true) {
+                    pagerState.scrollToPage(1)
+                    onNavigationRequestConsumed(request.token)
+                }
+            }
 
             Scaffold(
                 bottomBar = {
@@ -107,7 +133,11 @@ fun MainNavigation(
                             )
                         }
                         Screen.CheckIn -> {
-                            CheckInScreen(checkInViewModel)
+                            CheckInScreen(
+                                checkInViewModel,
+                                onStartRideRecognition = onStartRideRecognition,
+                                onStopRideRecognition = onStopRideRecognition
+                            )
                         }
                         Screen.Notifications -> {
                             NotificationScreen(notificationViewModel)
@@ -163,7 +193,10 @@ fun MainNavigation(
             SettingsScreen(
                 viewModel = settingsViewModel,
                 onBack = { navController.popBackStack() },
-                onRequestGpsPermission = onRequestGpsPermission
+                onRequestGpsPermission = onRequestGpsPermission,
+                onStartRideRecognition = onStartRideRecognition,
+                onStopRideRecognition = onStopRideRecognition,
+                onOpenLiveUpdateSettings = onOpenLiveUpdateSettings
             )
         }
     }

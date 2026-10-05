@@ -8,7 +8,7 @@ Dokumentiert den Deployment-Prozess.
 
 - `.github/workflows/android.yml` baut Releases manuell per `workflow_dispatch`.
 - Eingaben sind `version_name` und `version_code`.
-- Der Workflow führt `./gradlew assembleRelease` aus, signiert die APK mit GitHub Secrets und erstellt anschließend ein GitHub Release.
+- Der Workflow installiert Android-SDK 36 und Build Tools 35.0.0, führt `./gradlew assembleRelease` mit den Versionseingaben aus, signiert die APK mit GitHub Secrets und erstellt anschließend ein GitHub Release. Der Signierschritt verlangt ebenfalls Build Tools 35.0.0.
 - Das veröffentlichte APK-Artefakt heißt `routely-v<version_name>.apk`.
 - Zusätzlich wird das APK als Workflow-Artifact `release-apk` hochgeladen.
 

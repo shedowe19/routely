@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Dieses Modul verwaltet das UI-Theme (Light, Dark, AMOLED), GPS-Stationsalarme und die Konfiguration der Sprachausgabe (TTS).
+Dieses Modul verwaltet Theme (Hell, Dunkel, AMOLED), GPS-Stationsalarme, Fahrterkennung, Fahrtänderungen, Live-Fortschritt, Sperrbildschirmdetails und Sprachausgabe (TTS).
 
 ## Kontext
 
@@ -34,11 +34,27 @@ Der Bereich `Stationsansagen mit GPS` bietet `GPS verwenden` und die Entfernung 
 
 Die Sprachausgabe benötigt weiterhin die separate Option `Haltestellen ansagen`. GPS-Tracking und TTS-Aktivierung sind getrennte Einstellungen. Das genaue Trigger- und Rückfallverhalten beschreibt [TripTracking](./trip-tracking.md).
 
+### Reisebegleitung
+
+- **Fahrten automatisch erkennen:** Standardmäßig aus. Aktivierung erfolgt über `MainActivity` mit präziser Freigabe und startet einen sichtbaren Location-Service; es werden mögliche Fahrten vorgeschlagen, keine automatischen Check-ins erstellt. Die UI erklärt die Standortübertragung an den konfigurierten Träwelling-Server. Technisch werden aus dem Standort abgeleitete Bounding-Box-Grenzen an `GET /api/v1/stations` gesendet.
+- **Änderungen erklären:** Standardmäßig an. Meldet bekannte Änderungen der eigenen aktiven Fahrt. Der zusätzliche Schalter für Änderungsansagen ist nur bei aktivierten Hinweisen bedienbar; tatsächliche Sprache setzt ebenfalls die globale TTS-Option voraus.
+- **Reisefortschritt anzeigen:** Standardmäßig an. Aktiviert den Haltefortschritt und auf geeigneten Android-Systemen die Anfrage nach Live-Update-Hervorhebung.
+- **Reisedetails auf dem Sperrbildschirm:** Standardmäßig an. Ausschalten verwendet eine allgemeine öffentliche Ersatzanzeige und verhindert die Live-Update-Hervorhebungsanfrage. Android-Einstellungen gelten zusätzlich.
+
+Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../konfiguration/preferences-manager.md).
+
+`Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Auf älteren Geräten wird die allgemeine App-Benachrichtigungseinstellung geöffnet; ohne passende System-Activity fällt der Aufruf auf die App-Detailseite zurück. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
+
 ## Abhängigkeiten
 
 - `PreferencesManager` (DataStore)
 - `android.speech.tts.TextToSpeech`
 - `TraewellingTheme` (für das reaktive Styling)
+
+## Offene Fragen
+
+- Fehlerbehandlung in PreferencesManager — offen — @dev
+- Integration von App-spezifischen Spracheinstellungen — offen — @dev
 
 ## Verwandte Seiten
 
@@ -46,8 +62,6 @@ Die Sprachausgabe benötigt weiterhin die separate Option `Haltestellen ansagen`
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [ADR Dark Mode & Settings](../entscheidungen/2026-04-29-dark-mode-und-settings.md)
 - [TripTracking](./trip-tracking.md)
-
-## Offene Fragen
-
-- Fehlerbehandlung in PreferencesManager — offen — @dev
-- Integration von App-spezifischen Spracheinstellungen — offen — @dev
+- [Fahrterkennung](./ride-recognition.md)
+- [Fahrtänderungen](./trip-changes.md)
+- [Reisefortschritt](./trip-progress.md)

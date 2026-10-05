@@ -6,54 +6,25 @@ Detaillierte Dokumentation des OAuth2-Authentifizierungsablaufs mit PKCE (Proof 
 
 ## Kontext
 
-Die App unterstützt OAuth2 mit PKCE für sichere Autorisierung. Der Ablauf ist in `OAuthHelper.kt` implementiert.
+PKCE- und OAuth-Hilfsfunktionen sind vorhanden. Der erreichbare `SetupScreen` nutzt ausschließlich die manuelle Token-Eingabe. Es gibt derzeit keinen angebundenen Browser-Login oder Code-Austausch; der deklarierte Callback allein bildet keinen vollständigen Ablauf.
 
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/util/OAuthHelper.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/AuthViewModel.kt`
-- `app/src/main/kotlin/de/traewelling/app/data/api/OAuthApiService.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/repository/AuthRepository.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt` (enthält `OAuthApiService`)
+- `app/src/main/AndroidManifest.xml`
 
-## PKCE-Ablauf
+## Vorhandene Hilfsfunktionen
 
-### 1. Code Verifier generieren
+- `OAuthHelper.generateCodeVerifier()` erzeugt 64 zufällige Bytes und kodiert sie Base64-URL ohne Padding.
+- `generateCodeChallenge()` berechnet SHA-256 und kodiert das Ergebnis als Base64-URL.
+- `buildAuthorizationUrl()` setzt an `/oauth/authorize` unter anderem `code_challenge`, `code_challenge_method=S256` und `state`. Callback-Code und State können extrahiert werden.
+- `AuthRepository.exchangeCodeForToken()` sendet `grant_type=authorization_code`, Client-Konfiguration, Redirect-URI, `code` und optional `code_verifier` an `POST /oauth/token`. `code_challenge` gehört zur Autorisierungs-URL und wird hier nicht gesendet.
+- `refreshAccessToken()` sendet `grant_type=refresh_token`, Client-Konfiguration und gespeichertes Refresh-Token an denselben Endpunkt. Eine erfolglose HTTP-Antwort löscht die Session. Der Aufruf erfolgt derzeit nicht automatisch aus ViewModel oder Interceptor.
 
-```kotlin
-fun generateCodeVerifier(): String {
-    val bytes = ByteArray(64)
-    SecureRandom().nextBytes(bytes)
-    return Base64.encodeToString(bytes, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-}
-```
-
-### 2. Code Challenge ableiten (S256)
-
-```kotlin
-fun generateCodeChallenge(verifier: String): String {
-    val digest = MessageDigest.getInstance("SHA-256")
-    val hash = digest.digest(verifier.toByteArray(Charsets.US_ASCII))
-    return Base64.encodeToString(hash, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
-}
-```
-
-### 3. Authorization URL bauen
-
-```kotlin
-fun buildAuthorizationUrl(serverUrl, clientId, redirectUri, scopes, codeChallenge, state): String {
-    // Fügt code_challenge und code_challenge_method=S256 hinzu
-}
-```
-
-### 4. Token Exchange
-
-Nach Authorization-Code-Erhalt:
-
-```kotlin
-POST /oauth/token
-grant_type=authorization_code
-code_challenge=S256
-code_verifier=<original>
-```
+Die Manifest-URI `traewelling://oauth-callback` ist registriert. Eine passende Verarbeitung des Callback-Codes, des PKCE-Verifiers und des States ist in `MainActivity` nicht angebunden.
 
 ## PreferencesManager Keys für Auth
 
@@ -67,10 +38,10 @@ code_verifier=<original>
 
 ## Offene Fragen
 
-- TODO: PKCE wird bei allen Login-Typen verwendet?
-- TODO: Refresh-Token-Flow dokumentieren
+- TODO: Vollständigen OAuth-UI-Ablauf mit Callback-Verarbeitung, State-Prüfung und Token-Erneuerung anbinden. Der bestehende manuelle Token-Login verwendet kein PKCE.
 
 ## Verwandte Seiten
 
 - [Auth](./auth.md)
 - [Secrets und Sicherheit](../konfiguration/secrets-und-sicherheit.md)
+- [Offene Fragen](../offene-fragen.md)

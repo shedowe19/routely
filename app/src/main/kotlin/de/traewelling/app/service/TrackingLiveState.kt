@@ -10,5 +10,6 @@ data class TrackingLiveState(
     val stop: StopStation?,
     val arrivedAtCurrent: Boolean,
     val completed: Boolean,
-    val source: TrackingSource
+    val source: TrackingSource,
+    val gpsTimes: GpsJourneyTimes? = null
 )

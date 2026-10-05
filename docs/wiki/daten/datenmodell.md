@@ -8,6 +8,8 @@ Erklärt, wie Daten im Netzwerk modelliert und lokal gespeichert sind.
 
 - `app/src/main/kotlin/de/traewelling/app/data/model/Models.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/local/StatusEntity.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 
 ## Modelle (Retrofit / Gson)
 
@@ -105,9 +107,21 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 
 ### Effektive Zeiten
 
-`effectiveArrival` ist `arrivalReal ?: arrivalPlanned`, `effectiveDeparture` ist `departureReal ?: departurePlanned`. Die Legacy-Felder `arrival` und `departure` werden nicht gelesen. Manuelle Zeitkorrekturen werden in die Echtzeitfelder übernommen.
+`effectiveArrival` ist `arrivalReal ?: arrivalPlanned`, `effectiveDeparture` ist `departureReal ?: departurePlanned`. Diese Modellhelfer wählen vorhandene Felder, prüfen aber deren Parsebarkeit nicht. Die Legacy-Felder `arrival` und `departure` werden nicht gelesen. Der Tracking-Service berücksichtigt manuelle Einstieg-/Zielzeiten in seiner internen Route. Das Fahrtdetail behält API-Halte und manuelle Check-in-Zeiten getrennt; die Live-Anzeige verwendet `JourneyTimeResolver` statt GPS-Prognosen in Echtzeitfelder zu schreiben.
 
 `DepartureTrip.delayMinutes` berechnet die Differenz zwischen `when` und `plannedWhen` in Minuten. Bei fehlender oder ungültiger Zeit ist der Wert `null`; das Legacy-Feld `delay` wird nicht verwendet.
+
+### Lokale Tracking- und Zeitmodelle
+
+| Modell/Feld | Bedeutung und Lebensdauer |
+| --- | --- |
+| `TrackingStop.plannedDepartureMillis` | Geplante Abfahrt des konkreten Besuchs, getrennt von `effectiveDepartureMillis`; optional für alte Cache-Routen. |
+| `TrackingLiveState.gpsTimes` | Optionales prozesslokales Ergebnis der GPS-Zeitauswertung; nur passende eigene aktive Fahrt, nicht serialisiert. |
+| `GpsStopTime` | Besuchsschlüssel, Station-ID, Plan-Ankunft/-Abfahrt und optionale lokale Ankunft/-Abfahrt; Flags unterscheiden beobachtet und geschätzt. |
+| `GpsJourneyTimes` | Liste besuchsbezogener GPS-Zeiten, Fixzeitpunkt und Gültigkeitsende; spätestens nach 30 Sekunden unbrauchbar. |
+| `JourneyTime` | Aufgelöster Anzeigezeitpunkt mit `JourneyTimeSource`, Planzeit, Quellenlabel und optionaler positiver/negativer Abweichung in Minuten. |
+
+`JourneyTimeResolver` prüft je Ereignis gültige GPS-Zeit, manuelle Zeit, parsebare API-Echtzeit und Planzeit in dieser Reihenfolge. GPS-Matching bevorzugt UUID, sonst Station-ID und vorhandene Planzeiten mit eindeutigem Treffer. Es werden keine neuen Retrofit-, Room- oder Status-PUT-Felder eingeführt. Die Prognosen und Standortbeobachtungen bleiben RAM-Zustand; Details stehen unter [GPS-Zeiten](../module/gps-zeiten.md).
 
 ### List<StopStation>.deduplicate()
 
@@ -132,7 +146,7 @@ Die API unterstützt manuelle Korrekturen von Abfahrts-/Ankunftszeiten:
 - `manualDeparture`: Manuell korrigierte Abfahrtszeit
 - `manualArrival`: Manuell korrigierte Ankunftszeit
 
-Diese werden im CheckInInfo-Modell gespeichert und von TripTrackingService bei der Anzeige berücksichtigt.
+Diese werden im CheckInInfo-Modell gespeichert und beim Auflösen der Anzeige berücksichtigt. Eine frische eindeutige GPS-Zeit hat in der eigenen aktiven Begleitung Vorrang; außerhalb dieser Beobachtung bleiben manuelle Zeiten vor API-/Planzeit. Das Bearbeitungsformular wird ohne GPS-Werte initialisiert.
 
 Bei einem Zielwechsel über `UpdateStatusRequest` wird zusätzlich zur neuen internen Station-ID deren geplante Ankunft als `destinationArrivalPlanned` gesendet. Der Upstream-Request verlangt beide Felder gemeinsam. Für reine Text-, Sichtbarkeits- oder Zeitänderungen werden sie weggelassen.
 
@@ -145,4 +159,5 @@ Der Reisegrund wird beim Check-in im Feld `business` übertragen. Das Android-Mo
 - [Datenbank](./datenbank.md)
 - [Schemas](./schemas.md)
 - [Check-in](../module/checkin.md)
+- [GPS-Zeiten](../module/gps-zeiten.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)

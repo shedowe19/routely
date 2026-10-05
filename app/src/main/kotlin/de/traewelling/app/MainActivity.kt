@@ -23,6 +23,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import de.traewelling.app.service.TripTrackingService
+import de.traewelling.app.service.RideRecognitionService
+import de.traewelling.app.ui.navigation.NavigationRequest
 import de.traewelling.app.ui.navigation.MainNavigation
 import de.traewelling.app.ui.screens.SetupScreen
 import de.traewelling.app.ui.theme.TraewellingTheme
@@ -38,6 +40,9 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_OPEN_STATUS_ID = "open_status_id"
+    }
 
     private val authViewModel:         AuthViewModel         by viewModels()
     private val feedViewModel:         FeedViewModel         by viewModels()
@@ -54,6 +59,8 @@ class MainActivity : ComponentActivity() {
     private var permissionAskedForStatusId: Int? = null
     private var visibleTrackingStatusId: Int? = null
     private var hasRequestedLocationPermission = false
+    private val navigationRequest = MutableStateFlow<NavigationRequest?>(null)
+    private var navigationToken = 0L
     private val locationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) {
@@ -67,6 +74,8 @@ class MainActivity : ComponentActivity() {
 
         requestNotificationPermission()
         checkAndResumeTripTracking()
+        checkAndResumeRideRecognition()
+        receiveNavigationIntent(intent)
 
         setContent {
             val settingsState by settingsViewModel.uiState.collectAsState()
@@ -75,6 +84,7 @@ class MainActivity : ComponentActivity() {
                 val snackbarHostState = remember { SnackbarHostState() }
                 val scope             = rememberCoroutineScope()
                 val authState         by authViewModel.uiState.collectAsState()
+                val requestedNavigation by navigationRequest.collectAsState()
 
                 // Show "Willkommen @user" once after login / startup validation
                 LaunchedEffect(authState.welcomeMessage) {
@@ -106,7 +116,14 @@ class MainActivity : ComponentActivity() {
                             statusDetailViewModel = statusDetailViewModel,
                             userSearchViewModel   = userSearchViewModel,
                             settingsViewModel     = settingsViewModel,
-                            onRequestGpsPermission = { requestGpsPermission(fromSettings = true) }
+                            onRequestGpsPermission = { requestGpsPermission(fromSettings = true) },
+                            onStartRideRecognition = { requestRideRecognitionStart() },
+                            onStopRideRecognition = { stopRideRecognition() },
+                            onOpenLiveUpdateSettings = { openLiveUpdateSettings() },
+                            navigationRequest = requestedNavigation,
+                            onNavigationRequestConsumed = { consumedToken ->
+                                if (navigationRequest.value?.token == consumedToken) navigationRequest.value = null
+                            }
                         )
                         } else {
                             Box(modifier = Modifier.padding(innerPadding)) {
@@ -157,6 +174,71 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Recheck after returning from Android's app/location settings.
         permissionRevision.value += 1
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        receiveNavigationIntent(intent)
+    }
+
+    private fun receiveNavigationIntent(intent: Intent?) {
+        val statusId = intent?.getIntExtra(EXTRA_OPEN_STATUS_ID, -1)?.takeIf { it > 0 }
+        val openRecognition = intent?.getBooleanExtra(RideRecognitionService.EXTRA_OPEN_RECOGNITION, false) == true
+        if (statusId != null || openRecognition) {
+            navigationRequest.value = NavigationRequest(++navigationToken, statusId, openRecognition)
+            intent?.removeExtra(EXTRA_OPEN_STATUS_ID)
+            intent?.removeExtra(RideRecognitionService.EXTRA_OPEN_RECOGNITION)
+        }
+    }
+
+    private fun checkAndResumeRideRecognition() {
+        val prefs = PreferencesManager(this)
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.RESUMED) {
+                combine(prefs.rideRecognitionEnabled, prefs.activeStatusId, prefs.isLoggedIn, permissionRevision) {
+                        enabled, activeId, loggedIn, revision ->
+                    RecognitionStartState(enabled, activeId, loggedIn, revision)
+                }.distinctUntilChanged().collect { state ->
+                    if (state.enabled && state.loggedIn && state.activeId == null &&
+                        hasPreciseLocationPermission() && locationServicesEnabled()
+                    ) {
+                        try {
+                            ContextCompat.startForegroundService(this@MainActivity, RideRecognitionService.startIntent(this@MainActivity))
+                        } catch (error: RuntimeException) {
+                            android.util.Log.w("MainActivity", "Fahrterkennung konnte nicht gestartet werden", error)
+                        }
+                    } else {
+                        stopService(Intent(this@MainActivity, RideRecognitionService::class.java))
+                    }
+                }
+            }
+        }
+    }
+
+    private data class RecognitionStartState(val enabled: Boolean, val activeId: Int?, val loggedIn: Boolean, val revision: Int)
+
+    private fun requestRideRecognitionStart() {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        lifecycleScope.launch {
+            PreferencesManager(this@MainActivity).setRideRecognitionEnabled(true)
+            requestNotificationPermission()
+            requestGpsPermission(fromSettings = true)
+            permissionRevision.value += 1
+        }
+    }
+
+    private fun stopRideRecognition() {
+        lifecycleScope.launch { PreferencesManager(this@MainActivity).setRideRecognitionEnabled(false) }
+        stopService(Intent(this, RideRecognitionService::class.java))
+    }
+
+    private fun openLiveUpdateSettings() {
+        val action = if (Build.VERSION.SDK_INT >= 36) Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS
+            else Settings.ACTION_APP_NOTIFICATION_SETTINGS
+        val settingsIntent = Intent(action).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+        if (settingsIntent.resolveActivity(packageManager) != null) startActivity(settingsIntent)
+        else startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
     }
 
     private fun hasPreciseLocationPermission(): Boolean =

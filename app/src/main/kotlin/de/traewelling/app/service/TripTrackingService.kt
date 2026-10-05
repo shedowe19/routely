@@ -22,6 +22,7 @@ import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationCallback
@@ -63,7 +64,9 @@ private data class CachedTripTrackingState(
     val statusId: Int,
     val checkin: CheckinInfo,
     val stopovers: List<StopStation>,
-    val progress: TrackingProgress
+    val progress: TrackingProgress,
+    val changes: TripChangeMonitorState? = null,
+    val liveUpdateDismissed: Boolean = false
 )
 
 class TripTrackingService : Service(), TextToSpeech.OnInitListener {
@@ -103,6 +106,14 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private var isTtsInitialized = false
     private var audioFocusRequest: AudioFocusRequest? = null
     private val speechDeliveries = SpeechDeliveryQueue()
+    private val tripChanges = TripChangeMonitor()
+    private val gpsJourneyTimes = GpsJourneyTimeEstimator()
+    private var liveProgressEnabled = true
+    private var lockScreenDetailsEnabled = true
+    private var liveUpdateDismissed = false
+    private var lastProgressModel: TripProgressModel? = null
+    private var lastNotificationTitle = "Routely"
+    private var lastNotificationText = "Lade Reisedaten…"
     private val audioFocusListener = AudioManager.OnAudioFocusChangeListener { change ->
         if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
             serviceScope.launch { tts?.stop() }
@@ -115,6 +126,28 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         repo = TraewellingRepository(applicationContext, prefs)
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
+        serviceScope.launch {
+            prefs.liveProgressEnabled.distinctUntilChanged().collect { enabled ->
+                trackingMutex.withLock {
+                    liveProgressEnabled = enabled
+                    if (currentStatusId != null) updateNotification(lastNotificationTitle, lastNotificationText)
+                }
+            }
+        }
+        serviceScope.launch {
+            prefs.lockScreenDetailsEnabled.distinctUntilChanged().collect { enabled ->
+                trackingMutex.withLock {
+                    lockScreenDetailsEnabled = enabled
+                    if (!enabled) clearChangeNotifications(this@TripTrackingService)
+                    if (currentStatusId != null) updateNotification(lastNotificationTitle, lastNotificationText)
+                }
+            }
+        }
+        serviceScope.launch {
+            prefs.tripChangeAlertsEnabled.distinctUntilChanged().collect { enabled ->
+                if (!enabled) clearChangeNotifications(this@TripTrackingService)
+            }
+        }
         serviceScope.launch {
             val selectedEngine = prefs.getTtsEngine()
             tts = if (selectedEngine == null) TextToSpeech(this@TripTrackingService, this@TripTrackingService)
@@ -205,12 +238,29 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         lastStartId = startId
+        if (intent?.action == ACTION_DISMISS_LIVE_UPDATE) {
+            val requestedId = intent.getIntExtra(EXTRA_STATUS_ID, -1)
+            if (currentStatusId == null) {
+                stopSelf(startId)
+                return START_NOT_STICKY
+            }
+            serviceScope.launch {
+                trackingMutex.withLock {
+                    if (currentStatusId == requestedId) {
+                        liveUpdateDismissed = true
+                        saveProgress(requestedId)
+                        updateNotification(lastNotificationTitle, lastNotificationText)
+                    }
+                }
+            }
+            return START_STICKY
+        }
         val thisCommand = ++commandVersion
         val requestedId = intent?.getIntExtra(EXTRA_STATUS_ID, -1)?.takeIf { it > 0 }
         pendingRequestedStatusId = requestedId
         if (intent?.action == ACTION_STOP) {
             serviceScope.launch {
-                val expectedId = currentStatusId ?: prefs.activeStatusId.first()
+                val expectedId = requestedId ?: currentStatusId ?: prefs.activeStatusId.first()
                 trackingMutex.withLock {
                     if (expectedId != null) stopTracking(expectedId) else finishService(null)
                 }
@@ -220,7 +270,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
         // A sticky restart has no visible-Activity authorization to create a location FGS.
         gpsRequestedByActivity = intent?.getBooleanExtra(EXTRA_ENABLE_GPS, false) == true && hasPreciseLocation()
-        if (!promoteToForeground(gpsRequestedByActivity)) {
+        if (!promoteToForeground(gpsRequestedByActivity, requestedId ?: currentStatusId)) {
             stopSelf(startId)
             return START_NOT_STICKY
         }
@@ -246,8 +296,11 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         return START_STICKY
     }
 
-    private fun promoteToForeground(useGps: Boolean): Boolean {
-        val notification = createNotification("Lade Reisedaten…", if (useGps) "GPS-Tracking wird gestartet" else "Fahrplanmodus")
+    private fun promoteToForeground(useGps: Boolean, statusIdForNotification: Int? = currentStatusId): Boolean {
+        val notification = if (lastProgressModel != null && statusIdForNotification == currentStatusId) {
+            createNotification(lastNotificationTitle, lastNotificationText)
+        } else createNotification("Lade Reisedaten…", if (useGps) "GPS-Tracking wird gestartet" else "Fahrplanmodus",
+            model = null, statusIdForNotification = statusIdForNotification)
         try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val type = if (useGps) ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
@@ -287,13 +340,21 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             cachedCheckin = null
             cachedStops = emptyList()
             engine = null
+            gpsJourneyTimes.reset()
             latestLocation = null
             lastSavedJson = null
+            lastProgressModel = null
+            lastNotificationTitle = "Routely"
+            lastNotificationText = "Lade Reisedaten…"
+            liveUpdateDismissed = false
+            tripChanges.reset(statusId)
+            publishWidgetWaiting("Lade Reisedaten…")
             pendingAnnouncement = null
             tts?.stop()
             speechDeliveries.clear()
             abandonAudioFocus()
             restoreCachedTrip(statusId)
+            updateNotification(lastNotificationTitle, lastNotificationText)
         }
         engine?.setGpsEnabled(gpsPreferenceEnabled)
         if (gpsRequestedByActivity && gpsPreferenceEnabled && hasPreciseLocation() && callback == null) {
@@ -347,6 +408,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         cachedCheckin = cache.checkin
         cachedStops = cache.stopovers
         engine = StationTrackingEngine(toTrackingStops(cachedStops, cache.checkin), cache.progress, radiusMeters)
+        runCatching { tripChanges.reset(statusId, cache.changes) }.onFailure { tripChanges.reset(statusId) }
+        liveUpdateDismissed = cache.liveUpdateDismissed
         lastSavedJson = gson.toJson(cache)
     }
 
@@ -355,10 +418,22 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val checkin = status.checkin ?: return
         val tripId = checkin.trip ?: return
         val stops = repo.getStopovers(tripId).getOrNull() ?: return
+        val rawRoute = checkedInRoute(stops, checkin, applyManualTimes = false)
         val route = checkedInRoute(stops, checkin)
         if (route.isEmpty()) return
         trackingMutex.withLock {
             if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return@withLock
+            val previousProgress = engine?.getProgress()
+            val currentKeyIndex = previousProgress?.nextStopKey?.let { key ->
+                route.withIndex().firstOrNull { (index, stop) -> stopKey(stop, index) == key }?.index
+            }
+            val nextIndex = currentKeyIndex ?: previousProgress?.nextIndex ?: 0
+            val changes = tripChanges.observe(TripChangeSnapshot.fromApi(
+                statusId, SystemClock.elapsedRealtime(), rawRoute, checkin, nextIndex
+            ))
+            if (cachedCheckin?.manualArrival != checkin.manualArrival ||
+                cachedCheckin?.manualDeparture != checkin.manualDeparture
+            ) gpsJourneyTimes.invalidateLocation()
             cachedCheckin = checkin
             cachedStops = route
             val trackingStops = toTrackingStops(route, checkin)
@@ -366,6 +441,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             if (existingEngine == null) engine = StationTrackingEngine(trackingStops, radiusMeters = radiusMeters)
             else existingEngine.updateRoute(trackingStops)
             val currentEngine = engine ?: return@withLock
+            deliverTripChanges(changes, statusId, expectedGeneration)
+            if (!isCurrentTracking(statusId, expectedGeneration)) return@withLock
             currentEngine.setGpsEnabled(gpsPreferenceEnabled)
             val update = latestLocation?.takeIf { isFreshLocation(it) }?.let {
                 currentEngine.onLocation(toFix(it), System.currentTimeMillis())
@@ -374,21 +451,20 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun checkedInRoute(stops: List<StopStation>, checkin: CheckinInfo): List<StopStation> {
+    private fun checkedInRoute(stops: List<StopStation>, checkin: CheckinInfo, applyManualTimes: Boolean = true): List<StopStation> {
         val originIndex = stops.indexOfFirst { it.matchesStopover(checkin.origin) }
         val destinationIndex = stops.indexOfFirst { it.matchesStopover(checkin.destination) }
         // Never track unrelated parts of the trip if the check-in boundaries cannot be resolved.
         if (originIndex < 0 || destinationIndex < originIndex) return emptyList()
-        return stops.subList(originIndex, destinationIndex + 1).map { stop ->
-            when {
-                stop.matchesStopover(checkin.origin) -> stop.copy(
-                    departureReal = checkin.manualDeparture ?: stop.departureReal
-                )
-                stop.matchesStopover(checkin.destination) -> stop.copy(
-                    arrivalReal = checkin.manualArrival ?: stop.arrivalReal
-                )
-                else -> stop
-            }
+        val route = stops.subList(originIndex, destinationIndex + 1)
+        if (!applyManualTimes) return route
+        return route.map { stop ->
+            stop.copy(
+                departureReal = if (stop.matchesStopover(checkin.origin))
+                    checkin.manualDeparture ?: stop.departureReal else stop.departureReal,
+                arrivalReal = if (stop.matchesStopover(checkin.destination))
+                    checkin.manualArrival ?: stop.arrivalReal else stop.arrivalReal
+            )
         }
     }
 
@@ -404,11 +480,12 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                 latitude = stop.station?.latitude,
                 longitude = stop.station?.longitude,
                 plannedArrivalMillis = epochMillis(stop.arrivalPlanned),
-                effectiveArrivalMillis = epochMillis(stop.effectiveArrival),
-                effectiveDepartureMillis = epochMillis(stop.effectiveDeparture),
+                effectiveArrivalMillis = epochMillis(stop.arrivalReal) ?: epochMillis(stop.arrivalPlanned),
+                effectiveDepartureMillis = epochMillis(stop.departureReal) ?: epochMillis(stop.departurePlanned),
                 cancelled = stop.cancelled == true,
                 isOrigin = stop.matchesStopover(checkin.origin),
-                isDestination = stop.matchesStopover(checkin.destination)
+                isDestination = stop.matchesStopover(checkin.destination),
+                plannedDepartureMillis = epochMillis(stop.departurePlanned)
             )
         }
 
@@ -503,7 +580,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val oldCallback = callback
         callback = null
         locationIntervalMillis = 0L
-        if (clearLocation) latestLocation = null
+        if (clearLocation) {
+            latestLocation = null
+            gpsJourneyTimes.invalidateLocation()
+        }
         if (oldCallback != null) {
             runCatching { locationClient.removeLocationUpdates(oldCallback) }
         }
@@ -521,36 +601,60 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             cachedStops.withIndex().firstOrNull { (index, raw) -> stopKey(raw, index) == target.key }?.value
         }
         val progress = engine?.getProgress() ?: return
-        mutableTrackingLiveState.value = TrackingLiveState(
+        val nowMillis = System.currentTimeMillis()
+        val gpsTimes = gpsJourneyTimes.update(
+            route = toTrackingStops(cachedStops, checkin),
+            progress = progress,
+            source = update.source,
+            fix = latestLocation?.takeIf {
+                gpsRequestedByActivity && gpsPreferenceEnabled && isFreshLocation(it)
+            }?.let(::toFix),
+            nowMillis = nowMillis
+        )
+        val liveState = TrackingLiveState(
             statusId = statusId,
             nextStopKey = progress.nextStopKey,
             nextIndex = progress.nextIndex,
             stop = rawStop,
             arrivedAtCurrent = progress.arrivedAtCurrent,
             completed = progress.completed,
-            source = update.source
+            source = update.source,
+            gpsTimes = gpsTimes
         )
+        mutableTrackingLiveState.value = liveState
+        lastProgressModel = TripProgressModel.from(cachedStops, liveState, destinationName,
+            manualDestinationArrival = checkin.manualArrival, nowMillis = nowMillis)
         val platform = rawStop?.arrivalPlatformReal ?: rawStop?.arrivalPlatformPlanned ?: rawStop?.platform
         val platformText = platform?.takeIf { it.isNotBlank() }?.let { " • Gl. $it" } ?: ""
-        val destinationTime = nextStop?.effectiveArrivalMillis ?: nextStop?.effectiveDepartureMillis
+        val manualArrival = checkin.manualArrival.takeIf { rawStop?.matchesStopover(checkin.destination) == true }
+        val manualDeparture = checkin.manualDeparture.takeIf { rawStop?.matchesStopover(checkin.origin) == true }
+        val arrival = JourneyTimeResolver.arrival(rawStop, gpsTimes, nowMillis, manualArrival)
+        val departure = JourneyTimeResolver.departure(rawStop, gpsTimes, nowMillis, manualDeparture)
+        val nextTime = if (nextStop?.isOrigin == true) departure ?: arrival else arrival ?: departure
+        val destinationTime = nextTime?.millis
         val effectiveSource = if (nextStop == null) TrackingSource.TIMETABLE else update.source
         val needsManualEnd = nextStop == null || (effectiveSource == TrackingSource.TIMETABLE && nextStop.isDestination &&
-            (destinationTime == null || destinationTime <= System.currentTimeMillis()))
+            (destinationTime == null || destinationTime <= nowMillis))
         val sourceLabel = if (effectiveSource == TrackingSource.GPS) "GPS"
             else if (needsManualEnd) "Fahrplan · ungefähr · Fahrt manuell beenden"
             else "Fahrplan · ungefähr"
-        val time = (nextStop?.effectiveArrivalMillis ?: nextStop?.effectiveDepartureMillis)?.let {
-            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
+        val time = nextTime?.let {
+            Instant.ofEpochMilli(it.millis).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
         } ?: ""
-        updateNotification("$lineName nach $destinationName", "Nächster Halt: $nextName $time$platformText • $sourceLabel")
+        val labelledTime = nextTime?.let { "$time (${it.sourceLabel})" } ?: ""
+        val stopLabel = if (effectiveSource == TrackingSource.GPS && progress.arrivedAtCurrent) "Aktueller Halt" else "Nächster Halt"
+        updateNotification("$lineName nach $destinationName", "$stopLabel: $nextName $labelledTime$platformText • $sourceLabel")
         sendBroadcast(Intent(this, de.traewelling.app.widget.TripWidgetProvider::class.java).apply {
             action = "de.traewelling.app.ACTION_UPDATE_WIDGET"
             putExtra("lineName", lineName)
-            putExtra("nextStop", "$nextName · $sourceLabel")
+            putExtra("nextStop", nextName)
             putExtra("destination", destinationName)
             putExtra("time", time)
+            putExtra("timeSource", nextTime?.sourceLabel ?: sourceLabel)
             putExtra("platform", platform)
-            putExtra("delay", calculateDelay(rawStop) ?: -1)
+            nextTime?.delayMinutes?.let {
+                putExtra("delay", it.coerceIn(Int.MIN_VALUE.toLong(), Int.MAX_VALUE.toLong()).toInt())
+            }
         })
         var queuedUtterance: String? = null
         update.announcement?.let { announcedStop ->
@@ -580,7 +684,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private suspend fun saveProgress(statusId: Int) {
         val checkin = cachedCheckin ?: return
         val currentEngine = engine ?: return
-        val json = gson.toJson(CachedTripTrackingState(statusId = statusId, checkin = checkin, stopovers = cachedStops, progress = currentEngine.getProgress()))
+        val json = gson.toJson(CachedTripTrackingState(statusId = statusId, checkin = checkin, stopovers = cachedStops,
+            progress = currentEngine.getProgress(), changes = tripChanges.getState(), liveUpdateDismissed = liveUpdateDismissed))
         if (json != lastSavedJson) {
             prefs.saveTrackingState(statusId, json)
             if (currentStatusId == statusId) lastSavedJson = json
@@ -622,6 +727,46 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
+    private suspend fun deliverTripChanges(changes: List<TripChangeEvent>, statusId: Int, expectedGeneration: Long) {
+        if (changes.isEmpty() || !prefs.getTripChangeAlertsEnabled() || !isCurrentTracking(statusId, expectedGeneration)) return
+        val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        val permissionGranted = Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+        val title = if (changes.size == 1) changes.first().title else "${changes.size} Änderungen auf deiner Fahrt"
+        val message = changes.joinToString("\n") { it.message }
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            action = "de.traewelling.app.OPEN_STATUS.$statusId"
+            putExtra("open_status_id", statusId)
+        }
+        val openPendingIntent = PendingIntent.getActivity(this, statusId, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        if (permissionGranted && NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            val publicVersion = NotificationCompat.Builder(this, CHANGES_CHANNEL_ID)
+                .setSmallIcon(R.drawable.traewelling_logo).setContentTitle("Routely")
+                .setContentText("Neue Änderungen auf deiner Fahrt").build()
+            val notification = NotificationCompat.Builder(this, CHANGES_CHANNEL_ID)
+                .setSmallIcon(R.drawable.traewelling_logo).setContentTitle(title).setContentText(changes.first().message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setContentIntent(openPendingIntent).setAutoCancel(true)
+                .setCategory(NotificationCompat.CATEGORY_STATUS)
+                .setVisibility(if (lockScreenDetailsEnabled) NotificationCompat.VISIBILITY_PUBLIC else NotificationCompat.VISIBILITY_PRIVATE)
+                .setPublicVersion(publicVersion).setPriority(NotificationCompat.PRIORITY_DEFAULT).build()
+            runCatching { manager.notify("trip_changes:$statusId", CHANGES_NOTIFICATION_ID, notification) }
+        }
+        if (!isTtsInitialized || !prefs.getTtsEnabled() || !prefs.getTripChangeSpeechEnabled() ||
+            !isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null
+        ) return
+        configureSpeech()
+        if (!isCurrentTracking(statusId, expectedGeneration) || !requestAudioFocus()) return
+        val eventKey = changes.joinToString("|") { it.key }
+        val delivery = speechDeliveries.begin(statusId, expectedGeneration, eventKey, SpeechDeliveryKind.TRIP_CHANGE)
+        if (tts?.speak(message, TextToSpeech.QUEUE_ADD, null, delivery.utteranceId) != TextToSpeech.SUCCESS) {
+            speechDeliveries.finish(delivery.utteranceId)
+            if (speechDeliveries.isEmpty) abandonAudioFocus()
+        }
+    }
+
     private fun handleSpeechFinished(utteranceId: String?, successful: Boolean) {
         if (utteranceId == null) return
         serviceScope.launch {
@@ -630,7 +775,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                 // QUEUE_ADD entries share the focus until the last entry has finished.
                 if (speechDeliveries.isEmpty) abandonAudioFocus()
                 if (!isCurrentTracking(delivery.statusId, delivery.generation)) return@withLock
-                if (!successful && engine?.getProgress()?.nextStopKey == delivery.stopKey) {
+                if (!successful && delivery.kind == SpeechDeliveryKind.STOP && engine?.getProgress()?.nextStopKey == delivery.stopKey) {
                     engine?.releaseAnnouncement(delivery.stopKey)
                     saveProgress(delivery.statusId)
                 }
@@ -659,12 +804,6 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (utteranceId != null && utteranceId == completionUtteranceId && currentStatusId == statusId) {
             stopTracking(statusId)
         }
-    }
-
-    private fun calculateDelay(stop: StopStation?): Int? {
-        val planned = epochMillis(stop?.arrivalPlanned) ?: return null
-        val real = epochMillis(stop?.arrivalReal) ?: return null
-        return ((real - planned) / 60_000L).toInt().takeIf { it > 0 }
     }
 
     private fun requestAudioFocus(): Boolean {
@@ -697,18 +836,42 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun updateNotification(title: String, content: String) {
-        (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, createNotification(title, content))
+        lastNotificationTitle = title
+        lastNotificationText = content
+        runCatching {
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, createNotification(title, content))
+        }
     }
 
-    private fun createNotification(title: String, content: String): Notification {
-        val openIntent = Intent(this, MainActivity::class.java).apply { flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK }
-        val openPendingIntent = PendingIntent.getActivity(this, 0, openIntent, PendingIntent.FLAG_IMMUTABLE)
-        val stopIntent = Intent(this, TripTrackingService::class.java).apply { action = ACTION_STOP }
-        val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_IMMUTABLE)
-        return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle(title).setContentText(content).setSmallIcon(R.drawable.traewelling_logo)
-            .setContentIntent(openPendingIntent).addAction(android.R.drawable.ic_menu_close_clear_cancel, "Beenden", stopPendingIntent)
-            .setOngoing(true).setPriority(NotificationCompat.PRIORITY_LOW).build()
+    private fun createNotification(title: String, content: String, model: TripProgressModel? = lastProgressModel,
+                                   statusIdForNotification: Int? = currentStatusId): Notification {
+        val statusId = statusIdForNotification ?: -1
+        val openIntent = Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+            action = "de.traewelling.app.OPEN_STATUS.$statusId"
+            if (statusId > 0) putExtra("open_status_id", statusId)
+        }
+        val openPendingIntent = PendingIntent.getActivity(this, statusId, openIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val stopIntent = Intent(this, TripTrackingService::class.java).apply {
+            action = ACTION_STOP
+            putExtra(EXTRA_STATUS_ID, statusId)
+        }
+        val stopPendingIntent = PendingIntent.getService(this, 1, stopIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val deleteIntent = Intent(this, TripTrackingService::class.java).apply {
+            action = ACTION_DISMISS_LIVE_UPDATE
+            putExtra(EXTRA_STATUS_ID, statusId)
+        }
+        val deletePendingIntent = PendingIntent.getService(this, 2, deleteIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        return TripProgressNotificationBuilder.build(
+            context = this, channelId = CHANNEL_ID, title = title, text = content, model = model,
+            showLockScreenDetails = lockScreenDetailsEnabled,
+            requestLiveUpdate = liveProgressEnabled && !liveUpdateDismissed,
+            stopPendingIntent = stopPendingIntent, openPendingIntent = openPendingIntent,
+            deletePendingIntent = deletePendingIntent
+        )
     }
 
     private fun createNotificationChannel() {
@@ -716,6 +879,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             val channel = NotificationChannel(CHANNEL_ID, "Live-Reiseinformationen", NotificationManager.IMPORTANCE_LOW)
                 .apply { description = "Nächster Halt, Standortmodus und Zeiten der aktiven Fahrt" }
             (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(channel)
+            val changesChannel = NotificationChannel(CHANGES_CHANNEL_ID, "Änderungen auf deiner Fahrt", NotificationManager.IMPORTANCE_DEFAULT)
+                .apply { description = "Gleiswechsel, ausfallende Halte und deutliche Änderungen der Verspätung" }
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).createNotificationChannel(changesChannel)
         }
     }
 
@@ -744,13 +910,16 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         speechDeliveries.clear()
         abandonAudioFocus()
         currentStatusId = null
+        lastProgressModel = null
         mutableTrackingLiveState.value = null
+        publishWidgetWaiting()
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf(lastStartId)
     }
 
     override fun onDestroy() {
         disableLocationUpdates()
+        publishWidgetWaiting()
         abandonAudioFocus()
         serviceJob.cancel()
         tts?.stop()
@@ -760,13 +929,38 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         super.onDestroy()
     }
 
+    private fun publishWidgetWaiting(message: String = "Warte auf Check-in…") {
+        sendBroadcast(Intent(this, de.traewelling.app.widget.TripWidgetProvider::class.java).apply {
+            action = "de.traewelling.app.ACTION_UPDATE_WIDGET"
+            putExtra("lineName", "Routely")
+            putExtra("nextStop", message)
+            putExtra("destination", "")
+            putExtra("time", "")
+            putExtra("timeSource", "")
+            putExtra("platform", "")
+        })
+    }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        /** Settings also call this when the service is no longer alive. */
+        fun clearChangeNotifications(context: Context) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            runCatching {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    manager.activeNotifications.filter { it.notification.channelId == CHANGES_CHANNEL_ID }
+                        .forEach { manager.cancel(it.tag, it.id) }
+                }
+            }
+        }
+
         private val mutableTrackingLiveState = MutableStateFlow<TrackingLiveState?>(null)
         val trackingLiveState: StateFlow<TrackingLiveState?> = mutableTrackingLiveState.asStateFlow()
         private const val CHANNEL_ID = "TripTrackingChannel"
         private const val NOTIFICATION_ID = 1001
+        private const val CHANGES_CHANNEL_ID = "TripChangesChannel"
+        private const val CHANGES_NOTIFICATION_ID = 1002
         private const val API_POLL_INTERVAL_MILLIS = 60_000L
         private const val TICK_INTERVAL_MILLIS = 10_000L
         private const val NEAR_INTERVAL_MILLIS = 3_000L
@@ -775,5 +969,6 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         const val EXTRA_STATUS_ID = "extra_status_id"
         const val EXTRA_ENABLE_GPS = "extra_enable_gps"
         const val ACTION_STOP = "action_stop"
+        const val ACTION_DISMISS_LIVE_UPDATE = "DISMISS_LIVE_UPDATE"
     }
 }

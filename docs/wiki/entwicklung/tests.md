@@ -24,11 +24,11 @@ Dokumentiert, wie die App getestet wird.
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.
 - Der Unix-Wrapper `gradlew` muss mit LF-Zeilenenden ausgecheckt sein; dies wird zusammen mit weiteren Projekttextdateien über `.gitattributes` erzwungen.
-- Für den Android-Gradle-Lauf werden außerdem Android-SDK 34 und die auflösbaren Gradle-/Maven-Abhängigkeiten benötigt.
+- Für den Android-Gradle-Lauf werden außerdem Android-SDK 36 und die auflösbaren Gradle-/Maven-Abhängigkeiten benötigt.
 
 ## Automatisierte Prüfung
 
-`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 34 und Build Tools 34.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt.
+`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 36 und Build Tools 35.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt.
 
 | Artefakt | Inhalt |
 | --- | --- |
@@ -45,11 +45,46 @@ GitHub Actions hat am 05.10.2026 für Commit `4ed79c781e5ca38005885fb585277fee56
 
 ## Prüfung der GPS-Erweiterung
 
-Der aktuelle Quellstand enthält 88 Unit-Tests: 47 Engine-, 9 Timeline-, 4 Ansagequeue- und 28 API-Tests. Gegenüber den ursprünglichen 35 Engine-Regressionen sichern zwölf zusätzliche Fälle kurze Halteabstände, frühe richtungsabhängige Übergabe, dieselbe Fixfolge für den Folgehalt, kumulierte Bewegung bei häufigen Standortupdates, Signallücken sowie unveränderte Zielankunftskriterien ab. Ein erster GPS-Fix fern aller Stationen darf weiterhin keinen vorläufigen Zeitcursor festschreiben.
+Der vor der Begleiter-Erweiterung geprüfte Stand enthält 88 Unit-Tests: 47 Engine-, 9 Timeline-, 4 Ansagequeue- und 28 API-Tests. Gegenüber den ursprünglichen 35 Engine-Regressionen sichern zwölf zusätzliche Fälle kurze Halteabstände, frühe richtungsabhängige Übergabe, dieselbe Fixfolge für den Folgehalt, kumulierte Bewegung bei häufigen Standortupdates, Signallücken sowie unveränderte Zielankunftskriterien ab. Ein erster GPS-Fix fern aller Stationen darf weiterhin keinen vorläufigen Zeitcursor festschreiben.
 
 Der erste vollständige GPS-Prüflauf für Commit `672051411cc1f76bf910c0262b8fbe8710844363` war am 05.10.2026 erfolgreich: 62 Tests (34 GPS und 28 API), Android-Debug-Build und APK-Upload. Nachweis: [GitHub-Actions-Lauf 37349706390](https://github.com/shedowe19/routely/actions/runs/37349706390). Dieser historische Lauf enthält die späteren Startup-, Kurzhalte-, Timeline- und Ansagequeue-Regressionen noch nicht. Aktuelle Ergebnisse zeigt der Workflow [API Compatibility](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml); die Quellanzahl allein ist kein Nachweis eines erfolgreichen Laufs.
 
 Eine reine Kotlin-Testreihe bestätigt weder Android-Permissiondialoge, tatsächlich gelieferte Standortintervalle, Display-aus-Betrieb noch Audioausgabe auf einem Gerät. Der Nutzerbericht aus einer Fahrt mit `1.7.0` und die daraus abgeleitete erneute Geräteprüfung sind unter [TripTracking](../module/trip-tracking.md) dokumentiert. Die aktuellen Korrekturen wurden hier nicht auf einem physischen Gerät erprobt. Cachetests prüfen die restaurierbaren Daten und Engine-Fortsetzung, keine ausgeführte Android-DataStore-/Service-Integration; der Timeline-Maler erfordert zusätzlich eine visuelle Prüfung mit großer Schrift.
+
+## GPS-Zeiten: neue Prüfziele
+
+Die [GPS-Zeiterweiterung](../module/gps-zeiten.md) ergänzt synthetische Kotlin-Regressionen ohne Android oder Netzwerk:
+
+- `GpsJourneyTimeEstimatorTest`: früher/später räumlicher Planversatz, Mindestbeobachtung, gerichtete Bewegung, Jitter, falsche Richtung, Korridor, stabile erste Ankunft, spätes Warten, keine erfundene Frühabfahrt, fehlende Geschwindigkeit, schnelle Vorbeifahrt und unterstützte Abfahrtsbeobachtung auch auf langen Segmenten. Weitere Fälle prüfen alte/ungenaue/ungültige Fixes, doppelte oder rückläufige Zeitstempel, Cache-Ablauf, Invalidierung, Neustart, Plan-/Routen-/Koordinatenänderung, Streichungen, fehlende Segmentdaten, wiederholte Besuche und unveränderte Providerdaten/Fortschrittswerte. Eine gültige Planänderung muss alte Prognosen verwerfen und nach neuer Bewegung anhand der geänderten Basis neu schätzen; eine Abfahrt vor der Planankunft verwirft die Prognose auch bei weiteren frischen Fixes.
+- `JourneyTimeResolverTest`: GPS vor manueller Zeit/API/Plan, beobachtet gegenüber geschätzt, sofortiger API-Rückfall nach Ablauf, getrennte Ankunft-/Abfahrtsauflösung, ungültige Felder, Besuchsidentität, erhaltene Verfrühungen, unveränderte Rohhalte und Bearbeitungswerte. Die lokale manuelle Timeline-Projektion wird auf eindeutige Besuche, beide Ereignisse, ungültige Zeiten und mehrdeutige Zuordnung geprüft.
+- `TripProgressModelTest`: gemeinsame GPS-Zielzeit und API-/manueller Rückfall zusätzlich zum bestehenden Haltefortschritt.
+- `StationTrackingEngineTest`: zwei zusätzliche Regressionen sichern den räumlichen Abfahrts-Bootstrap vor der Plan-/API-Abfahrt und den anschließenden Ablauf Engine → GPS-Zeitschätzer nach einem Trackingstart während verfrühter Weiterfahrt ab. Die gerichtete Bewegung und der plausible Korridor bleiben erforderlich; Providerzeiten und Zielabschluss werden nicht durch den Bootstrap verändert.
+
+Der GPS-Zeiten-Stand ergänzt 43 Estimator- und 22 Resolver-Tests sowie sechs weitere Fortschrittsmodell-Fälle und zwei weitere Stationsengine-Fälle. Die Stationsengine enthält damit 49 Testmethoden; dieser Stand umfasst 235 Unit-Testmethoden. Die nachfolgenden Review-Korrekturen ergänzen weitere Tests. Prüfziele sind getrennt von historischen erfolgreichen Läufen zu bewerten. Ein erfolgreicher älterer Begleiter-Build belegt die neue Zeitprognose nicht; den passenden aktuellen Commit und CI-Lauf prüfen. Reale Prognosegüte, Kurven/Tunnel, Signalwiederkehr und einheitliche Quellenwechsel in Header, Haltliste, Widget und Samsung-Sperrbildschirm bleiben Gerätetests.
+
+Der GPS-Zeiten-Stand `fb0f75eb9dbdd21f6addb11fbe1cb1f333b07757` bestand am 05.10.2026 alle 235 Unit-Tests ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen auch die 43 Estimator- und 22 Resolver-Fälle. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37376730124](https://github.com/shedowe19/routely/actions/runs/37376730124). Diese Prüfung umfasst die korrigierte gültige Planänderung und die gesonderte Ablehnung einer Abfahrt vor der Planankunft; sie ersetzt die genannten Geräteprüfungen nicht.
+
+## Begleiter-Erweiterung: neue Prüfziele
+
+Die Erweiterung um [Fahrterkennung](../module/ride-recognition.md), [Fahrtänderungen](../module/trip-changes.md) und [Reisefortschritt](../module/trip-progress.md) ergänzt folgende reine Kotlin-Regressionen:
+
+- `RideRecognitionEngineTest`: gerichtete und kumulierte Bewegung, beobachteter Einstieg, Aktualität/Genauigkeit, parallele Kandidaten, Mehrfachbesuche, Ausfälle, reale Abfahrt gegenüber Cache-Zeiten und begrenzte RAM-Historie.
+- `TripChangeMonitorTest`: stille erste Basis, Folge-Snapshots, Gleis-/Ausfall-/Wiederherstellungshinweise, kumulierte Fünf-Minuten-Schwelle, manuelle Zeiten, fehlende Providerfelder, Besuchsschlüssel, Deduplizierung und Cache-Neustart.
+- `TripProgressModelTest`: Einstieg ausschließen, gestrichene Halte, Annäherung/Ankunft, wiederholte Besuche, unbekannter Cursor, Zeitmodus ohne bestätigte Zielankunft, vollständiger Abschluss und Plan-/Echtzeitangaben.
+- `SpeechDeliveryQueueTest`: zusätzliche Trennung von Stations- und Änderungssprache, auch bei identischen Ereignisschlüsseln.
+- `HttpLogSanitizerTest`: redaktierte Standortparameter einschließlich Bounding-Box-Werten und unveränderte unkritische URL-Parameter.
+
+Der erste bestätigte Begleiter-Stand `898130b91db2fd291d94d92752084070668c43ea` bestand am 05.10.2026 alle 162 Unit-Tests (keine Fehler, Fehlschläge oder übersprungenen Tests). Derselbe Lauf baute die Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Die JUnit-Berichte bestätigen 22 Erkennungs-, 31 Änderungs-, 18 Fortschritts-, 5 Ansagequeue-, 47 GPS-, 9 Timeline-, 28 API- und 2 Logredaktionstests. Nachweis: [GitHub-Actions-Lauf 37363237606](https://github.com/shedowe19/routely/actions/runs/37363237606). Spätere Änderungen müssen dem jeweils passenden CI-Lauf zugeordnet werden.
+
+Geräteprüfungen müssen zusätzlich die präzise Standortfreigabe der Opt-in-Suche, sichtbaren FGS, Pause bei Check-in/Logout, Kalte-/Warmstartnavigation, Benachrichtigungs- und TTS-Zustellung sowie API-35/36/36.1-Layouts und Sperrbildschirm-Privatsphäre abdecken. Die Erkennung verwendet synthetische Bewegung für Logiktests; reale Erkennungsgüte, Akkuverbrauch und Hersteller-Live-Updates sind dadurch nicht belegt.
+
+## Review-Korrekturen vom 05.10.2026
+
+- `RideDiscoveryRequestsTest`: acht neue Fälle unterscheiden vollständige Anfrageausfälle von erfolgreicher leerer Antwort, verwertbaren Teilergebnissen, gültigem Tripcache und einer Stufe ohne Anfragen. Ein in `Result` verpackter Coroutine-Abbruch muss trotz vorherigem Teilerfolg weitergegeben werden.
+- `TripProgressModelTest`: fünf zusätzliche Fälle sichern den noch ausstehenden Zielhalt bei Annäherung, eine Route mit ausschließlich Einstieg und Ziel, gestrichene Zwischenhalte, ein gestrichenes Ziel sowie die vom Service explizit übergebene manuelle Zielzeit. Der vorhandene Zielankunftsfall prüft zusätzlich null Resthalte ohne bestätigten Fahrtabschluss, die unvollständige Balkenposition und `Am Ziel · Ankunft wird geprüft`.
+- Android-spezifische Korrekturen verwenden `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` ab API 36 und erfassen jede neue Service-`startId` vor der Wegwisch-Verarbeitung. Einheitenlogik belegt weder die tatsächliche Android-Freigabeoberfläche noch das Lebenszyklusverhalten eines laufenden Services; beides bleibt eine Geräteprüfung.
+
+Der aktuelle Review-Quellstand enthält 248 Unit-Testmethoden: 235 aus dem zuvor geprüften GPS-Zeiten-Stand, acht neue Discovery- und fünf neue Fortschrittsmodell-Tests. `TripProgressModelTest` enthält jetzt 29 Fälle. Diese Quellanzahl allein belegt keinen erfolgreichen neuen CI-Lauf; historische Nachweise gelten weiterhin ausschließlich für ihre genannten Commits.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
@@ -81,4 +116,8 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 - [Build](./build.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
 - [TripTracking](../module/trip-tracking.md)
+- [GPS-Zeiten](../module/gps-zeiten.md)
 - [StatusDetail](../module/status-detail.md)
+- [Fahrterkennung](../module/ride-recognition.md)
+- [Fahrtänderungen](../module/trip-changes.md)
+- [Reisefortschritt](../module/trip-progress.md)

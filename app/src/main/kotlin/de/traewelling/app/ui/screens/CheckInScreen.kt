@@ -29,6 +29,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import de.traewelling.app.data.model.*
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
+import de.traewelling.app.service.RideRecognitionPhase
 import de.traewelling.app.viewmodel.CheckInStep
 import de.traewelling.app.viewmodel.CheckInUiState
 import de.traewelling.app.viewmodel.CheckInViewModel
@@ -37,7 +38,11 @@ import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 
 @Composable
-fun CheckInScreen(viewModel: CheckInViewModel) {
+fun CheckInScreen(
+    viewModel: CheckInViewModel,
+    onStartRideRecognition: () -> Unit = {},
+    onStopRideRecognition: () -> Unit = {}
+) {
     val uiState by viewModel.uiState.collectAsState()
     
     val title = when (uiState.step) {
@@ -66,7 +71,7 @@ fun CheckInScreen(viewModel: CheckInViewModel) {
     ) { innerPadding ->
         Box(Modifier.padding(innerPadding).fillMaxSize()) {
             when (uiState.step) {
-                CheckInStep.STATION     -> StationSearchStep(viewModel, uiState)
+                CheckInStep.STATION     -> StationSearchStep(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
                 CheckInStep.DEPARTURES  -> DeparturesStep(viewModel, uiState)
                 CheckInStep.DESTINATION -> DestinationStep(viewModel, uiState)
                 CheckInStep.CONFIRM     -> ConfirmStep(viewModel, uiState)
@@ -79,7 +84,12 @@ fun CheckInScreen(viewModel: CheckInViewModel) {
 // ─── Step 1: Bahnhof suchen ──────────────────────────────────────────────────
 
 @Composable
-private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
+private fun StationSearchStep(
+    viewModel: CheckInViewModel,
+    uiState: CheckInUiState,
+    onStartRideRecognition: () -> Unit,
+    onStopRideRecognition: () -> Unit
+) {
 
     val context = LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
@@ -99,6 +109,7 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
     }
 
     Column(Modifier.fillMaxSize()) {
+        RideRecognitionCard(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
         Spacer(Modifier.height(16.dp))
 
         Row(
@@ -189,6 +200,59 @@ private fun StationSearchStep(viewModel: CheckInViewModel, uiState: CheckInUiSta
                         HorizontalDivider()
                     }
                 }
+        }
+    }
+}
+
+@Composable
+private fun RideRecognitionCard(
+    viewModel: CheckInViewModel,
+    uiState: CheckInUiState,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    Card(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().heightIn(max = 340.dp)) {
+        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Default.MyLocation, null, tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(8.dp))
+                Text("Fahrt erkennen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(
+                when {
+                    uiState.activeRidePresent -> "Du hast bereits eine aktive Fahrt. Die Fahrtsuche pausiert während der Begleitung."
+                    !uiState.rideRecognitionEnabled -> "Routely kann anhand von GPS und passenden Abfahrten Fahrten vorschlagen. Du prüfst die Linie und wählst dein Ziel selbst."
+                    uiState.rideRecognition.phase == RideRecognitionPhase.OFF -> "Die Suche ist pausiert. Prüfe die präzise Standortfreigabe und die Ortung deines Geräts."
+                    else -> uiState.rideRecognition.message
+                }, style = MaterialTheme.typography.bodySmall
+            )
+            if (!uiState.rideRecognitionEnabled) {
+                Spacer(Modifier.height(6.dp))
+                Text("Zur Suche naher Stationen wird dein Standort an den konfigurierten Träwelling-Server gesendet. Es wird kein GPS-Verlauf gespeichert und kein Check-in automatisch veröffentlicht.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            uiState.rideRecognition.candidates.forEach { candidate ->
+                HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                val departure = candidate.ride.departure
+                Text("${departure.line?.name ?: "Unbekannte Linie"} → ${departure.direction ?: candidate.nextStationName}",
+                    fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
+                Text("Ab ${candidate.ride.origin?.stationName ?: "Station"} · ${formatLocalTime(departure.realWhen ?: departure.plannedWhen ?: "")}",
+                    style = MaterialTheme.typography.bodySmall)
+                Text("Nächster Halt im Verlauf: ${candidate.nextStationName}", style = MaterialTheme.typography.bodySmall)
+                TextButton(onClick = { viewModel.acceptRecognizedRide(candidate) }) { Text("Fahrt prüfen und Ziel wählen") }
+            }
+            Spacer(Modifier.height(8.dp))
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                if (!uiState.rideRecognitionEnabled || uiState.rideRecognition.phase == RideRecognitionPhase.OFF) {
+                    Button(onClick = onStart, enabled = !uiState.activeRidePresent, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (uiState.rideRecognitionEnabled) "Standortfreigabe prüfen" else "Fahrtsuche aktivieren")
+                    }
+                }
+                if (uiState.rideRecognitionEnabled) {
+                    OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("Suche stoppen") }
+                }
+            }
         }
     }
 }

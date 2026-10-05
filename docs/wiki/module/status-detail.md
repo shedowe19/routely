@@ -14,17 +14,18 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 
 ## Verhalten
 
 ### Lade-Prozess
 
 1. `loadStatusDetail(statusId)` lädt Status-Details
-2. Enriches mit `manualDeparture` und `manualArrival` von CheckinInfo
+2. Behält `manualDeparture` und `manualArrival` von CheckinInfo für die getrennte Anzeigenauflösung
 3. Lädt Stopovers via `repo.getStopovers(tripId)`
 4. Prüft via `checkIfOwnStatus()` ob eigener Status (für Bearbeiten/Löschen-Buttons)
 
-Die Timeline verwendet `StopStation.stationName` und `stationId` aus dem verschachtelten Stationsobjekt. Einstieg und Ziel werden über `matchesStopover` statt über die alte Stopover-`id` zugeordnet. Ankunft und Abfahrt nutzen `effectiveArrival` und `effectiveDeparture`; manuelle Zeitkorrekturen werden dafür in `arrivalReal` und `departureReal` gespeichert.
+Die Timeline verwendet `StopStation.stationName` und `stationId` aus dem verschachtelten Stationsobjekt. Einstieg und Ziel werden über `matchesStopover` statt über die alte Stopover-`id` zugeordnet. API-Halte bleiben unverändert im UI-Zustand; manuelle Zeiten und GPS-Werte werden nur für die Anzeige aufgelöst.
 
 ### Auto-Refresh
 
@@ -32,13 +33,11 @@ Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Der 
 
 Antworten auf Status-, Halte- und Nutzeranfragen werden nur übernommen, wenn weiterhin dieselbe Status-ID angezeigt wird. Späte Antworten einer zuvor geöffneten Fahrt überschreiben dadurch nicht die neue Ansicht.
 
-### Intelligente Verspätungsvererbung und Verspätungsabbau (Delay Recovery)
+### GPS-Zeiten und API-Rückfall
 
-Vor der Speicherung des Haltestellenverlaufs im `UIState` (sowohl beim Initialladen als auch beim Auto-Refresh) durchläuft die Haltestellen-Liste die Methode `propagateDelays()`. Diese Funktion gleicht Plan- und Echtzeitdaten ab und berechnet die aktuelle Verspätung in Minuten. Wenn die API oder manuell geänderte Check-in-Daten eine geringere Verspätung als den erwarteten vererbten Wert melden, wird aus Gründen der logischen Konsistenz der höhere, vererbte Wert verwendet, um unmögliche Ankunftszeiten (wie eine Ankunft vor der vorherigen Abfahrt) zu verhindern. Um Pufferzeiten zu simulieren, baut die App die vererbte Verspätung bei nachfolgenden Stationen anhand einer realistischen Eisenbahn-Pufferformel anteilig ab:
+`JourneyTimeResolver` entscheidet für Header und Halte dieselbe Priorität: frische GPS-Zeit des konkreten Ereignisses, manuelle Check-in-Zeit, parsebare API-Echtzeit, Planzeit. GPS-Werte werden nur aus dem passenden eigenen aktiven `TrackingLiveState` übernommen. Ankunft und Abfahrt erhalten getrennte Quellenhinweise; beobachtete Ankunft und Prognose sind unterscheidbar. Fehlende GPS-Abfahrt verhindert keine gültige API-Abfahrt desselben Halts.
 
-- **Fahrzeitpuffer**: ca. 5% Puffer auf die reine Fahrzeit zwischen zwei Stationen.
-- **Haltezeitpuffer**: Überschüssige Standzeiten/Haltezeiten (alles über 1 Minute Mindesthaltezeit) werden ebenfalls mit einem Skalierungsfaktor von 5% in den Verspätungsabbau einbezogen.
-  Dadurch nimmt die geschätzte Ankunftszeit am Ziel realistisch ab, anstatt den exakt selben Verspätungswert blind bis zur Endstation mitzuschleppen.
+Die frühere `propagateDelays()`-Vererbung einschließlich synthetischer Puffer wurde entfernt. Ein Rückfall zeigt dadurch tatsächliche vorhandene Providerwerte und bewahrt Verfrühungen, statt eine ältere positive Verzögerung auf weitere Halte zu übertragen. GPS-Prognosen verändern weder die API-Echtzeitfelder noch die gespeicherten Check-in-Zeiten. Das Bearbeitungsformular verwendet ausdrücklich den Resolver ohne GPS-Daten; eine Schätzung wird nicht beim Speichern zur manuellen Istzeit. Die Prognosebedingungen stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 ### Bearbeitung (nur eigene Statusen)
 
@@ -82,7 +81,7 @@ Für den eigenen, weiterhin aktiven und gerade geöffneten Status übernimmt das
 
 GPS-Fortschritt hat Vorrang vor der Uhrzeit. Der Kopf zeigt `Fortschritt per GPS` oder `Fahrplan-Schätzung · ungefähre Position`. Bei fehlender Zuordnung wird kein neuer Uhrzeitcursor erfunden. Nach Abschluss endet die Fortschrittslinie am eingecheckten Ziel; spätere Halte werden nicht als besucht markiert.
 
-Ohne passenden aktiven Service, etwa bei fremden oder früheren Fahrten, ermittelt der Helper genau einen zeitbasierten Besuch aus Ankunft bis Abfahrt; bei überlappenden Aufenthalten gilt der letzte passende Besuch, sonst der nächste zukünftige. Gestrichene Halte werden ausgelassen. Das frühere Zeitfenster von ±1 Minute je Zeile wird nicht mehr verwendet, da es benachbarte Halte gleichzeitig als aktuell markieren konnte.
+Ohne passenden aktiven Service, etwa bei fremden oder früheren Fahrten, ermittelt der Helper genau einen zeitbasierten Besuch aus Ankunft bis Abfahrt; bei überlappenden Aufenthalten gilt der letzte passende Besuch, sonst der nächste zukünftige. `JourneyTimeResolver.manualTimelineStops` erstellt dafür nur eine lokale Projektion mit parsebaren manuellen Einstieg-/Zielzeiten an eindeutig passenden Besuchen. Diese Projektion enthält keine GPS-Zeiten und wird weder im UIState gespeichert noch dem Bearbeitungsformular übergeben. Gestrichene Halte werden ausgelassen. Das frühere Zeitfenster von ±1 Minute je Zeile wird nicht mehr verwendet, da es benachbarte Halte gleichzeitig als aktuell markieren konnte.
 
 Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. Die Punktposition folgt der gemessenen Kopfzeilenhöhe, auch bei großer Schrift und mehrzeiligen Zeiten; feste Prozentsegmente werden nicht mehr eingesetzt.
 
@@ -106,6 +105,7 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 - [Check-in](./checkin.md)
 - [TripTracking](./trip-tracking.md)
+- [GPS-Zeiten](./gps-zeiten.md)
 - [Datenfluss](../architektur/datenfluss.md)
 - [Tests](../entwicklung/tests.md)
 - [API Überblick](../api/ueberblick.md)

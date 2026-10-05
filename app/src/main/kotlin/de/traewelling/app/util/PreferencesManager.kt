@@ -31,6 +31,11 @@ class PreferencesManager(private val context: Context) {
         val KEY_APP_THEME     = stringPreferencesKey("app_theme")
         val KEY_GPS_TRACKING_ENABLED = booleanPreferencesKey("gps_tracking_enabled")
         val KEY_ANNOUNCEMENT_RADIUS = intPreferencesKey("announcement_radius_meters")
+        val KEY_RIDE_RECOGNITION_ENABLED = booleanPreferencesKey("ride_recognition_enabled")
+        val KEY_TRIP_CHANGE_ALERTS_ENABLED = booleanPreferencesKey("trip_change_alerts_enabled")
+        val KEY_TRIP_CHANGE_SPEECH_ENABLED = booleanPreferencesKey("trip_change_speech_enabled")
+        val KEY_LIVE_PROGRESS_ENABLED = booleanPreferencesKey("live_progress_enabled")
+        val KEY_LOCK_SCREEN_DETAILS_ENABLED = booleanPreferencesKey("lock_screen_details_enabled")
         private val KEY_TRACKING_STATE = stringPreferencesKey("trip_tracking_state")
         private val KEY_LOCATION_PERMISSION_REQUESTED = booleanPreferencesKey("location_permission_requested")
 
@@ -90,6 +95,46 @@ class PreferencesManager(private val context: Context) {
     val announcementRadiusMeters: Flow<Int> = context.dataStore.data.map {
         validRadius(it[KEY_ANNOUNCEMENT_RADIUS] ?: 0)
     }
+
+    val rideRecognitionEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_RIDE_RECOGNITION_ENABLED] ?: false
+    }
+    val tripChangeAlertsEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_TRIP_CHANGE_ALERTS_ENABLED] ?: true
+    }
+    val tripChangeSpeechEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_TRIP_CHANGE_SPEECH_ENABLED] ?: true
+    }
+    val liveProgressEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_LIVE_PROGRESS_ENABLED] ?: true
+    }
+    val lockScreenDetailsEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_LOCK_SCREEN_DETAILS_ENABLED] ?: true
+    }
+
+    suspend fun setRideRecognitionEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_RIDE_RECOGNITION_ENABLED] = enabled }
+    }
+    suspend fun setTripChangeAlertsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TRIP_CHANGE_ALERTS_ENABLED] = enabled }
+        if (!enabled) de.traewelling.app.service.TripTrackingService.clearChangeNotifications(context)
+    }
+    suspend fun setTripChangeSpeechEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_TRIP_CHANGE_SPEECH_ENABLED] = enabled }
+    }
+    suspend fun setLiveProgressEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_LIVE_PROGRESS_ENABLED] = enabled }
+    }
+    suspend fun setLockScreenDetailsEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_LOCK_SCREEN_DETAILS_ENABLED] = enabled }
+        if (!enabled) de.traewelling.app.service.TripTrackingService.clearChangeNotifications(context)
+    }
+
+    suspend fun getRideRecognitionEnabled(): Boolean = rideRecognitionEnabled.first()
+    suspend fun getTripChangeAlertsEnabled(): Boolean = tripChangeAlertsEnabled.first()
+    suspend fun getTripChangeSpeechEnabled(): Boolean = tripChangeSpeechEnabled.first()
+    suspend fun getLiveProgressEnabled(): Boolean = liveProgressEnabled.first()
+    suspend fun getLockScreenDetailsEnabled(): Boolean = lockScreenDetailsEnabled.first()
 
     suspend fun saveServerConfig(serverUrl: String, clientId: String, clientSecret: String) {
         context.dataStore.edit { prefs ->
@@ -196,6 +241,7 @@ class PreferencesManager(private val context: Context) {
 
     suspend fun clearSession() {
         context.dataStore.edit { prefs ->
+            prefs[KEY_RIDE_RECOGNITION_ENABLED] = false
             prefs.remove(KEY_ACCESS_TOKEN)
             prefs.remove(KEY_REFRESH_TOKEN)
             prefs.remove(KEY_USERNAME)

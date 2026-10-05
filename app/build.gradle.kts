@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "de.traewelling.app"
-    compileSdk = 34
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "de.traewelling.app"

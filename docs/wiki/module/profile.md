@@ -17,8 +17,8 @@ Der Profile-Tab zeigt nach dem Login die eigenen Nutzerdaten, Statistiken (Fahrt
 
 ### Lade-Prozess
 
-1. `loadProfile()` lädt User, Statistiken und letzte Fahrten parallel
-2. Nutzt `repo.getCurrentUser()`, `repo.getStatistics()`, `repo.getUserStatuses()`
+1. `loadProfile()` lädt den User und anschließend die Statistiken sequenziell über `repo.getCurrentUser()` und `repo.getStatistics()`.
+2. Nach erfolgreicher User-Antwort werden die letzten Fahrten über `repo.getUserStatuses()` geladen; erst danach werden die geladenen Statistiken in den UI-Zustand übernommen.
 
 ### Einstellungen-Einstieg
 
@@ -36,7 +36,7 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 - Profilkopf als große Gradient-Hero-Card mit Avatar, Benutzername, Bio und Statistik-Chips
 - Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
 - Lade- und Fehlerzustände via `StateMessage`
-- Letzte Fahrten werden weiterhin über `StatusCard` dargestellt
+- Letzte Fahrten werden über `StatusCard` dargestellt. Der Herz-Handler ist hier leer (`onLike = {}`); Tippen führt keinen Like-Aufruf aus.
 
 ## UI-Zustand (ProfileUiState)
 
@@ -45,9 +45,10 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 | `user`                                 | User?           | Eigene Nutzerdaten         |
 | `statistics`                           | StatisticsData? | Fahrten-Statistiken        |
 | `recentStatuses`                       | List<Status>    | Letzte Check-ins           |
-| `isTtsEnabled`                         | Boolean         | TTS aktiviert              |
-| `selectedTtsEngine/Language/Voice`     | String?         | Gewählte TTS-Einstellungen |
-| `availableTtsEngines/Languages/Voices` | List            | Verfügbare Optionen        |
+| `isLoading`                            | Boolean         | Ladezustand                |
+| `error`                                | String?         | Profil-Ladefehler          |
+
+TTS-Zustand liegt im `SettingsViewModel`, nicht im `ProfileUiState`.
 
 ## Abhängigkeiten
 
@@ -56,9 +57,11 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 
 ## Offene Fragen
 
-- Keine spezifischen aktuell.
+- TODO: Sichtbaren Herz-Button der Fahrtkarten mit Like/Unlike verbinden oder die Aktion in dieser Ansicht deaktivieren.
 
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
+- [Settings](./settings.md)
+- [Offene Fragen](../offene-fragen.md)

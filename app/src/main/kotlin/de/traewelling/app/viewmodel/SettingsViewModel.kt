@@ -19,7 +19,12 @@ data class SettingsUiState(
     val availableVoices: List<android.speech.tts.Voice> = emptyList(),
     val appTheme: String = "LIGHT",
     val gpsTrackingEnabled: Boolean = true,
-    val announcementRadiusMeters: Int = 0
+    val announcementRadiusMeters: Int = 0,
+    val rideRecognitionEnabled: Boolean = false,
+    val tripChangeAlertsEnabled: Boolean = true,
+    val tripChangeSpeechEnabled: Boolean = true,
+    val liveProgressEnabled: Boolean = true,
+    val lockScreenDetailsEnabled: Boolean = true
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application), TextToSpeech.OnInitListener {
@@ -66,6 +71,11 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     _uiState.update { it.copy(announcementRadiusMeters = radius) }
                 }
             }
+            launch { prefs.rideRecognitionEnabled.collect { enabled -> _uiState.update { it.copy(rideRecognitionEnabled = enabled) } } }
+            launch { prefs.tripChangeAlertsEnabled.collect { enabled -> _uiState.update { it.copy(tripChangeAlertsEnabled = enabled) } } }
+            launch { prefs.tripChangeSpeechEnabled.collect { enabled -> _uiState.update { it.copy(tripChangeSpeechEnabled = enabled) } } }
+            launch { prefs.liveProgressEnabled.collect { enabled -> _uiState.update { it.copy(liveProgressEnabled = enabled) } } }
+            launch { prefs.lockScreenDetailsEnabled.collect { enabled -> _uiState.update { it.copy(lockScreenDetailsEnabled = enabled) } } }
         }
     }
 
@@ -194,5 +204,18 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
 
     fun setAnnouncementRadiusMeters(radius: Int) {
         viewModelScope.launch { prefs.setAnnouncementRadiusMeters(radius) }
+    }
+
+    fun setTripChangeAlertsEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setTripChangeAlertsEnabled(enabled) }
+    }
+    fun setTripChangeSpeechEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setTripChangeSpeechEnabled(enabled) }
+    }
+    fun setLiveProgressEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setLiveProgressEnabled(enabled) }
+    }
+    fun setLockScreenDetailsEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setLockScreenDetailsEnabled(enabled) }
     }
 }

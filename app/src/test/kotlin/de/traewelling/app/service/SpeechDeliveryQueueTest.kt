@@ -9,6 +9,16 @@ import org.junit.Test
 
 class SpeechDeliveryQueueTest {
     @Test
+    fun changeAndStationEntriesWithTheSameKeyCannotConsumeEachOther() {
+        val queue = SpeechDeliveryQueue()
+        val stop = queue.begin(42, 1, "same")
+        val change = queue.begin(42, 1, "same", SpeechDeliveryKind.TRIP_CHANGE)
+        assertNotEquals(stop.utteranceId, change.utteranceId)
+        assertEquals(SpeechDeliveryKind.TRIP_CHANGE, queue.finish(change.utteranceId)?.kind)
+        assertFalse(queue.isEmpty)
+        assertEquals(stop, queue.find(42, 1, "same"))
+    }
+    @Test
     fun firstCompletionKeepsTheFollowingAnnouncementActive() {
         val queue = SpeechDeliveryQueue()
         val first = queue.begin(42, 1, "maubis")

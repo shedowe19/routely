@@ -25,7 +25,7 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 **2. Bahnhöfe & Abfahrten (Reiseplanung)**
 
 - **Station Search**: `GET /api/v1/trains/station/autocomplete/{query}` – Suche von Haltestellen per Text.
-- **Nearby Stations**: `GET /api/v1/stations` (mit Bounding-Box über `min_lat`, `max_lat`, `min_lon`, `max_lon`) oder `GET /api/v1/trains/station/nearby` – Haltestellen in der Nähe. _Hinweis: `nearby` liefert immer nur einen Bahnhof, `stations` ist für Umkreissuche._
+- **Stationen in der Nähe**: Der Check-in und die Fahrterkennung verwenden `TraewellingRepository.getNearbyStations(lat, lon)`. Dieser Aufruf berechnet eine ungefähr einen Kilometer in jede Richtung reichende Bounding-Box und sendet `min_lat`, `max_lat`, `min_lon`, `max_lon` an `GET /api/v1/stations`. `GET /api/v1/trains/station/nearby` ist zusätzlich in Retrofit deklariert und liefert einen Bahnhof; die aktuellen App-Abläufe rufen diesen Endpunkt nicht auf.
 - **Departures**: `GET /api/v1/station/{id}/departures` – Abfahrtsmonitor. Benötigt die numerische ID, nicht den Namen!
   Die ID ist die interne Träwelling-Station-ID, keine IBNR oder Stopover-ID.
 

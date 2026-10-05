@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.TrackingLiveState
 import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.util.PreferencesManager
@@ -14,11 +15,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import android.util.Log
-import java.time.ZonedDateTime
-import java.time.format.DateTimeFormatter
-import java.time.format.DateTimeParseException
-import java.time.temporal.ChronoUnit
+import java.time.Instant
 
 data class StatusDetailUiState(
     val isLoading: Boolean = false,
@@ -86,38 +83,25 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             repo.getStatusDetail(statusId)
                 .onSuccess statusLoaded@ { status ->
                     if (currentStatusId != statusId) return@statusLoaded
-                    // Enrich status with manual times from the checkin right away
+                    // Keep API stopovers intact. Manual and GPS times are resolved only for display.
                     val checkin = status.checkin
-                    val origin = checkin?.origin?.let {
-                        it.copy(departureReal = checkin.manualDeparture ?: it.departureReal)
-                    }
-                    val destination = checkin?.destination?.let {
-                        it.copy(arrivalReal = checkin.manualArrival ?: it.arrivalReal)
-                    }
+                    val origin = checkin?.origin
+                    val destination = checkin?.destination
 
-                    val enrichedStatus = status.copy(
-                        checkin = checkin?.copy(
-                            origin = origin,
-                            destination = destination
-                        )
-                    )
-
-                    _uiState.update { it.copy(status = enrichedStatus) }
-                    checkIfOwnStatus(enrichedStatus)
+                    _uiState.update { it.copy(status = status) }
+                    checkIfOwnStatus(status)
 
                     // Load stopovers using the trip ID from the checkin
-                    val tripId = enrichedStatus.checkin?.trip
+                    val tripId = status.checkin?.trip
                     if (tripId != null) {
-                        val enrichedCheckin = enrichedStatus.checkin
+                        val loadedCheckin = status.checkin
                         repo.getStopovers(tripId)
                             .onSuccess stopsLoaded@ { stops ->
                                 if (currentStatusId != statusId) return@stopsLoaded
-                                val enrichedStops = enrichStops(stops, origin, destination)
-                                
-                                val finalOrigin = enrichedStops.find { it.matchesStopover(origin) } ?: origin
-                                val finalDestination = enrichedStops.find { it.matchesStopover(destination) } ?: destination
-                                val finalStatus = enrichedStatus.copy(
-                                    checkin = enrichedCheckin.copy(
+                                val finalOrigin = stops.find { it.matchesStopover(origin) } ?: origin
+                                val finalDestination = stops.find { it.matchesStopover(destination) } ?: destination
+                                val finalStatus = status.copy(
+                                    checkin = loadedCheckin.copy(
                                         origin = finalOrigin,
                                         destination = finalDestination
                                     )
@@ -127,7 +111,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                     it.copy(
                                         isLoading = false,
                                         status = finalStatus,
-                                        stopovers = enrichedStops,
+                                        stopovers = stops,
                                         lastUpdated = System.currentTimeMillis()
                                     )
                                 }
@@ -169,35 +153,21 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         // Silently update — no loading spinner
         repo.getStatusDetail(statusId).onSuccess statusRefreshed@ { status ->
             if (currentStatusId != statusId) return@statusRefreshed
-            // Enrich status with manual times from the checkin right away
             val checkin = status.checkin
-            val origin = checkin?.origin?.let {
-                it.copy(departureReal = checkin.manualDeparture ?: it.departureReal)
-            }
-            val destination = checkin?.destination?.let {
-                it.copy(arrivalReal = checkin.manualArrival ?: it.arrivalReal)
-            }
+            val origin = checkin?.origin
+            val destination = checkin?.destination
 
-            val enrichedStatus = status.copy(
-                checkin = checkin?.copy(
-                    origin = origin,
-                    destination = destination
-                )
-            )
+            _uiState.update { it.copy(status = status) }
 
-            _uiState.update { it.copy(status = enrichedStatus) }
-
-            val tripId = enrichedStatus.checkin?.trip
+            val tripId = status.checkin?.trip
             if (tripId != null) {
-                val enrichedCheckin = enrichedStatus.checkin
+                val loadedCheckin = status.checkin
                 repo.getStopovers(tripId).onSuccess stopsRefreshed@ { stops ->
                     if (currentStatusId != statusId) return@stopsRefreshed
-                    val enrichedStops = enrichStops(stops, origin, destination)
-
-                    val finalOrigin = enrichedStops.find { it.matchesStopover(origin) } ?: origin
-                    val finalDestination = enrichedStops.find { it.matchesStopover(destination) } ?: destination
-                    val finalStatus = enrichedStatus.copy(
-                        checkin = enrichedCheckin.copy(
+                    val finalOrigin = stops.find { it.matchesStopover(origin) } ?: origin
+                    val finalDestination = stops.find { it.matchesStopover(destination) } ?: destination
+                    val finalStatus = status.copy(
+                        checkin = loadedCheckin.copy(
                             origin = finalOrigin,
                             destination = finalDestination
                         )
@@ -206,137 +176,12 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                     _uiState.update {
                         it.copy(
                             status = finalStatus,
-                            stopovers = enrichedStops, 
+                            stopovers = stops,
                             lastUpdated = System.currentTimeMillis()
                         )
                     }
                 }
             }
-        }
-    }
-
-    private fun enrichStops(stops: List<StopStation>, origin: StopStation?, destination: StopStation?): List<StopStation> {
-        val mappedStops = stops.map { stop ->
-            when {
-                stop.matchesStopover(origin) -> stop.copy(
-                    departureReal = origin?.departureReal ?: stop.departureReal
-                )
-                stop.matchesStopover(destination) -> stop.copy(
-                    arrivalReal = destination?.arrivalReal ?: stop.arrivalReal
-                )
-                else -> stop
-            }
-        }
-        return propagateDelays(mappedStops)
-    }
-
-    private fun propagateDelays(stops: List<StopStation>): List<StopStation> {
-        var currentDelayMinutes: Long = 0
-        var lastDeparturePlanned: ZonedDateTime? = null
-        var fractionalRecovery = 0.0
-
-        val formatter = DateTimeFormatter.ISO_OFFSET_DATE_TIME
-
-        return stops.map { stop ->
-            var updatedStop = stop
-            var delayUpdated = false
-
-            val plannedArrivalZdt = try { stop.arrivalPlanned?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed arrivalPlanned time for stop ${stop.uuid ?: stop.stationId}: ${stop.arrivalPlanned}", e)
-                null
-            }
-            val realArrivalZdt = try { stop.arrivalReal?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed arrivalReal time for stop ${stop.uuid ?: stop.stationId}: ${stop.arrivalReal}", e)
-                null
-            }
-
-            val plannedDepartureZdt = try { stop.departurePlanned?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed departurePlanned time for stop ${stop.uuid ?: stop.stationId}: ${stop.departurePlanned}", e)
-                null
-            }
-            val realDepartureZdt = try { stop.departureReal?.let { ZonedDateTime.parse(it) } } catch (e: DateTimeParseException) {
-                Log.w("StatusDetailViewModel", "Malformed departureReal time for stop ${stop.uuid ?: stop.stationId}: ${stop.departureReal}", e)
-                null
-            }
-
-            // 1. Process Travel Time Recovery (Arrival)
-            if (plannedArrivalZdt != null) {
-                var apiDelayMinutes: Long? = null
-                if (realArrivalZdt != null && !realArrivalZdt.isEqual(plannedArrivalZdt)) {
-                    apiDelayMinutes = ChronoUnit.MINUTES.between(plannedArrivalZdt, realArrivalZdt)
-                }
-
-                if (currentDelayMinutes > 0 && lastDeparturePlanned != null) {
-                    val travelTime = ChronoUnit.MINUTES.between(lastDeparturePlanned, plannedArrivalZdt).coerceAtLeast(0)
-                    fractionalRecovery += travelTime * 0.05
-
-                    if (fractionalRecovery >= 1.0) {
-                        val recoveredMins = fractionalRecovery.toLong()
-                        currentDelayMinutes = (currentDelayMinutes - recoveredMins).coerceAtLeast(0)
-                        fractionalRecovery -= recoveredMins
-                    }
-                }
-
-                if (apiDelayMinutes != null && apiDelayMinutes > currentDelayMinutes) {
-                    currentDelayMinutes = apiDelayMinutes
-                    fractionalRecovery = 0.0
-                }
-
-                if (currentDelayMinutes != 0L) {
-                    val newRealArrival = plannedArrivalZdt.plusMinutes(currentDelayMinutes).format(formatter)
-                    if (updatedStop.arrivalReal != newRealArrival || updatedStop.isArrivalDelayed != (currentDelayMinutes > 0L)) {
-                        updatedStop = updatedStop.copy(
-                            arrivalReal = newRealArrival,
-                            isArrivalDelayed = currentDelayMinutes > 0
-                        )
-                        delayUpdated = true
-                    }
-                }
-            }
-
-            // 2. Process Dwell Time Recovery (Departure)
-            if (plannedDepartureZdt != null) {
-                var apiDelayMinutes: Long? = null
-                if (realDepartureZdt != null && !realDepartureZdt.isEqual(plannedDepartureZdt)) {
-                    apiDelayMinutes = ChronoUnit.MINUTES.between(plannedDepartureZdt, realDepartureZdt)
-                }
-
-                if (currentDelayMinutes > 0 && plannedArrivalZdt != null && plannedDepartureZdt.isAfter(plannedArrivalZdt)) {
-                    val dwellTime = ChronoUnit.MINUTES.between(plannedArrivalZdt, plannedDepartureZdt)
-                    if (dwellTime > 1) {
-                        val recoveryFromDwell = dwellTime - 1
-                        fractionalRecovery += recoveryFromDwell * 0.05
-                    }
-
-                    if (fractionalRecovery >= 1.0) {
-                        val recoveredMins = fractionalRecovery.toLong()
-                        currentDelayMinutes = (currentDelayMinutes - recoveredMins).coerceAtLeast(0)
-                        fractionalRecovery -= recoveredMins
-                    }
-                }
-
-                if (apiDelayMinutes != null && apiDelayMinutes > currentDelayMinutes) {
-                    currentDelayMinutes = apiDelayMinutes
-                    fractionalRecovery = 0.0
-                }
-
-                if (currentDelayMinutes != 0L) {
-                    val newRealDeparture = plannedDepartureZdt.plusMinutes(currentDelayMinutes).format(formatter)
-                    if (updatedStop.departureReal != newRealDeparture || updatedStop.isDepartureDelayed != (currentDelayMinutes > 0L)) {
-                        updatedStop = updatedStop.copy(
-                            departureReal = newRealDeparture,
-                            isDepartureDelayed = currentDelayMinutes > 0
-                        )
-                        delayUpdated = true
-                    }
-                }
-                lastDeparturePlanned = plannedDepartureZdt
-            } else if (plannedArrivalZdt != null) {
-                // If it's a destination station (no departure), update last planned for completeness
-                lastDeparturePlanned = plannedArrivalZdt
-            }
-
-            if (delayUpdated) updatedStop else stop
         }
     }
 
@@ -367,8 +212,10 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             it.copy(
                 isEditing = true,
                 editBody = status.body ?: "",
-                editDeparture = status.checkin?.origin?.departureReal ?: status.checkin?.origin?.departurePlanned ?: "",
-                editArrival = status.checkin?.destination?.arrivalReal ?: status.checkin?.destination?.arrivalPlanned ?: "",
+                editDeparture = JourneyTimeResolver.departure(status.checkin?.origin, null, 0,
+                    status.checkin?.manualDeparture)?.millis?.let { millis -> Instant.ofEpochMilli(millis).toString() } ?: "",
+                editArrival = JourneyTimeResolver.arrival(status.checkin?.destination, null, 0,
+                    status.checkin?.manualArrival)?.millis?.let { millis -> Instant.ofEpochMilli(millis).toString() } ?: "",
                 editDestinationId = status.checkin?.destination?.stationId,
                 editDestinationStop = status.checkin?.destination,
                 editVisibility = status.visibility ?: 0
@@ -397,7 +244,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             it.copy(
                 editDestinationId = stop.stationId,
                 editDestinationStop = stop,
-                editArrival = stop.effectiveArrival ?: ""
+                editArrival = JourneyTimeResolver.arrival(stop, null, 0)?.millis?.let { millis -> Instant.ofEpochMilli(millis).toString() } ?: ""
             )
         }
     }

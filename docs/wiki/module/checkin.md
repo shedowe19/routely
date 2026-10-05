@@ -19,7 +19,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 
 1. **Bahnhofsauswahl (Start):**
    - Entweder über die Textsuche (`GET /api/v1/trains/station/autocomplete/{query}`)
-   - Oder über die Ortung (`GET /api/v1/stations` mit Koordinaten der Bounding-Box)
+   - Oder über die Ortung (`TraewellingRepository.getNearbyStations` → `GET /api/v1/stations` mit den aus dem Standort berechneten Boxgrenzen `min_lat`, `max_lat`, `min_lon`, `max_lon`)
    - _Wichtig:_ Stationsergebnisse müssen dedupliziert werden (z.B. nach Nähe und Namen).
 
 2. **Abfahrtsauswahl:**
@@ -43,6 +43,10 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 Abfahrten zeigen `direction` als Fahrtrichtung und nutzen `delayMinutes`, berechnet aus `when - plannedWhen`. Bei fehlender Echtzeit wird die Planzeit angezeigt. Ein Betreiber wird aus `TripDetails.operator` beziehungsweise `CheckinInfo.operator` gelesen; das veraltete `line.operator` wird nicht vorausgesetzt.
 
 Der Check-in überträgt weiterhin numerische interne Station-IDs für `start` und `destination` und den Provider-Identifier für `tripId`. Eine Stopover-ID, IBNR oder Trip-UUID darf diese Werte nicht ersetzen.
+
+## Fahrtvorschläge aus GPS
+
+Der Stationsschritt enthält die ausdrücklich aktivierbare [Fahrterkennung](./ride-recognition.md). Eine laufende eigene Fahrt pausiert die Suche. Kandidaten bleiben prozesslokal und können mehrdeutig sein; der Nutzer prüft Linie/Richtung. `CheckInViewModel` prüft bei Auswahl Fixalter, aktuelle Session und das Fehlen eines aktiven Check-ins erneut. Ein gültiger Vorschlag übernimmt Einstieg, Abfahrt und bereits geladene Tripdetails; anschließend folgen normale Zielauswahl und manuelle Bestätigung. Es gibt keinen automatischen `POST /trains/checkin`.
 
 ## Zeitfelder und Konflikte
 
@@ -83,6 +87,8 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 ## Verwandte Seiten
 
 - [API Überblick](../api/ueberblick.md)
+- [Fahrterkennung](./ride-recognition.md)
+- [TripTracking](./trip-tracking.md)
 - [Externe Schnittstellen](../api/externe-schnittstellen.md)
 - [Datenmodell](../daten/datenmodell.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)
