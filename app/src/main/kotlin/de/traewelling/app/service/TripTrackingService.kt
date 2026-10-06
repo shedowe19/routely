@@ -246,6 +246,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                 pendingAnnouncement?.let { (stop, source) ->
                     pendingAnnouncement = null
                     if (engine?.getProgress()?.nextStopKey != stop.key) return@let
+                    // A returning fix may belong to a later visit while the
+                    // protected cursor still waits for independent evidence.
+                    if (engine?.isReacquiringLocation() == true) return@let
                     val utterance = speakStop(stop, source)
                     if (utterance != null) {
                         engine?.acknowledgeAnnouncement(stop.key)

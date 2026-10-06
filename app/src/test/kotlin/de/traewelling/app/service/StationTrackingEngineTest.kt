@@ -1109,6 +1109,364 @@ class StationTrackingEngineTest {
         assertTrue(engine.getProgress().completed)
     }
 
+    @Test
+    fun restoredTunnelCursorReanchorsOnlyAfterThreeFreshUniqueFutureFixes() {
+        val engine = tunnelEngine()
+        val first = engine.onLocation(tunnelFix(5_870.0, now), now)
+        val second = engine.onLocation(tunnelFix(5_875.0, now + 3 * SECOND), now + 3 * SECOND)
+
+        assertEquals("bismarck", first.stop?.key)
+        assertEquals(TrackingSource.TIMETABLE, first.source)
+        assertEquals(TrackingSource.TIMETABLE, second.source)
+        assertTrue(engine.isReacquiringLocation())
+        assertNull(first.announcement)
+        assertNull(second.announcement)
+        val selected = engine.onLocation(tunnelFix(5_880.0, now + 6 * SECOND), now + 6 * SECOND)
+
+        assertEquals("savigny", selected.stop?.key)
+        assertEquals(TrackingSource.GPS, selected.source)
+        assertFalse(engine.isReacquiringLocation())
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        assertFalse(selected.destinationReached)
+        assertEquals(setOf("origin"), engine.getProgress().announcedKeys)
+        assertNull(selected.announcement)
+    }
+
+    @Test
+    fun multiStopGapRecoveryDoesNotRequireAPreGapApproachTrend() {
+        val engine = tunnelEngine()
+        engine.onLocation(fix(500.0, now), now)
+        repeat(3) { index ->
+            val time = now + (40 + index * 3) * SECOND
+            engine.onLocation(tunnelFix(5_875.0, time), time)
+        }
+
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().completed)
+    }
+
+    @Test
+    fun explicitLocationInvalidationAllowsForwardRecoveryWithoutOldFixHistory() {
+        val engine = tunnelEngine()
+        engine.onLocation(fix(2_000.0, now), now)
+        engine.onLocation(fix(2_000.0, now + 3 * SECOND), now + 3 * SECOND)
+        assertTrue(engine.getProgress().arrivedAtCurrent)
+        engine.invalidateLocation()
+        repeat(3) { index ->
+            val time = now + (10 + index * 3) * SECOND
+            engine.onLocation(tunnelFix(5_875.0, time), time)
+        }
+
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+    }
+
+    @Test
+    fun invalidationAndGpsTogglesCannotReplayAlreadyConsumedFixesAsNewVisitProof() {
+        listOf(false, true).forEach { toggle ->
+            val engine = tunnelEngine()
+            val old = listOf(0L, 3 * SECOND, 6 * SECOND).map { elapsed ->
+                fix(1_000.0, now + elapsed)
+            }
+            old.forEach { engine.onLocation(it, it.timeMillis) }
+            if (toggle) {
+                engine.setGpsEnabled(false)
+                engine.setGpsEnabled(true)
+            } else engine.invalidateLocation()
+            // Even changed cached coordinates at these timestamps are old
+            // events, not three fresh fixes proving a later physical visit.
+            old.forEach { engine.onLocation(tunnelFix(5_875.0, it.timeMillis), now + 7 * SECOND) }
+            assertEquals("bismarck", engine.getProgress().nextStopKey)
+            assertFalse(engine.hasReliableLocation(now + 7 * SECOND))
+            repeat(3) { index ->
+                val time = now + (10 + index * 3) * SECOND
+                engine.onLocation(tunnelFix(5_875.0, time), time)
+            }
+            assertEquals("savigny", engine.getProgress().nextStopKey)
+        }
+    }
+
+    @Test
+    fun tentativeOneHopGapRecoveryKeepsMultiStopRecoveryArmedUntilPhysicalVisitProof() {
+        val engine = StationTrackingEngine(listOf(
+            stop("old", stationId = 1),
+            stop("unconfirmed", positionMeters = 2_000.0, stationId = 2),
+            stop("missed", positionMeters = 3_000.0, stationId = 3),
+            stop("later", positionMeters = 4_000.0, stationId = 4)
+        ))
+        engine.onLocation(fix(-300.0, now), now)
+        engine.onLocation(fix(-150.0, now + 5 * SECOND), now + 5 * SECOND)
+        engine.onLocation(fix(1_800.0, now + 45 * SECOND), now + 45 * SECOND)
+        engine.onLocation(fix(1_850.0, now + 50 * SECOND), now + 50 * SECOND)
+        assertEquals("unconfirmed", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        engine.onLocation(fix(3_800.0, now + 75 * SECOND), now + 75 * SECOND)
+        assertEquals("missed", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        repeat(3) { index ->
+            val time = now + (78 + index * 3) * SECOND
+            engine.onLocation(fix(3_875.0, time), time)
+            if (index < 2) assertEquals("missed", engine.getProgress().nextStopKey)
+        }
+        assertEquals("later", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        assertFalse(engine.getProgress().announcedKeys.contains("missed"))
+    }
+
+    @Test
+    fun firstFarOriginFixDoesNotDisableLaterMultiStopPhysicalProof() {
+        val engine = StationTrackingEngine(tunnelStops())
+        engine.onLocation(tunnelFix(5_000.0, now, yMeters = 1_000.0), now)
+        assertEquals("origin", engine.getProgress().nextStopKey)
+        repeat(3) { index ->
+            val time = now + (15 + index * 3) * SECOND
+            engine.onLocation(tunnelFix(5_875.0, time), time)
+        }
+
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+        assertEquals(emptySet<String>(), engine.getProgress().announcedKeys)
+    }
+
+    @Test
+    fun stationaryLaterVisitCanBeReacquiredWithoutClockOrMovementGuessing() {
+        val stops = tunnelStops().map { it.copy(effectiveArrivalMillis = now + 2 * 60 * MINUTE,
+            effectiveDepartureMillis = now + 2 * 60 * MINUTE + MINUTE) }
+        val engine = tunnelEngine(stops)
+        repeat(3) { index ->
+            val time = now + index * 3 * SECOND
+            engine.onLocation(tunnelFix(6_000.0, time), time)
+        }
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        engine.onLocation(tunnelFix(6_000.0, now + 9 * SECOND), now + 9 * SECOND)
+        assertTrue(engine.getProgress().arrivedAtCurrent)
+    }
+
+    @Test
+    fun pendingRecoveryTicksCannotAnnounceOldStopOrRestoreItsGpsSource() {
+        val engine = tunnelEngine()
+        engine.onLocation(tunnelFix(5_875.0, now), now)
+        val tick = engine.onTimetable(now + SECOND)
+        val laterTick = engine.onTimetable(now + 45 * MINUTE)
+
+        assertEquals("bismarck", tick.stop?.key)
+        assertEquals(TrackingSource.TIMETABLE, tick.source)
+        assertNull(tick.announcement)
+        assertEquals("bismarck", laterTick.stop?.key)
+        assertEquals(TrackingSource.TIMETABLE, laterTick.source)
+        assertNull(laterTick.announcement)
+        assertTrue(engine.isReacquiringLocation())
+    }
+
+    @Test
+    fun staleAndInaccurateFixesResetFutureVisitEvidence() {
+        listOf("stale", "inaccurate").forEach { invalid ->
+            val engine = tunnelEngine()
+            engine.onLocation(tunnelFix(5_875.0, now), now)
+            engine.onLocation(tunnelFix(5_875.0, now + 3 * SECOND), now + 3 * SECOND)
+            val fix = tunnelFix(5_875.0, now + 6 * SECOND,
+                accuracy = if (invalid == "stale") 10.0 else 80.0)
+            val invalidNow = now + (if (invalid == "stale") 40 else 6) * SECOND
+            engine.onLocation(fix, invalidNow)
+            engine.onLocation(tunnelFix(5_875.0, invalidNow + 3 * SECOND), invalidNow + 3 * SECOND)
+            engine.onLocation(tunnelFix(5_875.0, invalidNow + 6 * SECOND), invalidNow + 6 * SECOND)
+            assertEquals(invalid, "bismarck", engine.getProgress().nextStopKey)
+            engine.onLocation(tunnelFix(5_875.0, invalidNow + 9 * SECOND), invalidNow + 9 * SECOND)
+            assertEquals(invalid, "savigny", engine.getProgress().nextStopKey)
+        }
+    }
+
+    @Test
+    fun duplicateApiFixReplaysNeitherCountNorEraseFreshPendingRecoveryEvidence() {
+        val engine = tunnelEngine()
+        val first = tunnelFix(5_875.0, now)
+        val second = tunnelFix(5_875.0, now + 3 * SECOND)
+        engine.onLocation(first, now)
+        repeat(3) { assertEquals(TrackingSource.TIMETABLE, engine.onLocation(first, now + SECOND).source) }
+        engine.onLocation(second, now + 3 * SECOND)
+        repeat(3) { engine.onLocation(second, now + 4 * SECOND) }
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        val confirmed = engine.onLocation(tunnelFix(5_875.0, now + 6 * SECOND), now + 6 * SECOND)
+        assertEquals("savigny", confirmed.stop?.key)
+        assertEquals(TrackingSource.GPS, confirmed.source)
+    }
+
+    @Test
+    fun recentImplausibleJumpCannotBeTheFirstFutureAnchorSample() {
+        val engine = tunnelEngine()
+        engine.onLocation(fix(2_000.0, now), now)
+        engine.onLocation(tunnelFix(5_875.0, now + SECOND), now + SECOND)
+        engine.onLocation(tunnelFix(5_875.0, now + 4 * SECOND), now + 4 * SECOND)
+        engine.onLocation(tunnelFix(5_875.0, now + 7 * SECOND), now + 7 * SECOND)
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        engine.onLocation(tunnelFix(5_875.0, now + 10 * SECOND), now + 10 * SECOND)
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+    }
+
+    @Test
+    fun repeatedPastPhysicalStopAndDuplicateStationIdCannotChooseALaterLoopVisit() {
+        val base = tunnelStops()
+        val routes = listOf(
+            base.toMutableList().apply { this[0] = base[3].copy(key = "past-savigny", isOrigin = true) },
+            base.toMutableList().apply { this[0] = base[0].copy(stationId = base[3].stationId) }
+        )
+        routes.forEach { stops ->
+            val engine = tunnelEngine(stops)
+            repeat(5) { index ->
+                val time = now + index * 3 * SECOND
+                engine.onLocation(tunnelFix(5_875.0, time), time)
+            }
+            assertEquals("bismarck", engine.getProgress().nextStopKey)
+            assertFalse(engine.getProgress().completed)
+        }
+    }
+
+    @Test
+    fun nearbyCurrentAndFutureVisitsAreAmbiguousInsteadOfNearestMatched() {
+        val stops = tunnelStops().toMutableList().apply {
+            this[1] = this[1].copy(latitude = this[3].latitude,
+                longitude = 5_800.0 / METERS_PER_DEGREE)
+        }
+        val engine = tunnelEngine(stops)
+        repeat(4) { index ->
+            val time = now + index * 3 * SECOND
+            engine.onLocation(tunnelFix(5_875.0, time, speed = 10.0), time)
+        }
+
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().completed)
+    }
+
+    @Test
+    fun missingOrRepeatedVisitKeyCannotBecomeAForwardAnchor() {
+        val base = tunnelStops()
+        val routes = listOf(
+            base.map { if (it.key == "savigny") it.copy(key = "") else it },
+            base.map { if (it.key == "origin") it.copy(key = "savigny", stationId = null) else it }
+        )
+        routes.forEach { stops ->
+            val engine = tunnelEngine(stops)
+            repeat(4) { index ->
+                val time = now + index * 3 * SECOND
+                engine.onLocation(tunnelFix(5_875.0, time), time)
+            }
+            assertEquals("bismarck", engine.getProgress().nextStopKey)
+            assertFalse(engine.getProgress().completed)
+        }
+    }
+
+    @Test
+    fun candidateChangesAndSecondOutagesStartNewFreshProofWindows() {
+        val engine = tunnelEngine()
+        engine.onLocation(tunnelFix(5_875.0, now), now)
+        engine.onLocation(tunnelFix(5_875.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.onLocation(tunnelFix(3_875.0, now + 25 * SECOND), now + 25 * SECOND)
+        engine.onLocation(tunnelFix(5_875.0, now + 50 * SECOND), now + 50 * SECOND)
+        engine.onLocation(tunnelFix(5_875.0, now + 90 * SECOND), now + 90 * SECOND)
+        engine.onLocation(tunnelFix(5_875.0, now + 93 * SECOND), now + 93 * SECOND)
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        engine.onLocation(tunnelFix(5_875.0, now + 96 * SECOND), now + 96 * SECOND)
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+    }
+
+    @Test
+    fun selectingAnAlreadyDepartingVisitKeepsRecoveryArmedForTheFollowingVisit() {
+        val engine = tunnelEngine()
+        listOf(6_090.0, 6_110.0, 6_130.0).forEachIndexed { index, position ->
+            val time = now + index * 3 * SECOND
+            engine.onLocation(tunnelFix(position, time, speed = 10.0), time)
+        }
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        repeat(3) { index ->
+            val time = now + (30 + index * 3) * SECOND
+            engine.onLocation(tunnelFix(7_875.0, time, speed = 10.0), time)
+        }
+        assertEquals("destination", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().completed)
+        assertEquals(setOf("origin"), engine.getProgress().announcedKeys)
+    }
+
+    @Test
+    fun initialOuterCurrentVisitSelectionDoesNotDisableLaterPhysicalRecovery() {
+        val route = listOf(
+            stop("already-passed", stationId = 1),
+            stop("later", positionMeters = 2_000.0, stationId = 2)
+        )
+        val engine = StationTrackingEngine(route)
+        engine.onLocation(fix(130.0, now), now)
+        engine.onLocation(fix(180.0, now + 3 * SECOND), now + 3 * SECOND)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        repeat(3) { index ->
+            val time = now + (25 + index * 3) * SECOND
+            engine.onLocation(fix(1_875.0, time), time)
+        }
+        assertEquals("later", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+    }
+
+    @Test
+    fun routeCoordinateRefreshInvalidatesPendingFutureSamples() {
+        val stops = tunnelStops()
+        val engine = tunnelEngine(stops)
+        engine.onLocation(tunnelFix(5_875.0, now), now)
+        engine.onLocation(tunnelFix(5_875.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.updateRoute(stops.map { if (it.key == "savigny")
+            it.copy(longitude = 6_010.0 / METERS_PER_DEGREE) else it })
+        engine.onLocation(tunnelFix(5_880.0, now + 6 * SECOND), now + 6 * SECOND)
+        engine.onLocation(tunnelFix(5_880.0, now + 9 * SECOND), now + 9 * SECOND)
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        engine.onLocation(tunnelFix(5_880.0, now + 12 * SECOND), now + 12 * SECOND)
+        assertEquals("savigny", engine.getProgress().nextStopKey)
+    }
+
+    @Test
+    fun forwardDestinationSelectionNeedsItsOwnSubsequentArrivalFix() {
+        val engine = tunnelEngine()
+        repeat(3) { index ->
+            val time = now + index * 3 * SECOND
+            val update = engine.onLocation(tunnelFix(8_000.0, time), time)
+            assertFalse(update.destinationReached)
+        }
+        assertEquals("destination", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        val arrived = engine.onLocation(tunnelFix(8_000.0, now + 9 * SECOND), now + 9 * SECOND)
+        assertTrue(arrived.destinationReached)
+        assertEquals(setOf("origin"), engine.getProgress().announcedKeys)
+    }
+
+    @Test
+    fun completedJourneyNeverReanchorsAfterNewLocationFixes() {
+        val engine = StationTrackingEngine(tunnelStops(), TrackingProgress(nextIndex = 4,
+            nextStopKey = "destination", arrivedAtCurrent = true, completed = true, gpsEstablished = true))
+        repeat(3) { index ->
+            val time = now + index * 3 * SECOND
+            engine.onLocation(tunnelFix(6_000.0, time), time)
+        }
+        assertEquals("destination", engine.getProgress().nextStopKey)
+        assertTrue(engine.getProgress().completed)
+        assertFalse(engine.isReacquiringLocation())
+    }
+
+    private fun tunnelStops(): List<TrackingStop> = listOf(
+        stop("origin", stationId = 1, origin = true),
+        stop("bismarck", positionMeters = 2_000.0, stationId = 2, arrival = now + 2 * MINUTE),
+        stop("missed", positionMeters = 4_000.0, stationId = 3)
+            .copy(latitude = 2_000.0 / METERS_PER_DEGREE),
+        stop("savigny", positionMeters = 6_000.0, stationId = 4)
+            .copy(latitude = 2_000.0 / METERS_PER_DEGREE),
+        stop("destination", positionMeters = 8_000.0, stationId = 5, destination = true)
+            .copy(latitude = 2_000.0 / METERS_PER_DEGREE)
+    )
+
+    private fun tunnelEngine(stops: List<TrackingStop> = tunnelStops()): StationTrackingEngine =
+        StationTrackingEngine(stops, TrackingProgress(nextIndex = 1, nextStopKey = "bismarck",
+            announcedKeys = setOf("origin"), gpsEstablished = true))
+
+    private fun tunnelFix(xMeters: Double, time: Long, yMeters: Double = 2_000.0,
+        accuracy: Double = 10.0, speed: Double? = 0.0): LocationFix =
+        LocationFix(yMeters / METERS_PER_DEGREE, xMeters / METERS_PER_DEGREE, accuracy, time, speed)
+
     private fun stop(
         key: String,
         positionMeters: Double = 0.0,

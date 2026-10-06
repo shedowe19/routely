@@ -66,6 +66,9 @@ class StationTrackingEngine(
     private var configuredRadius = normalizeRadius(radiusMeters)
     private var gpsEnabled = true
     private var lastReliableFix: LocationFix? = null
+    // Retained across transient invalidation/toggles so queued old fixes cannot
+    // become a new proof after location history has deliberately been cleared.
+    private var latestAcceptedFixMillis: Long? = null
     // A GPS-established cursor is authoritative, including after restoration.
     // A clock-only cursor remains provisional until a safe GPS re-anchor.
     private var protectCoordinateCursor = progress.gpsEstablished || progress.arrivedAtCurrent
@@ -81,7 +84,19 @@ class StationTrackingEngine(
     private var insideArrivalFixCount = 0
     private var dwellAnchor: LocationFix? = null
     private var smoothedSpeed: Double? = null
+    // A tunnel can cover more than one ordered visit. This evidence is local
+    // and transient; restoring a cursor never restores a location proof.
+    private var recoveryEligible = !progress.completed
+    private var recoveryPending = false
+    private var recoveryCandidate: RecoveryCandidate? = null
     private val releasedAnnouncements = mutableSetOf<String>()
+
+    private data class RecoveryCandidate(
+        val key: String,
+        val firstFix: LocationFix,
+        val latestFix: LocationFix,
+        val count: Int
+    )
 
     init {
         alignCursor()
@@ -108,6 +123,10 @@ class StationTrackingEngine(
         val newStop = route.getOrNull(index)
         val sameCoordinates = oldStop?.latitude == newStop?.latitude &&
             oldStop?.longitude == newStop?.longitude
+        if (previousRoute.map(::recoveryIdentity) != route.map(::recoveryIdentity)) {
+            recoveryCandidate = null
+            recoveryEligible = !state.completed
+        }
         state = state.copy(
             nextIndex = index,
             nextStopKey = newKey ?: if (route.isEmpty()) oldKey else null,
@@ -133,6 +152,9 @@ class StationTrackingEngine(
         protectCoordinateCursor = enabled
         initializationAttempted = false
         mayBootstrapOrigin = enabled
+        recoveryEligible = enabled && !state.completed
+        recoveryPending = false
+        recoveryCandidate = null
         resetObservation()
     }
 
@@ -141,6 +163,8 @@ class StationTrackingEngine(
     fun invalidateLocation() {
         lastReliableFix = null
         smoothedSpeed = null
+        recoveryEligible = gpsEnabled && !state.completed
+        recoveryCandidate = null
         resetObservation()
     }
 
@@ -166,11 +190,15 @@ class StationTrackingEngine(
     fun hasReliableLocation(nowMillis: Long): Boolean =
         gpsEnabled && lastReliableFix?.let { isReliable(it, nowMillis) } == true
 
+    /** A later physical visit is plausible, but its fresh proof is incomplete. */
+    @Synchronized
+    fun isReacquiringLocation(): Boolean = recoveryPending && !state.completed
+
     /** Revalidate delayed TTS work against the current visit, not its old reservation. */
     @Synchronized
     fun isOriginAnnouncementRelevant(key: String, source: TrackingSource, nowMillis: Long): Boolean {
         val stop = currentStop() ?: return false
-        if (state.completed || stop.cancelled || !stop.isOrigin || stop.key != key) return false
+        if (state.completed || recoveryPending || stop.cancelled || !stop.isOrigin || stop.key != key) return false
         val departure = stop.effectiveDepartureMillis ?: stop.effectiveArrivalMillis ?: return false
         if (departure < nowMillis || departure - nowMillis > TIMETABLE_ANNOUNCEMENT_MILLIS) return false
         val fix = lastReliableFix?.takeIf { gpsEnabled && isReliable(it, nowMillis) }
@@ -183,11 +211,16 @@ class StationTrackingEngine(
     @Synchronized
     fun onLocation(fix: LocationFix, nowMillis: Long): TrackingUpdate {
         if (!gpsEnabled) return onTimetable(nowMillis)
-        if (!isReliable(fix, nowMillis) ||
-            lastReliableFix?.let { fix.timeMillis <= it.timeMillis } == true
-        ) return onTimetable(nowMillis)
+        // API/clock refreshes may replay the latest cached fix. They neither
+        // add new evidence nor discard a still valid in-progress fix window.
+        if (latestAcceptedFixMillis?.let { fix.timeMillis <= it } == true) return onTimetable(nowMillis)
+        if (!isReliable(fix, nowMillis)) {
+            recoveryCandidate = null
+            return onTimetable(nowMillis)
+        }
 
         val oldFix = lastReliableFix
+        latestAcceptedFixMillis = fix.timeMillis
         // A gap invalidates the approach trend, not the persisted visit cursor.
         if (oldFix != null && fix.timeMillis - oldFix.timeMillis > MAX_FIX_AGE_MILLIS) {
             val candidate = currentStop()?.takeIf {
@@ -195,6 +228,8 @@ class StationTrackingEngine(
                     (!it.isOrigin || state.arrivedAtCurrent)
             }?.key
             resetObservation()
+            recoveryEligible = !state.completed
+            recoveryCandidate = null
             gapPassCandidateKey = candidate
             observedKey = candidate
         }
@@ -214,6 +249,15 @@ class StationTrackingEngine(
             if (advanced) mayBootstrapOrigin = false
         }
         if (!advanced && oldFix != null) advanced = recoverPassedStopAfterGap(oldFix, fix)
+        if (advanced) clearPendingRecovery()
+        if (!advanced && recoverLaterVisit(fix, oldFix, nowMillis)) {
+            // Selection is not an arrival. In particular, none of the missed
+            // visits can contribute dwell, speech or destination completion.
+            return observeCurrentStop(fix, null, nowMillis, canAdvance = false)
+        }
+        if (recoveryPending && !nearCurrentVisit(fix)) {
+            return TrackingUpdate(currentStop(), TrackingSource.TIMETABLE)
+        }
         return observeCurrentStop(fix, oldFix, nowMillis, canAdvance = !advanced)
     }
 
@@ -272,6 +316,7 @@ class StationTrackingEngine(
         ) {
             state = state.copy(arrivedAtCurrent = true)
             establishGpsCursor()
+            confirmCurrentVisit()
         }
         val lowSpeed = fix.speedMetersPerSecond?.takeIf { it.isFinite() && it >= 0.0 }
             ?.let { it <= DESTINATION_MAX_SPEED_METERS_PER_SECOND } == true
@@ -283,6 +328,7 @@ class StationTrackingEngine(
         ) {
             state = state.copy(arrivedAtCurrent = true, completed = true)
             establishGpsCursor()
+            confirmCurrentVisit()
             previousDistance = distance
             return TrackingUpdate(stop, TrackingSource.GPS,
                 announcementCandidate?.let(::announce), destinationReached = true)
@@ -302,6 +348,11 @@ class StationTrackingEngine(
         if (canAdvance && (leftArrival || fastPass)) {
             establishGpsCursor()
             advance()
+            // Departure/pass establishes the old visit, not the successor.
+            // Preserve an active outage recovery until the new visit itself
+            // has a physical arrival proof; ordinary established trips keep
+            // their already-disabled recovery eligibility.
+            clearPendingRecovery()
             // One fix advances at most one non-cancelled visit, then assesses
             // that successor immediately. Close stops do not have to wait for
             // a fixed 220 m bubble around the preceding stop to be left.
@@ -312,7 +363,7 @@ class StationTrackingEngine(
             announcementCandidate == null && shouldAnnounceWaitingOrigin(it, fix, nowMillis)
         }
         return TrackingUpdate(stop, sourceForCurrent(nowMillis),
-            (announcementCandidate ?: originAnnouncement)?.let(::announce))
+            (announcementCandidate ?: originAnnouncement)?.takeUnless { recoveryPending }?.let(::announce))
     }
 
     @Synchronized
@@ -320,6 +371,7 @@ class StationTrackingEngine(
         skipCancelled()
         if (state.completed) return finishedUpdate(sourceForCurrent(nowMillis))
         var stop = currentStop() ?: return TrackingUpdate(null, TrackingSource.TIMETABLE)
+        if (recoveryPending) return TrackingUpdate(stop, TrackingSource.TIMETABLE)
         if (hasCoordinates(stop) && hasReliableLocation(nowMillis)) {
             val announcement = lastReliableFix?.takeIf {
                 shouldAnnounceWaitingOrigin(stop, it, nowMillis)
@@ -355,7 +407,7 @@ class StationTrackingEngine(
         nowMillis: Long,
         requireUnannounced: Boolean = true
     ): Boolean {
-        if (!stop.isOrigin || !state.arrivedAtCurrent ||
+        if (recoveryPending || !stop.isOrigin || !state.arrivedAtCurrent ||
             (requireUnannounced && stop.key in state.announcedKeys) ||
             insideArrivalFixCount < 2 || !hasCoordinates(stop)
         ) return false
@@ -396,14 +448,96 @@ class StationTrackingEngine(
         }
         // Never choose the globally nearest station: repeated visits and nearby
         // platforms may otherwise move the cursor to the wrong part of a loop.
-        if (candidates.size == 1) {
+        if (candidates.size == 1 && candidates.single().index <= state.nextIndex) {
             val candidate = candidates.single()
             state = state.copy(nextIndex = candidate.index, nextStopKey = candidate.value.key)
             mayBootstrapOrigin = candidate.index == 0 && candidate.value.isOrigin
             resetObservation()
+            clearPendingRecovery()
             return true
         }
         return false
+    }
+
+    /** Confirm an ordered forward re-anchor without guessing a nearest visit. */
+    private fun recoverLaterVisit(fix: LocationFix, previous: LocationFix?, nowMillis: Long): Boolean {
+        if (!recoveryEligible || state.completed || fix.accuracyMeters > RECOVERY_MAX_ACCURACY_METERS ||
+            fix.timeMillis > nowMillis
+        ) {
+            recoveryCandidate = null
+            return false
+        }
+        // Include past/current visits: filtering them out would choose the
+        // later occurrence of a loop station or a nearby parallel platform.
+        val nearby = route.withIndex().filter { (_, stop) ->
+            !stop.cancelled && hasCoordinates(stop) &&
+                distanceMeters(fix.latitude, fix.longitude, stop.latitude!!, stop.longitude!!) +
+                fix.accuracyMeters <= MIDWAY_RADIUS_METERS
+        }
+        val candidate = nearby.singleOrNull()?.takeIf { (index, stop) ->
+            index > state.nextIndex && stop.key.isNotBlank() &&
+                route.count { !it.cancelled && it.key == stop.key } == 1 &&
+                route.subList(state.nextIndex, index).none { it.isDestination && !it.cancelled } &&
+                (stop.stationId == null || route.count { !it.cancelled && it.stationId == stop.stationId } == 1)
+        }
+        if (candidate == null) {
+            recoveryCandidate = null
+            return false
+        }
+        recoveryPending = true
+        val recentPrevious = previous?.takeIf { fix.timeMillis - it.timeMillis in 1..MAX_FIX_AGE_MILLIS }
+        if (recentPrevious != null && !coherentRecoveryMovement(recentPrevious, fix)) {
+            recoveryCandidate = null
+            return false
+        }
+        val evidence = recoveryCandidate?.takeIf { it.key == candidate.value.key &&
+            fix.timeMillis - it.latestFix.timeMillis in 1..MAX_FIX_AGE_MILLIS &&
+            coherentRecoveryMovement(it.latestFix, fix)
+        }
+        val updated = if (evidence == null) RecoveryCandidate(candidate.value.key, fix, fix, 1)
+            else evidence.copy(latestFix = fix, count = evidence.count + 1)
+        recoveryCandidate = updated
+        if (updated.count < RECOVERY_MIN_FIXES ||
+            fix.timeMillis - updated.firstFix.timeMillis < RECOVERY_MIN_DURATION_MILLIS
+        ) return false
+
+        state = state.copy(nextIndex = candidate.index, nextStopKey = candidate.value.key,
+            arrivedAtCurrent = false)
+        mayBootstrapOrigin = false
+        resetObservation()
+        establishGpsCursor()
+        // The selected visit may itself already be behind the vehicle. Keep
+        // reacquisition armed until an actual arrival or ordered pass proves
+        // the new section, otherwise a second tunnel stop could pin it again.
+        clearPendingRecovery()
+        return true
+    }
+
+    private fun coherentRecoveryMovement(previous: LocationFix, fix: LocationFix): Boolean {
+        val elapsed = fix.timeMillis - previous.timeMillis
+        if (elapsed !in 1..MAX_FIX_AGE_MILLIS) return false
+        val movement = distanceMeters(previous.latitude, previous.longitude, fix.latitude, fix.longitude)
+        return movement <= RECOVERY_MAX_SPEED_METERS_PER_SECOND * elapsed / 1000.0 +
+            previous.accuracyMeters + fix.accuracyMeters
+    }
+
+    private fun nearCurrentVisit(fix: LocationFix): Boolean = currentStop()?.let { stop ->
+        hasCoordinates(stop) && distanceMeters(fix.latitude, fix.longitude,
+            stop.latitude!!, stop.longitude!!) + fix.accuracyMeters <= MIDWAY_RADIUS_METERS
+    } == true
+
+    private fun recoveryIdentity(stop: TrackingStop): List<Any?> = listOf(
+        stop.key, stop.stationId, stop.latitude, stop.longitude, stop.cancelled, stop.isDestination
+    )
+
+    private fun confirmCurrentVisit() {
+        recoveryEligible = false
+        clearPendingRecovery()
+    }
+
+    private fun clearPendingRecovery() {
+        recoveryPending = false
+        recoveryCandidate = null
     }
 
     private fun bootstrapDepartedOrigin(previous: LocationFix, fix: LocationFix): Boolean {
@@ -551,7 +685,7 @@ class StationTrackingEngine(
     }
 
     private fun sourceForCurrent(nowMillis: Long): TrackingSource =
-        if (state.gpsEstablished && currentStop()?.let(::hasCoordinates) == true && hasReliableLocation(nowMillis)) {
+        if (!recoveryPending && state.gpsEstablished && currentStop()?.let(::hasCoordinates) == true && hasReliableLocation(nowMillis)) {
             TrackingSource.GPS
         } else TrackingSource.TIMETABLE
 
@@ -599,6 +733,10 @@ class StationTrackingEngine(
         private const val MIDWAY_RADIUS_METERS = 150.0
         private const val MIDWAY_TIME_WINDOW_MILLIS = 600_000L
         private const val MIDWAY_CORRIDOR_MARGIN_METERS = 300.0
+        private const val RECOVERY_MAX_ACCURACY_METERS = 75.0
+        private const val RECOVERY_MAX_SPEED_METERS_PER_SECOND = 100.0
+        private const val RECOVERY_MIN_FIXES = 3
+        private const val RECOVERY_MIN_DURATION_MILLIS = 6_000L
         private const val DESTINATION_MAX_SPEED_METERS_PER_SECOND = 3.0
         private const val DESTINATION_DWELL_MILLIS = 10_000L
         private const val ORIGIN_WAIT_MAX_SPEED_METERS_PER_SECOND = 1.5

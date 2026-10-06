@@ -1216,7 +1216,7 @@ private fun gpsTimeUnavailableMessage(reason: GpsTimeUnavailableReason): String 
         GpsTimeUnavailableReason.WAITING_AT_ORIGIN ->
             "Die Zeitprognose wartet auf bestätigte Fahrbewegung nach dem Einstieg."
         GpsTimeUnavailableReason.OUTSIDE_CORRIDOR ->
-            "Die GPS-Position liegt außerhalb des berechneten Fahrtwegs."
+            "Die GPS-Position lässt sich dem aktuellen Streckenabschnitt noch nicht sicher zuordnen."
         GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT ->
             "Für die Zeitprognose wird weitere Fahrbewegung benötigt."
         GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT ->
