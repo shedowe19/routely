@@ -97,6 +97,14 @@ Der Main-Stand `454e61710e8f418cdf70b08195657cbf31545d71` bestand am 06.10.2026 
 
 Die neuen Fälle verwenden synthetische Positionen und eine feste Uhr. Sie prüfen weder die tatsächlich von Android gelieferten Location-Callbacks noch den Zeitpunkt hörbarer TTS auf einem Gerät. Der erneute S28-Fahrtversuch mit Bremsen, Ankunft und kurzen Haltwechseln bleibt unter [TripTracking](../module/trip-tracking.md) und [GPS-Zeiten](../module/gps-zeiten.md) offen. Der CI-Nachweis ist weiterhin dem tatsächlich geprüften Commit zuzuordnen; historische 248-Test-Ergebnisse belegen diese neuen Fälle nicht.
 
+## UI-Uhr und GPS-Quellenwechsel vom 06.10.2026
+
+Eine rund 19 Sekunden lange Bildschirmaufnahme zeigt bei eingeschaltetem Display mehrfach den Wechsel zwischen GPS- und API-Zeitquellen für denselben aktuellen Besuch und Folgehalte. Sie enthält keinen Audio- oder Standortverlauf und belegt weder eine Doze-Ursache noch unzureichende GPS-Genauigkeit.
+
+Die Codeprüfung ergibt einen unabhängigen UI-Fehler: Ein zwischen zwei sekündlichen Ticks veröffentlichter GPS-Datensatz kann neuer als die zuletzt gespeicherte UI-Uhrzeit sein. Die korrekte Zukunftssperre in `GpsJourneyTimes.timeFor` verwirft ihn dann bis zum nächsten Tick. `StatusDetailContent` verwendet jetzt bei jeder Zusammensetzung die aktuelle Systemzeit; der Ein-Sekunden-Ticker bleibt für den Ablauf ohne Service-Updates bestehen. Die vorhandenen Tests `futureDatedGpsSnapshotDoesNotOverrideApi` und `timeForRejectsExpiredFutureOrUnboundedSnapshots` sichern weiterhin die strikte Zukunfts- und Ablaufsperre. Diese reine UI-Uhrkorrektur ändert weder Standortanforderungen noch die ursprüngliche 30-Sekunden-Gültigkeit.
+
+TODO: Mit der aktualisierten APK frische GPS-Veröffentlichungen zwischen UI-Ticks sowie anschließenden Signalverlust auf dem Gerät prüfen. Der Codepfad erklärt einen möglichen Anzeigewechsel; eine erfolgreiche Bildschirmaufnahme ohne erneutes Flackern bleibt ein eigener Gerätenachweis.
+
 ## Display-aus- und Doze-Prüfung vom 06.10.2026
 
 Ein Nutzerbericht meldet ausbleibende Ansagen bei ausgeschaltetem Display. Der Bericht enthält keinen Standort-, Service- oder Audioverlauf; die konkrete Geräteursache ist daher nicht bewiesen. Die [Absicherung der aktiven Fahrt](../module/trip-tracking.md) und die [Android-Akkueinstellung](../module/settings.md) müssen auf einem physischen Gerät zusätzlich zum Kotlin-/Build-Prüflauf validiert werden.

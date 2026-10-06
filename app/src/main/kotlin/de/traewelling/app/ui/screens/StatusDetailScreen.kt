@@ -245,7 +245,9 @@ private fun StatusDetailContent(
         }
     }
 
-    val nowMillis = now.toInstant().toEpochMilli()
+    // A GPS callback can arrive between ticks. Validate its timestamp against
+    // the current clock, not the previous tick that may predate the new fix.
+    val nowMillis = System.currentTimeMillis()
     val gpsTimes = uiState.trackingState?.takeIf { it.source == TrackingSource.GPS }?.gpsTimes
 
     val firstRealStopIndex = remember(stopovers) {
@@ -268,7 +270,7 @@ private fun StatusDetailContent(
         JourneyTimeResolver.manualTimelineStops(stopovers, origin, destination,
             checkin?.manualDeparture, checkin?.manualArrival)
     }
-    val timelineProgress = remember(clockStopovers, now, uiState.trackingState, destinationIdx) {
+    val timelineProgress = remember(clockStopovers, now, nowMillis, uiState.trackingState, destinationIdx) {
         resolveStopTimelineProgress(clockStopovers, nowMillis, uiState.trackingState, destinationIdx)
     }
 

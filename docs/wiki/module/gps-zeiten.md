@@ -32,6 +32,8 @@ Fehlt ein einzelnes GPS-Ereignis, bleibt für dieses Ereignis der Rückfall verf
 
 Ein GPS-Datensatz gilt höchstens 30 Sekunden ab seinem Fixzeitpunkt. Eine UUID identifiziert bevorzugt den konkreten Besuch; auch bei gleicher UUID müssen die vorhandenen Planmarker weiterhin passen. Ohne UUID benötigt die Zuordnung Station-ID und übereinstimmende vorhandene Planzeiten; mehrere passende Besuche bleiben mehrdeutig und verwenden den Rückfall. Gestrichene Halte erhalten keine GPS-Zeit.
 
+Die Gültigkeitsprüfung benötigt einen aktuellen Vergleichszeitpunkt: In [StatusDetail](./status-detail.md) wird die Systemzeit bei jeder Zusammensetzung gelesen, auch wenn neue GPS-Daten zwischen zwei UI-Ticks eintreffen. Die ältere Tickzeit darf einen bereits eingetroffenen Fix nicht scheinbar in die Zukunft versetzen. Ein weiterhin sekündlicher Tick prüft den Ablauf bei ausbleibenden Updates. Tatsächlich zukünftige oder abgelaufene GPS-Datensätze bleiben ungültig; weder Schätzergrenzen noch Gültigkeitsdauer werden für die Anzeige gelockert.
+
 ## Konservative GPS-Auswertung
 
 Der Schätzer setzt einen bereits räumlich etablierten Besuchscursor der `StationTrackingEngine` voraus. Frische Position allein genügt nicht. Fixes müssen gültige Koordinaten und eine Genauigkeit von höchstens 75 Metern haben; ihr Zeitstempel darf weder in der Zukunft liegen noch älter als 30 Sekunden sein. Doppelte Zeitstempel und reine Uhr-/API-Ticks zählen nicht als zusätzliche Bewegung oder Aufenthaltsdauer.
@@ -62,7 +64,7 @@ Die Erweiterung sendet weder Standortverläufe noch Prognosen an Träwelling und
 
 ## Offene Fragen
 
-- TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand erneut prüfen. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
+- TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand und der aktuellen UI-Vergleichszeit erneut prüfen. Die nachgereichte Bildschirmaufnahme bei eingeschaltetem Display zeigt wechselnde GPS-/API-Quellen für denselben Besuch und Folgehalte, enthält aber keinen Standort- oder Audioverlauf. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
 - TODO: Einheitliche Quellen-/Zeitdarstellung in Fahrtdetail, Widget und Samsung-Sperrbildschirm bei Display-aus-Betrieb und wiederkehrendem Signal prüfen. Reine Kotlin-Tests belegen keine reale ETA-Güte.
 
 ## Verwandte Seiten
