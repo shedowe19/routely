@@ -326,7 +326,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                     if ((stopCommandVersion != commandVersion && ownedSession != null) ||
                         (generation != stopGeneration && (ownedSession != null || requestedRevision == null)) ||
                         (requestedId != null && requestedId != config.activeStatusId) ||
-                        (requestedRevision != null && requestedRevision != config.session.revision) ||
+                        requestedRevision != config.session.revision ||
                         (ownedSession != null && ownedSession != config.session)) return@withLock
                     val expectedId = requestedId ?: currentStatusId ?: config.activeStatusId
                     commandVersion++

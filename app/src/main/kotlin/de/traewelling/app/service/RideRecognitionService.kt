@@ -102,7 +102,7 @@ class RideRecognitionService : Service() {
             scope.launch {
                 val config = prefs.trackingConfiguration.first()
                 if ((sessionId != expectedRecognitionSession && (expectedSession != null || requestedRevision == null)) ||
-                    (requestedRevision != null && config.session.revision != requestedRevision) ||
+                    requestedRevision != config.session.revision ||
                     (expectedSession != null && expectedSession != config.session)) return@launch
                 startRequests.clear()
                 val stoppingSession = sessionId
