@@ -93,6 +93,8 @@ Der Review-Quellstand vom 05.10.2026 enthält 248 Unit-Testmethoden: 235 aus dem
 
 Der Quellstand dieser Korrektur enthält 275 Unit-Testmethoden: 248 aus dem Review-Stand, 14 zusätzliche Estimator- und 13 zusätzliche Engine-Fälle. Diese Quellanzahl ist kein neuer CI-Nachweis.
 
+Der Main-Stand `454e61710e8f418cdf70b08195657cbf31545d71` bestand am 06.10.2026 alle 275 Unit-Tests ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen 57 Estimator- und 62 Engine-Fälle in insgesamt zwölf Testklassen. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37433060421](https://github.com/shedowe19/routely/actions/runs/37433060421). Der erfolgreiche automatisierte Lauf ersetzt die genannten GPS-/TTS-Geräteprüfungen nicht.
+
 Die neuen Fälle verwenden synthetische Positionen und eine feste Uhr. Sie prüfen weder die tatsächlich von Android gelieferten Location-Callbacks noch den Zeitpunkt hörbarer TTS auf einem Gerät. Der erneute S28-Fahrtversuch mit Bremsen, Ankunft und kurzen Haltwechseln bleibt unter [TripTracking](../module/trip-tracking.md) und [GPS-Zeiten](../module/gps-zeiten.md) offen. Der CI-Nachweis ist weiterhin dem tatsächlich geprüften Commit zuzuordnen; historische 248-Test-Ergebnisse belegen diese neuen Fälle nicht.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
