@@ -2,6 +2,10 @@ package de.traewelling.app.service
 
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.TrainStation
+import de.traewelling.app.data.model.RoutePoint
+import de.traewelling.app.data.model.RoadRouteGeometry
+import de.traewelling.app.data.model.GpsSegmentGeometry
+import de.traewelling.app.data.routing.RoadRouteParser
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
@@ -9,6 +13,9 @@ import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.time.Instant
+import kotlin.math.cos
+import kotlin.math.hypot
+import kotlin.math.roundToLong
 
 class GpsJourneyTimeEstimatorTest {
     private val base = Instant.parse("2026-10-05T18:00:00Z").toEpochMilli()
@@ -515,6 +522,150 @@ class GpsJourneyTimeEstimatorTest {
     }
 
     @Test
+    fun curvedRoadForecastUsesPolylineDistanceInsteadOfStationChord() {
+        val path = curvedPath()
+        val shape = roadGeometry(listOf(path))
+        val estimator = GpsJourneyTimeEstimator()
+        var estimate: GpsJourneyTimes? = null
+        for (longitude in listOf(.004, .006, .008)) {
+            val fix = pathFix(path, RoutePoint(50.005, longitude))
+            estimate = update(estimator, fix, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true)
+        }
+        val gps = estimate!!
+        assertTrue(kotlin.math.abs(gps.stopTimes.first { it.stopKey == "middle" }.arrivalMillis!! - (base + 180_000)) <= 2)
+        assertNull(estimator.unavailableReason())
+        val sameFix = pathFix(path, RoutePoint(50.005, .008))
+        assertEquals(gps, update(estimator, sameFix, progress(), now = sameFix.timeMillis + 1_000,
+            segmentGeometries = listOf(shape), useRoadGeometry = true))
+        assertEquals(sameFix.timeMillis + 30_000, gps.validUntilMillis)
+        assertNull(update(GpsJourneyTimeEstimator(), sameFix, progress()))
+    }
+
+    @Test
+    fun publicMuelheimEssenJsonSupportsGpsCurveWithBothRoadAlternatives() {
+        val from = RoutePoint(51.43175246, 6.88538831)
+        val to = RoutePoint(51.45018831, 7.0101172)
+        val json = javaClass.getResourceAsStream("/routing/muelheim-essen-osrm.json")!!.bufferedReader().use { it.readText() }
+        val geometry = RoadRouteParser.parse(json, from, to, base)!!
+        assertEquals(2, geometry.alternatives.size)
+        val publicRoute = listOf(
+            route[0].copy(latitude = from.latitude, longitude = from.longitude),
+            route[1].copy(latitude = to.latitude, longitude = to.longitude, isDestination = true,
+                plannedArrivalMillis = base + 1_380_000, plannedDepartureMillis = null,
+                effectiveArrivalMillis = base + 1_380_000, effectiveDepartureMillis = null)
+        )
+        val shape = GpsSegmentGeometry(publicRoute[0].key, publicRoute[1].key, geometry)
+        val path = listOf(from) + geometry.alternatives.first() + to
+        val estimator = GpsJourneyTimeEstimator()
+        var estimate: GpsJourneyTimes? = null
+        for (index in listOf(50, 55, 60)) {
+            val point = geometry.alternatives.first()[index]
+            val fix = pathFix(path, point, travelMillis = 1_380_000, offset = 120_000)
+            assertNull(update(GpsJourneyTimeEstimator(), fix, progress(route = publicRoute), route = publicRoute))
+            estimate = update(estimator, fix, progress(route = publicRoute), route = publicRoute,
+                segmentGeometries = listOf(shape), useRoadGeometry = true)
+        }
+        val forecast = estimate!!.stopTimes.single()
+        assertEquals("middle", forecast.stopKey)
+        assertTrue(kotlin.math.abs(forecast.arrivalMillis!! - (base + 1_500_000)) <= 1_000)
+        assertFalse(forecast.arrivalObserved)
+        assertNull(estimator.unavailableReason())
+    }
+
+    @Test
+    fun crossingRoadBranchesCannotChooseAnArbitraryAlongRoutePosition() {
+        val path = listOf(RoutePoint(50.0, .0), RoutePoint(50.004, .02),
+            RoutePoint(50.004, .0), RoutePoint(50.0, .02))
+        val shape = roadGeometry(listOf(path))
+        val fix = LocationFix(50.002, .01, 10.0, base + 60_000, 12.0)
+        val estimator = GpsJourneyTimeEstimator()
+        assertNull(update(estimator, fix, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true))
+        assertEquals(GpsTimeUnavailableReason.AMBIGUOUS_ROUTE, estimator.unavailableReason())
+    }
+
+    @Test
+    fun wrongRoadAndBackwardRoadMovementDiscardTheForecast() {
+        val path = curvedPath()
+        val shape = roadGeometry(listOf(path))
+        val estimator = GpsJourneyTimeEstimator()
+        var last: LocationFix? = null
+        for (longitude in listOf(.004, .006, .008)) {
+            val fix = pathFix(path, RoutePoint(50.005, longitude))
+            last = fix
+            update(estimator, fix, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true)
+        }
+        assertNull(estimator.unavailableReason())
+        val lastFix = checkNotNull(last)
+        val backwards = lastFix.copy(longitude = .004, timeMillis = lastFix.timeMillis + 8_000)
+        assertNull(update(estimator, backwards, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true))
+        assertEquals(GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT, estimator.unavailableReason())
+        val wrongRoad = roadGeometry(listOf(listOf(RoutePoint(50.0, .0), RoutePoint(50.0, .02))))
+        val wrongEstimator = GpsJourneyTimeEstimator()
+        assertNull(update(wrongEstimator, lastFix, progress(), segmentGeometries = listOf(wrongRoad), useRoadGeometry = true))
+        assertEquals(GpsTimeUnavailableReason.OUTSIDE_CORRIDOR, wrongEstimator.unavailableReason())
+    }
+
+    @Test
+    fun returningRoadLoopCannotTurnOriginDepartureIntoFarAlongRouteProgress() {
+        val path = listOf(RoutePoint(50.0, .0), RoutePoint(49.99, .0),
+            RoutePoint(49.99, .02), RoutePoint(50.0, .0001), RoutePoint(50.0, .02))
+        val shape = roadGeometry(listOf(path))
+        val estimator = GpsJourneyTimeEstimator()
+        update(estimator, stationFix(0, base), progress(0, arrived = true), segmentGeometries = listOf(shape), useRoadGeometry = true)
+        update(estimator, stationFix(0, base + 5_000), progress(0, arrived = true),
+            segmentGeometries = listOf(shape), useRoadGeometry = true)
+        val departing = LocationFix(50.0, .004, 10.0, base + 15_000, 12.0)
+        assertNull(update(estimator, departing, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true))
+        assertEquals(GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT, estimator.unavailableReason())
+    }
+
+    @Test
+    fun provenRoadAlternativeKeepsItsProgressWhenCandidatesRejoin() {
+        val north = listOf(RoutePoint(50.0, .0), RoutePoint(50.005, .0),
+            RoutePoint(50.005, .012), RoutePoint(50.0, .012), RoutePoint(50.0, .02))
+        val south = listOf(RoutePoint(50.0, .0), RoutePoint(49.988, .0),
+            RoutePoint(49.988, .012), RoutePoint(50.0, .012), RoutePoint(50.0, .02))
+        val shape = roadGeometry(listOf(north, south))
+        val estimator = GpsJourneyTimeEstimator()
+        val points = listOf(RoutePoint(50.005, .004), RoutePoint(50.005, .006),
+            RoutePoint(50.005, .008), RoutePoint(50.005, .010), RoutePoint(50.005, .012),
+            RoutePoint(50.003, .012), RoutePoint(50.001, .012), RoutePoint(50.0, .012),
+            RoutePoint(50.0, .014), RoutePoint(50.0, .016))
+        for ((index, point) in points.withIndex()) {
+            val fix = pathFix(north, point)
+            val estimate = update(estimator, fix, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true)
+            if (index >= 2) {
+                assertNotNull("Confirmed road must remain stable at $point", estimate)
+                assertNull(estimator.unavailableReason())
+            }
+        }
+        val onCommonRoad = pathFix(north, RoutePoint(50.0, .014))
+        val unconfirmed = GpsJourneyTimeEstimator()
+        assertNull(update(unconfirmed, onCommonRoad, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true))
+        assertEquals(GpsTimeUnavailableReason.AMBIGUOUS_ROUTE, unconfirmed.unavailableReason())
+    }
+
+    @Test
+    fun roadLegHandoverRetainsOriginalForecastExpiryAndObservedDeparture() {
+        val first = roadGeometry(listOf(curvedPath()))
+        val nextPath = listOf(RoutePoint(50.0, .02), RoutePoint(50.005, .02),
+            RoutePoint(50.005, .04), RoutePoint(50.0, .04))
+        val next = roadGeometry(listOf(nextPath), fromIndex = 1, toIndex = 2)
+        val estimator = GpsJourneyTimeEstimator()
+        update(estimator, stationFix(1, base + 120_000), progress(arrived = true),
+            segmentGeometries = listOf(first, next), useRoadGeometry = true)
+        val established = update(estimator, stationFix(1, base + 123_000), progress(arrived = true),
+            segmentGeometries = listOf(first, next), useRoadGeometry = true)!!
+        val departing = LocationFix(50.002, .02, 10.0, base + 135_000, 12.0)
+        val handover = update(estimator, departing, progress(2), segmentGeometries = listOf(next), useRoadGeometry = true)!!
+        assertEquals(established.updatedAtMillis, handover.updatedAtMillis)
+        assertEquals(established.validUntilMillis, handover.validUntilMillis)
+        assertTrue(handover.stopTimes.first { it.stopKey == "middle" }.departureObserved)
+        assertNotNull(handover.stopTimes.first { it.stopKey == "destination" }.arrivalMillis)
+        assertNull(estimator.unavailableReason())
+    }
+
+    @Test
     fun duplicateFixDoesNotCreateMovementEvidence() {
         val estimator = GpsJourneyTimeEstimator()
         val fix = fractionFix(.25)
@@ -812,8 +963,40 @@ class GpsJourneyTimeEstimatorTest {
 
     private fun update(
         estimator: GpsJourneyTimeEstimator, fix: LocationFix, progress: TrackingProgress,
-        now: Long = fix.timeMillis, route: List<TrackingStop> = this.route
-    ): GpsJourneyTimes? = estimator.update(route, progress, TrackingSource.GPS, fix, now)
+        now: Long = fix.timeMillis, route: List<TrackingStop> = this.route,
+        segmentGeometries: List<GpsSegmentGeometry> = emptyList(), useRoadGeometry: Boolean = false
+    ): GpsJourneyTimes? = estimator.update(route, progress, TrackingSource.GPS, fix, now, segmentGeometries, useRoadGeometry)
+
+    private fun curvedPath() = listOf(RoutePoint(50.0, .0), RoutePoint(50.005, .0),
+        RoutePoint(50.005, .02), RoutePoint(50.0, .02))
+
+    private fun roadGeometry(paths: List<List<RoutePoint>>, fromIndex: Int = 0, toIndex: Int = 1): GpsSegmentGeometry =
+        GpsSegmentGeometry(route[fromIndex].key, route[toIndex].key, RoadRouteGeometry(
+            RoutePoint(route[fromIndex].latitude!!, route[fromIndex].longitude!!),
+            RoutePoint(route[toIndex].latitude!!, route[toIndex].longitude!!), paths, base
+        ))
+
+    /** Synthetic motion follows a supplied path, independently of the estimator. */
+    private fun pathFix(path: List<RoutePoint>, point: RoutePoint, travelMillis: Long = 120_000, offset: Long = 60_000): LocationFix {
+        fun distance(a: RoutePoint, b: RoutePoint): Double = hypot(
+            Math.toRadians(b.longitude - a.longitude) * 6_371_000 * cos(Math.toRadians((a.latitude + b.latitude) / 2)),
+            Math.toRadians(b.latitude - a.latitude) * 6_371_000
+        )
+        var along = 0.0
+        var found = false
+        for ((from, to) in path.zipWithNext()) {
+            if (distance(from, point) + distance(point, to) - distance(from, to) < .01) {
+                along += distance(from, point)
+                found = true
+                break
+            }
+            along += distance(from, to)
+        }
+        check(found) { "Synthetic point must lie on the source path" }
+        val total = path.zipWithNext().sumOf { (a, b) -> distance(a, b) }
+        return LocationFix(point.latitude, point.longitude, 10.0,
+            base + (travelMillis * along / total).roundToLong() + offset, 12.0)
+    }
 
     private fun progress(index: Int = 1, arrived: Boolean = false, route: List<TrackingStop> = this.route) =
         TrackingProgress(nextIndex = index, nextStopKey = route[index].key, arrivedAtCurrent = arrived, gpsEstablished = true)

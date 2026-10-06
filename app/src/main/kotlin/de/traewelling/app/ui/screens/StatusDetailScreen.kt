@@ -409,6 +409,9 @@ private fun StatusDetailContent(
                                 }
                             }
                         }
+                        if (isReplacementBus) {
+                            RoadRouteAttribution()
+                        }
                     }
                 }
             }
@@ -1173,6 +1176,29 @@ private fun SevStopGuidance(info: SevStopInfo) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+@Composable
+private fun RoadRouteAttribution() {
+    val uriHandler = LocalUriHandler.current
+    Column(Modifier.padding(horizontal = 24.dp, vertical = 2.dp)) {
+        Text(
+            "Straßenmodell: OSRM · © OpenStreetMap-Mitwirkende",
+            modifier = Modifier.clickable {
+                runCatching { uriHandler.openUri("https://routing.openstreetmap.de/about.html") }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Text(
+            "Kartendaten verbessern ↗",
+            modifier = Modifier.padding(vertical = 4.dp).clickable {
+                runCatching { uriHandler.openUri("https://www.openstreetmap.org/fixthemap") }
+            },
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
 private fun gpsTimeUnavailableMessage(reason: GpsTimeUnavailableReason): String =
     when (reason) {
         GpsTimeUnavailableReason.NO_FRESH_LOCATION ->
@@ -1183,10 +1209,14 @@ private fun gpsTimeUnavailableMessage(reason: GpsTimeUnavailableReason): String 
             "Der GPS-Halt ist noch nicht sicher zugeordnet."
         GpsTimeUnavailableReason.ROUTE_UNSUPPORTED ->
             "Für die Zeitprognose fehlen passende Streckendaten."
+        GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE ->
+            "Für die GPS-Prognose ist noch keine passende Straßenroute verfügbar."
+        GpsTimeUnavailableReason.AMBIGUOUS_ROUTE ->
+            "Der GPS-Fortschritt ist auf den möglichen Fahrwegen noch nicht eindeutig."
         GpsTimeUnavailableReason.WAITING_AT_ORIGIN ->
             "Die Zeitprognose wartet auf bestätigte Fahrbewegung nach dem Einstieg."
         GpsTimeUnavailableReason.OUTSIDE_CORRIDOR ->
-            "Der Fahrtweg weicht von der berechneten Verbindung zwischen den Halten ab."
+            "Die GPS-Position liegt außerhalb des berechneten Fahrtwegs."
         GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT ->
             "Für die Zeitprognose wird weitere Fahrbewegung benötigt."
         GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT ->

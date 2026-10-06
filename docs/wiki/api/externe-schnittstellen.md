@@ -29,9 +29,29 @@ Die Antwort ist HTML mit JSON-Daten in Next.js-Datensätzen. `BahnhofSevParser` 
 
 Für diese öffentliche Quelle wird kein RIS::Stations-Zugang benötigt. HTML-Struktur und Inhalt sind kein garantierter REST-Vertrag; fehlerhafte, fehlende oder nicht eindeutig zuordenbare Daten bleiben optional und lassen die API-Route verwendbar. Die Cache-, Quellenalter-, Richtungs- und Datumsgrenzen stehen in der [Modulseite](../module/sev-haltestellen.md). Neue Retrofit-Routen, Zugangsdaten oder Android-Abhängigkeiten werden dafür nicht eingeführt.
 
+## Öffentliche Straßen-Geometrie über FOSSGIS/OSRM
+
+Für die optionale [SEV-Zeitprojektion](../module/gps-zeiten.md) verwendet `RoadRouteRepository` einen weiteren getrennten anonymen OkHttp-Client:
+
+```text
+GET https://routing.openstreetmap.de/routed-car/route/v1/driving/<lon1>,<lat1>;<lon2>,<lat2>?geometries=geojson&overview=full&steps=false&alternatives=2&generate_hints=false
+```
+
+Beide Koordinaten stammen ausschließlich aus aktuell eindeutig zugeordneten öffentlichen SEV-Punkten. Gerätepositionen, Bewegungshistorie, Fahrt-/Nutzerkennungen und Träwelling-Token sind keine Routingparameter. Geordnete Besuchsschlüssel binden die Antwort erst lokal an die aktive Fahrt. Das vorbereitete Pkw-Profil liefert mögliche Straßenführung, keinen offiziellen Ersatzbusweg. Der Schätzer übernimmt keine OSRM-Fahrtdauer als Bus-ETA.
+
+`alternatives=2` fordert neben dem bevorzugten Weg bis zu zwei weitere Kandidaten an; der Dienst garantiert nicht, dass Alternativen existieren. `generate_hints=false` deaktiviert die nicht benötigten Routing-Hints. `RoadRouteParser` akzeptiert höchstens drei GeoJSON-`LineString`-Kandidaten mit insgesamt begrenzter Antwortgröße von 2 MiB und höchstens 5.000 Punkten je Weg. Er prüft erfolgreiche Antwort, genau zwei plausible Waypoints, höchstens 150 Meter Endpunktsnap, endliche Koordinaten, 100 Meter bis 50 Kilometer Weglänge sowie konsistente deklarierte/aus Geometrie berechnete Länge. Fehlende oder ungültige Antworten liefern keine Geometrie.
+
+Der feste HTTPS-Endpunkt erlaubt weder Redirects noch HTTP-Rückfall; Call-/Connect-/Read-Timeouts liegen bei 20/10/15 Sekunden. Der Client setzt `Accept: application/json` und einen projektspezifischen User-Agent ohne Account-Interceptor oder HTTP-Logging. Request-Starts sind im Prozess auf höchstens einen je Sekunde begrenzt. Gleiche geordnete Endpunktpaare teilen laufende Abrufe; der RAM-Cache hält höchstens 64 Ergebnisse, erfolgreiche 24 Stunden und Fehlversuche 15 Minuten. Höchstens 16 unterschiedliche Anfragen dürfen gleichzeitig ausstehen. Das Service-Prefetch betrachtet höchstens den aktuellen Ankunftsabschnitt und dessen Folgeabschnitt, am Einstieg die ersten zwei geeigneten Abschnitte, und blockiert weder API-Polling noch Standortverarbeitung. Der Service hält höchstens acht besuchsbezogene Abschnitte. Ein bereits laufender gemeinsamer Request darf den Cache auch nach Abbruch eines einzelnen wartenden Service-Jobs füllen; er kann keine beendete Fahrt reaktivieren.
+
+Nach der [Anbieterseite](https://routing.openstreetmap.de/about.html) betreibt FOSSGIS den OSRM-Dienst mit OpenStreetMap-Daten. Sie verlangt Attribution, einen Link zur Kartenkorrektur, identifizierbaren User-Agent, höchstens eine Anfrage pro Sekunde und begrenzte Nutzung. Die Ersatzbus-Detailansicht zeigt die Quellenangabe und einen Kartenkorrektur-Link. Die Anbieterseite erklärt außerdem, dass Routenanfragen serverseitig protokolliert werden; die öffentlichen Haltpaare und übliche Verbindungsdaten sind dem Anbieter sichtbar. TODO: Belastung und Eignung des öffentlichen Dienstes bei wachsender Installation prüfen; das Request-Limit gilt pro App-Prozess und ersetzt keine Gesamtkapazitätsplanung.
+
+Vertrag: [offizielle OSRM-HTTP-Dokumentation](https://project-osrm.org/docs/v5.24.0/api/). Geometrien bleiben unpersistiert im RAM. Keine neue Preference, Retrofit-Route, Datenbanktabelle oder Android-Bibliothek. Unpassende oder mehrdeutige Wege verwenden den bestehenden GPS-/API-/Plan-Rückfall; die Stationsengine bleibt unverändert.
+
 ## Verwandte Seiten
 
 - [API Überblick](./ueberblick.md)
 - [Interne Schnittstellen](./interne-schnittstellen.md)
 - [Träwelling-API-Kompatibilität](./traewelling-kompatibilitaet.md)
 - [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)
+- [GPS-Zeiten](../module/gps-zeiten.md)
+- [Secrets und Sicherheit](../konfiguration/secrets-und-sicherheit.md)

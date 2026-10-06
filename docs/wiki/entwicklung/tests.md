@@ -139,7 +139,7 @@ Die Tracking-Regressionen verlangen bei einer veränderten physischen Position e
 
 Der Main-Stand `5333921b078ae79fe0cc99add80a435daab15f48` bestand am 06.10.2026 alle **321 Unit-Tests** ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen 15 Testklassen, darunter 14 Parser-, 22 SEV-Zuordnungs- und 64 Stationsengine-Fälle. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37450392024](https://github.com/shedowe19/routely/actions/runs/37450392024). Damit sind Kotlin-/Compose-Kompilierung und die Logikregressionen belegt; tatsächliche HTTP-Lebenszyklen, GPS-/Audiozustellung und die Zuverlässigkeit auf dem Gerät bleiben gesonderte Prüfungen.
 
-TODO: Mit einer aktuellen Bus-RE/RB-Fahrt Essen → Mülheim → Duisburg den Abruf, den tatsächlichen Einstiegspunkt, richtungsabhängige Ansagen und die Netzunterbrechung prüfen. Die öffentliche Duisburger Abfahrtsbeschriftung belegt keinen eindeutigen Ankunftspunkt eines dort endenden Busses; dieser Fall behält API-Koordinaten. Straßenumwege können weiterhin außerhalb des geraden GPS-Zeitkorridors liegen.
+TODO: Mit einer aktuellen Bus-RE/RB-Fahrt Essen → Mülheim → Duisburg den Abruf, den tatsächlichen Einstiegspunkt, richtungsabhängige Ansagen und die Netzunterbrechung prüfen. Die öffentliche Duisburger Abfahrtsbeschriftung belegt keinen eindeutigen Ankunftspunkt eines dort endenden Busses; dieser Fall behält API-Koordinaten. Die spätere Straßenprojektion benötigt beidseitig bestätigte Ersatzhaltepunkte und muss einen tatsächlichen Umweg weiterhin sicher ablehnen.
 
 ## Fehlende GPS-Zeitprognose und beobachtete Ereignisse vom 06.10.2026
 
@@ -151,7 +151,19 @@ Die Regressionen prüfen, dass tatsächlich bestätigte Ankünfte und Abfahrten 
 
 Der Main-Code `9e0212979e21028f893b155db50abaa1a2fba4b4` bestand am 06.10.2026 alle **329 Unit-Tests** ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen 15 Klassen und 65 Estimator-Fälle einschließlich der acht zusätzlichen Regressionen. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37454963229](https://github.com/shedowe19/routely/actions/runs/37454963229). Der Prüflauf belegt Kompilierung und Logikregressionen, keinen tatsächlichen Fixverlauf oder hörbare Ansage der abgebildeten Busfahrt.
 
-TODO: Auf einer echten RE1-SEV-Rückfahrt die ausgegebenen Gründe, gemessene Abfahrt und Ankunft, Zeitquellen sowie Signalverlust und Kurvenfahrt gegen einen zeitlich zugeordneten Fix-/Audioverlauf prüfen. Die Erweiterung liefert weiterhin keine Straßenroute und keine garantierte Bus-ETA.
+TODO: Auf einer echten RE1-SEV-Rückfahrt die ausgegebenen Gründe, gemessene Abfahrt und Ankunft, Zeitquellen sowie Signalverlust und Kurvenfahrt gegen einen zeitlich zugeordneten Fix-/Audioverlauf prüfen. Die damalige Erweiterung lieferte noch keine Straßenroute; die folgende Straßenprojektion ergänzt ein Modell, keine garantierte Bus-ETA.
+
+## GPS-Straßenprognose für SEV vom 06.10.2026
+
+Die spätere Aufnahme um 13:29 Uhr zeigt den Diagnosegrund „Der Fahrtweg weicht von der berechneten Verbindung zwischen den Halten ab.“ Damit ist die Ablehnung durch das räumliche Segmentmodell für diese Aufnahme sichtbar; die tatsächliche GPS-Position und der genaue Querabstand werden daraus nicht rekonstruiert. Die [GPS-Auswertung](../module/gps-zeiten.md) verwendet für SEV nun passende Straßenkandidaten zwischen bestätigten Ersatzhaltepunkten.
+
+Die zusätzlichen Regressionen prüfen den vollständigen Weg vom OSRM-GeoJSON zum örtlichen Segmentfortschritt, Kurven außerhalb der bisherigen Geraden, Kreuzungs- und Alternativenmehrdeutigkeit, gerichtete Bewegung, Quellen-/Geometriewechsel, Gültigkeitsablauf und unveränderte GPS-Qualitätsgrenzen. Die Haltauswahl prüft geordnete Besuche, Streichungen, fehlende physische SEV-Punkte und getrennte Fahrtrichtungen. Repository-Tests prüfen anonymes HTTPS, reine öffentliche Endpunkte, Abrufbegrenzung, Cache-Lebensdauer und die Kündigung eines einzelnen Mitwartenden.
+
+Die [öffentlichen OSRM-Testdaten](../../../app/src/test/resources/routing/README.md) wurden am 06.10.2026 ohne Kontotoken oder Gerätestandort abgerufen: Duisburg → Mülheim und Mülheim → Essen lieferten jeweils HTTP 200, `code = Ok` und zwei GeoJSON-Fahrwege. Diese Quellenproben belegen Abruf und Antwortformat, nicht den tatsächlichen Busweg oder eine Geräteprognose. Die wiederholbaren Kotlin-Regressionen verwenden die gespeicherten Antworten und erzeugte Messfolgen ohne weitere Netzabfragen.
+
+Unklar: Die zusätzliche Kotlin-Testausführung und beide APK-Builds sind vor Veröffentlichung noch durch den zugehörigen CI-Lauf zu bestätigen. Historische erfolgreiche Prüfläufe gelten ausschließlich für ihren jeweils genannten Code.
+
+TODO: Auf dem Gerät eine SEV-Kurvenfahrt, einen bestätigten Alternativzweig mit anschließendem Zusammenlauf, einen tatsächlichen Umweg, fehlendes Netz beim Neustart und den Rückfall auf API-/Planzeit prüfen. Das Pkw-Straßenprofil belegt weder eine offizielle SEV-Führung noch Echtzeitverkehr oder Buszufahrtsrechte.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 

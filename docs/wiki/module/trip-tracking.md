@@ -10,6 +10,8 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 - `app/src/main/kotlin/de/traewelling/app/service/StationTrackingEngine.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/routing/RoadRouteRepository.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/routing/RoadRouteParser.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/SpeechDeliveryQueue.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingWakeLockLease.kt`
@@ -73,6 +75,8 @@ Bei Bus-RE/RB-Kandidaten werden Bahn-Gleisangaben für Fahrtbenachrichtigung, Wi
 
 ## GPS-Trigger und Fortschritt
 
+Die optionale Straßen-Geometrie für SEV-Zeitprognosen verändert die folgenden Regeln der `StationTrackingEngine` nicht. Halterkennung, Ansageradius und Zielabschluss verwenden weiterhin die eigenen geordneten Besuchs- und Entfernungsbelege.
+
 Ein brauchbarer Fix hat gültige Koordinaten, höchstens 100 Meter gemeldete Ungenauigkeit und ist höchstens 30 Sekunden alt. Ungültige, alte oder bereits verarbeitete Zeitstempel bestätigen keine neue Annäherung. Nach einer längeren Signallücke muss ein neuer Annäherungstrend entstehen.
 
 Die Entfernung zum aktuellen Halt muss erkennbar sinken, bevor der Ansageradius einen Trigger erzeugt. Der Eintritt in diesen Radius erledigt den Halt nicht. Zwischenankunft erfordert `Entfernung + Ungenauigkeit <= 120 m` und einen bestätigten Annäherungstrend oder zwei frische innere Fixes; der Einstieg kann schon im inneren Bereich als erreicht gelten.
@@ -113,11 +117,19 @@ Der Fahrplan-Rückfall bestätigt niemals die Zielankunft und beendet die Fahrt 
 
 Nach der Engine-Auswertung verarbeitet `GpsJourneyTimeEstimator` den passenden Fix und die Plan-Ankunft/-Abfahrt der eingegrenzten Route. Geeignete Beobachtungen liefern lokale Istzeiten oder einen konservativen Versatz der kommenden Planzeiten. Eine gerichtete Fixfolge und die geplante Fahrzeit stützen die räumliche Interpolation; Luftlinie geteilt durch Momentangeschwindigkeit ist keine ETA-Methode.
 
+Bei Bus-RE/RB-Ersatzverkehr benötigt die Abschnittsprognose eine validierte [Straßen-Geometrie](./gps-zeiten.md) zwischen zwei aktuell eindeutig zugeordneten öffentlichen SEV-Punkten. `RoadRouteSelection` wählt höchstens den aktuellen Ankunftsabschnitt und dessen Folgeabschnitt, am Einstieg die ersten zwei passenden Abschnitte; ein nicht bestätigter Ersatzhalt wird nicht überbrückt. `roadRouteJob` lädt dieses Fenster außerhalb der Tracking-Sperre. Vor Übernahme müssen Fahrtgeneration, geordnete Besuchsschlüssel, aktuelles Fenster und physische Endpunkte weiterhin passen. API-/Standortverarbeitung warten nicht auf den Abruf. Native API-Polylines ohne Herkunftsbeleg und gerade Stationsverbindungen dienen nicht als SEV-Rückfall.
+
+Der Schätzer nutzt den lokal passenden Linienzug nur zur Fortschrittsprojektion, nicht die OSRM-Fahrtdauer. Das Pkw-Profil ist kein offizieller Busweg. Fehlende, abgelaufene oder mehrdeutige Geometrie verhindert die bewegungsgestützte Abschnittsprognose. Bestätigte Ereignisse und der bestehende Planversatz aus Aufenthalt am passenden Zwischenhalt bleiben davon getrennt; ohne geeignete lokale Zeit gilt der normale Zeitquellenrückfall. Eine Formänderung desselben Besuchspaars entfernt Bewegung und Zukunftsprognose, erhält jedoch bestätigte tatsächliche Ereignisse derselben Haltbasis; ein zuvor verarbeiteter Fix wird dadurch nicht erneut als Beobachtung verwendet.
+
+Die Prognosebasis berücksichtigt nur Endpunkte und Linienzüge des aktuell eingehenden Abschnitts, keinen geänderten Abrufzeitpunkt oder zusätzlich vorgeladenen Folgeweg. Nach hinreichendem eindeutigem Bewegungsbeleg kann ein Kandidat innerhalb dieses Abschnitts gebunden bleiben, auch wenn mehrere Wege später wieder dieselbe Straße nutzen. Korridorverlust, Mehrdeutigkeit innerhalb des gebundenen Wegs, Form-/Abschnittswechsel und ungültiges GPS lösen die Bindung. Beim geordneten Abschnittswechsel beginnen Bewegungsbeleg und Kandidatenwahl neu; ein kompatibler frischer Fix darf die bisherige gültige Prognose nur bis zum ursprünglichen Ablauf erhalten. Endpunktverbindungen erhalten die bestätigten öffentlichen SEV-Koordinaten; Wegsprünge unterliegen weiter Zeit-/Genauigkeitsprüfungen. Details stehen unter [GPS-Zeiten](./gps-zeiten.md).
+
 `JourneyTimeResolver` verwendet je Ereignis frische eindeutig zugeordnete GPS-Zeit, sonst manuelle Zeit, parsebare API-Echtzeit und schließlich Planzeit. Notification, Widget, Fahrtdetail und Sperrbildschirm verwenden denselben Resolver und kennzeichnen die Zeitquelle. Eine bereits belegte Prognose wird bei Bremsen oder geordnetem Haltwechsel mit passender frischer Position bis zu ihrem unveränderten ursprünglichen Gültigkeitsende erhalten. Standortqualität, Korridor, Ablauf und fehlende Daten können die GPS-Zeit weiterhin sofort verwerfen, während der räumlich etablierte Besuchscursor erhalten bleibt. Schwellen, stabile Ankunftsbeobachtung, längere Halte und Quellenentscheidung stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 ## Persistenz und Offlinebetrieb
 
 `trip_tracking_state` speichert ein versioniertes JSON mit Status-ID, Check-in, zuletzt gültiger eingegrenzter Haltfolge und `TrackingProgress` (Cursor, Besuchsschlüssel, innerer Ankunftsstatus, `gpsEstablished`, erfolgreich eingereihte Ansageschlüssel und Abschlussstatus). Standortfixes, Bewegungshistorie, GPS-Istzeiten und GPS-Prognosen bleiben ausschließlich im Speicher; es wird keine GPS-Historie an Träwelling gesendet und kein automatischer Status-PUT ausgelöst.
+
+Auch die zusätzlichen Straßen-Geometrien bleiben ausschließlich im RAM: höchstens acht besuchsbezogene Service-Abschnitte und ein davon getrennter begrenzter Repository-Cache. Es gibt dafür kein neues DataStore-Feld und keine Cache-Migration. Ein laufender Prozess kann noch gültige geladene Wege bei Netzausfall verwenden; nach einem Neustart müssen benötigte Abschnittswege erneut verfügbar werden. GPS aus, Fahrtwechsel, Zielabschluss und Service-Ende beenden die fahrtspezifische Straßen-Anreicherung und verhindern die Übernahme später Ergebnisse. Ein gemeinsam genutzter öffentlicher Repository-Job kann nach Abbruch eines wartenden Service-Jobs noch auf das Request-Limit warten und anschließend den RAM-Cache füllen. Der tatsächliche HTTP-Call hat einen 20-Sekunden-Timeout; die gemeinsame Aufgabe kann keine Fahrt fortsetzen.
 
 Nach mindestens einem erfolgreichen Laden kann diese Route bei API-Ausfällen und nach Service-Neustart wiederverwendet werden. Ohne gültigen Cache und ohne erfolgreiche API-Antwort existiert keine auswertbare Haltfolge. Fortschritt wird nur für die noch aktive Status-ID gespeichert; Fahrtwechsel, Logout und bestätigtes Beenden entfernen den zugehörigen Cache.
 

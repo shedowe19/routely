@@ -26,6 +26,12 @@ Stationskoordinaten stammen grundsätzlich aus Träwelling-Stopovers. Für erkan
 
 `BahnhofSevParser` verwendet vorhandenes Gson für JSON-Datensätze der Bahnhofskarten; der separate öffentliche Abruf verwendet vorhandenes OkHttp. Es wird weder eine PDF-/QR-Bibliothek noch ein Karten-, Routing- oder Geocoding-SDK ergänzt. Die Website-Quelle benötigt keinen Bearer-Token. Geänderte HTML-Daten sind ein möglicher Quellenfehler und dürfen das bestehende Tracking nicht blockieren. Details: [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
 
+## Optionale Straßen-Geometrie
+
+`RoadRouteRepository` verwendet vorhandenes OkHttp für den öffentlichen FOSSGIS-OSRM-Dienst `routing.openstreetmap.de/routed-car`; `RoadRouteParser` prüft GeoJSON mit vorhandenem Gson. Es kommt kein Routing-SDK hinzu, aber ein zusätzlicher externer HTTP-Dienst. Angefragt werden nur zwei eindeutig zugeordnete öffentliche SEV-Endpunkte, keine Gerätepositionen und keine Zugangsdaten.
+
+Das Pkw-Profil liefert mögliche Straßenwege, keine offiziellen Ersatzbusfahrwege oder Bus-Echtzeit. Der Zeitschätzer verwendet nur geeignete Geometrien lokal; Stationsengine und Ansageradius bleiben getrennt. Eine gescheiterte oder unpassende Anfrage blockiert die Begleitung nicht und führt zum normalen Zeitquellenrückfall. RAM-Cache, Request-Limit, Attribution und Anbieterbedingungen stehen unter [Externe Schnittstellen](../api/externe-schnittstellen.md) und [GPS-Zeiten](../module/gps-zeiten.md).
+
 ## Fahrterkennung und Android-Fortschritt
 
 Die [Fahrterkennung](../module/ride-recognition.md) nutzt dieselbe Träwelling-Schnittstelle und Play Services, hat aber einen getrennten sichtbaren Location-Service. Ihre Stationssuche überträgt aus dem aktuellen Fix berechnete Bounding-Box-Grenzen an `GET /api/v1/stations`; lokale Zuordnung und RAM-Historie liegen in der App. Die Boxmitte entspricht dem verwendeten Standort. Der aktive Stationsalarm selbst überträgt keine Gerätepositionen.

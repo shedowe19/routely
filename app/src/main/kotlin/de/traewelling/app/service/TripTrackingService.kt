@@ -36,12 +36,15 @@ import com.google.gson.Gson
 import de.traewelling.app.MainActivity
 import de.traewelling.app.R
 import de.traewelling.app.data.model.CheckinInfo
+import de.traewelling.app.data.model.GpsSegmentGeometry
+import de.traewelling.app.data.model.RoadRouteGeometry
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.SevMap
 import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.sev.SevJourneyEnricher
 import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.data.routing.RoadRouteRepository
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -90,6 +93,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private var trackingJob: Job? = null
     private var tickJob: Job? = null
     private var sevJob: Job? = null
+    private var roadRouteJob: Job? = null
+    private var roadRequestWindow: List<RoadSegmentRequest> = emptyList()
+    private val cachedRoadRoutes = linkedMapOf<RoadSegmentRequest, RoadRouteGeometry>()
+    private val roadAttempts = linkedMapOf<RoadSegmentRequest, Long>()
     private var wakeLockRenewalJob: Job? = null
     private var trackingWakeLock: TrackingWakeLockLease? = null
     private var currentStatusId: Int? = null
@@ -360,6 +367,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             trackingJob?.cancel()
             tickJob?.cancel()
             sevJob?.cancel()
+            clearRoadRoutes()
             releaseTrackingWakeLock()
             completionJob?.cancel()
             completionStatusId = null
@@ -596,6 +604,102 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         cachedSevStops = resolved
         engine?.updateRoute(toTrackingStops(cachedStops, checkin))
         if (coordinatesChanged) gpsJourneyTimes.invalidateLocation()
+        pruneRoadRoutes(nowMillis)
+    }
+
+    private fun roadPairs(): List<RoadSegmentRequest> {
+        val checkin = cachedCheckin ?: return emptyList()
+        return RoadRouteSelection.allPairs(checkin, cachedStops,
+            cachedStops.mapIndexed { index, stop -> stopKey(stop, index) }, cachedSevStops)
+    }
+
+    private fun roadWindow(progress: TrackingProgress): List<RoadSegmentRequest> =
+        RoadRouteSelection.aroundCursor(roadPairs(), progress.nextStopKey)
+
+    /** Route geometry is volatile and keyed by the actual public stop pair and visit identities. */
+    private fun pruneRoadRoutes(nowMillis: Long) {
+        val allowed = roadPairs().toSet()
+        cachedRoadRoutes.entries.removeAll { (request, geometry) ->
+            request !in allowed || !RoadRouteSelection.usable(request, geometry, nowMillis)
+        }
+        roadAttempts.keys.retainAll(allowed)
+        if (roadRequestWindow.any { it !in allowed }) {
+            roadRouteJob?.cancel()
+            roadRouteJob = null
+            roadRequestWindow = emptyList()
+        }
+    }
+
+    private fun clearRoadRoutes() {
+        roadRouteJob?.cancel()
+        roadRouteJob = null
+        roadRequestWindow = emptyList()
+        cachedRoadRoutes.clear()
+        roadAttempts.clear()
+    }
+
+    private fun segmentGeometries(progress: TrackingProgress, nowMillis: Long): List<GpsSegmentGeometry> =
+        roadWindow(progress).mapNotNull { request ->
+            cachedRoadRoutes[request]?.takeIf { RoadRouteSelection.usable(request, it, nowMillis) }
+                ?.let { GpsSegmentGeometry(request.fromKey, request.toKey, it) }
+        }
+
+    /** Network waits run in a separate child; they never delay a GPS update under trackingMutex. */
+    private fun scheduleRoadRoutes(statusId: Int, expectedGeneration: Long, progress: TrackingProgress, nowMillis: Long) {
+        if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null || progress.completed) return
+        if (!gpsRequestedByActivity || !gpsPreferenceEnabled) {
+            roadRouteJob?.cancel()
+            roadRouteJob = null
+            roadRequestWindow = emptyList()
+            return
+        }
+        pruneRoadRoutes(nowMillis)
+        val window = roadWindow(progress)
+        if (roadRequestWindow != window) {
+            roadRouteJob?.cancel()
+            roadRouteJob = null
+            roadRequestWindow = window
+        }
+        if (window.isEmpty() || roadRouteJob?.isActive == true) return
+        val missing = window.filter { request ->
+            cachedRoadRoutes[request]?.let { RoadRouteSelection.usable(request, it, nowMillis) } != true &&
+                roadAttempts[request]?.let { nowMillis - it in 0 until ROAD_RETRY_INTERVAL_MILLIS } != true
+        }
+        if (missing.isEmpty()) return
+        roadRouteJob = serviceScope.launch {
+            for (request in missing) {
+                if (!isActive || !isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null ||
+                    !gpsRequestedByActivity || !gpsPreferenceEnabled
+                ) break
+                // A cancelled preload must not mark its unstarted successor as a failed attempt.
+                roadAttempts[request] = System.currentTimeMillis()
+                val geometry = try {
+                    RoadRouteRepository.getRoute(request.from, request.to)
+                } catch (error: CancellationException) {
+                    throw error
+                } catch (_: Exception) {
+                    null
+                } ?: continue
+                trackingMutex.withLock {
+                    if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return@withLock
+                    val loadedAt = System.currentTimeMillis()
+                    revalidateSevStops(loadedAt)
+                    if (!isActive) return@withLock
+                    val currentEngine = engine ?: return@withLock
+                    val currentProgress = currentEngine.getProgress()
+                    // Coordinates, validity, visit identities or the cursor may have changed in flight.
+                    if (request !in roadWindow(currentProgress) ||
+                        !RoadRouteSelection.usable(request, geometry, loadedAt)
+                    ) return@withLock
+                    cachedRoadRoutes[request] = geometry
+                    while (cachedRoadRoutes.size > MAX_CACHED_ROAD_SEGMENTS) {
+                        cachedRoadRoutes.remove(cachedRoadRoutes.keys.first())
+                    }
+                    // A geometry response is not a fresh GPS fix or new station/dwell evidence.
+                    applyUpdate(currentEngine.onTimetable(loadedAt), statusId, expectedGeneration)
+                }
+            }
+        }
     }
 
     private fun checkedInRoute(stops: List<StopStation>, checkin: CheckinInfo, applyManualTimes: Boolean = true): List<StopStation> {
@@ -751,6 +855,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
         val progress = engine?.getProgress() ?: return
         val nowMillis = System.currentTimeMillis()
+        pruneRoadRoutes(nowMillis)
         val gpsTimes = gpsJourneyTimes.update(
             route = toTrackingStops(cachedStops, checkin),
             progress = progress,
@@ -758,7 +863,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             fix = latestLocation?.takeIf {
                 gpsRequestedByActivity && gpsPreferenceEnabled && isFreshLocation(it)
             }?.let(::toFix),
-            nowMillis = nowMillis
+            nowMillis = nowMillis,
+            segmentGeometries = segmentGeometries(progress, nowMillis),
+            useRoadGeometry = SevStopResolver.isReplacementBus(checkin)
         )
         val liveState = TrackingLiveState(
             statusId = statusId,
@@ -827,6 +934,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             if (activeQueuedUtterance != null || existingDestinationUtterance != null || pendingAnnouncement != null) {
                 awaitFinalSpeech(statusId, activeQueuedUtterance ?: existingDestinationUtterance)
             } else stopTracking(statusId)
+        } else {
+            scheduleRoadRoutes(statusId, expectedGeneration, progress, nowMillis)
         }
     }
 
@@ -958,6 +1067,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         trackingJob?.cancel()
         tickJob?.cancel()
         sevJob?.cancel()
+        clearRoadRoutes()
         disableLocationUpdates()
         completionJob?.cancel()
         completionJob = serviceScope.launch {
@@ -1057,6 +1167,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private suspend fun stopTracking(expectedStatusId: Int) {
         if (currentStatusId != null && currentStatusId != expectedStatusId) return
         stopping = true
+        clearRoadRoutes()
         disableLocationUpdates()
         // Keep the current bounded CPU lease through the atomic ID+progress clear.
         // Renewal sees stopping=true, so a stalled commit cannot extend the lease.
@@ -1076,6 +1187,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         trackingJob?.cancel()
         tickJob?.cancel()
         sevJob?.cancel()
+        clearRoadRoutes()
         completionJob?.cancel()
         completionStatusId = null
         completionUtteranceId = null
@@ -1094,6 +1206,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        clearRoadRoutes()
         releaseTrackingWakeLock()
         disableLocationUpdates()
         publishWidgetWaiting()
@@ -1121,6 +1234,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        private const val ROAD_RETRY_INTERVAL_MILLIS = 60_000L
+        private const val MAX_CACHED_ROAD_SEGMENTS = 8
         /** Settings also call this when the service is no longer alive. */
         fun clearChangeNotifications(context: Context) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

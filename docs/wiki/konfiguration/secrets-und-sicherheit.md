@@ -31,6 +31,14 @@ Die automatische [SEV-Ergänzung](../module/sev-haltestellen.md) fragt Bahnhofsk
 
 HTML wird ausschließlich nach eingebetteten JSON-Daten durchsucht. Webseiten-JavaScript wird nicht ausgeführt. Größen-, Host-, Zeit- und Koordinatenprüfungen verhindern, dass ein ungeprüfter Kartenmittelpunkt die Tracking-Koordinate ersetzt. Fehlende oder unsichere Ergebnisse erhalten den bestehenden API-Rückfall.
 
+## Optionale öffentliche Straßenroute
+
+`RoadRouteRepository` lädt für geeignete SEV-Abschnitte Geometrien vom festen HTTPS-Endpunkt `routing.openstreetmap.de/routed-car`. Sein eigener OkHttp-Client verwendet keine Account-Interceptors, Zugangsdaten, Redirects oder HTTP-Logging. Die Anfrage enthält ausschließlich die beiden veröffentlichten und lokal eindeutig zugeordneten Ersatzhaltkoordinaten. Gerätefix, Bewegungshistorie, Träwelling-Status-ID und Prognosezeiten werden nicht übertragen.
+
+Diese Endpunktpaare beschreiben angefragte öffentliche Fahrtabschnitte und sind zusammen mit der üblichen IP-/Verbindungsinformation dem Anbieter sichtbar. Laut [Anbieterhinweis](https://routing.openstreetmap.de/about.html) werden Routenanfragen serverseitig protokolliert. Öffentliche Koordinaten bedeuten daher nicht, dass keine Nutzungsinformation übertragen wird. Die Opt-in-Fahrterkennung mit standortabgeleiteter Stationssuche bleibt davon getrennt.
+
+Antwortgröße, Punktzahl, Snap, Koordinaten und Weglänge werden geprüft; Request-Starts sind begrenzt. Geometrien liegen ausschließlich im begrenzten RAM-Cache und werden weder als GPS-Historie noch als neues DataStore-/Room-Feld gespeichert. Generation, geordnete Besuchspaarung und unveränderte Endpunkte schützen die lokale Übernahme. Ein Pkw-Routenmodell gilt nicht als amtlicher Busweg; fehlerhafte oder mehrdeutige Geometrie führt zum bestehenden Zeitquellenrückfall. Details und Nutzungsgrenzen: [Externe Schnittstellen](../api/externe-schnittstellen.md).
+
 ## Verwandte Seiten
 
 - [Umgebungsvariablen](./umgebungsvariablen.md)
@@ -40,3 +48,4 @@ HTML wird ausschließlich nach eingebetteten JSON-Daten durchsucht. Webseiten-Ja
 - [Reisefortschritt](../module/trip-progress.md)
 - [GPS-Zeiten](../module/gps-zeiten.md)
 - [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)
+- [Externe Schnittstellen](../api/externe-schnittstellen.md)

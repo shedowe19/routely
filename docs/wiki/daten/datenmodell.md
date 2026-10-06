@@ -8,6 +8,7 @@ Erklärt, wie Daten im Netzwerk modelliert und lokal gespeichert sind.
 
 - `app/src/main/kotlin/de/traewelling/app/data/model/Models.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/model/SevModels.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/model/RoadRouteModels.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/local/StatusEntity.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
@@ -137,6 +138,18 @@ Die Modelle in `SevModels.kt` ergänzen die öffentliche Bahnhofskarte, ohne den
 `SevStopInfo.hasCoordinates` unterscheidet einen nutzbaren Punkt von einem reinen Hinweis. GeoJSON liefert Längengrad vor Breitengrad; das App-Modell hält beide benannt. Der Bearbeitungsstand eines Punkts ersetzt kein Gültigkeitsintervall. Ein allgemeiner Kartenmittelpunkt wird niemals als SEV-Punkt ausgegeben.
 
 Die Zuordnung bleibt lokal. API-Stations-ID, Stopover-UUID, Plan-/Echtzeit und Check-in-Werte behalten ihre Identität und Bedeutung; es werden keine SEV-Koordinaten per Status-PUT übertragen. Die Auflösungsregeln und Lebensdauer stehen unter [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
+
+### Lokale Straßen-Geometrien
+
+`RoadRouteModels.kt` trennt mögliche Straßenwege von den öffentlichen SEV-Punkten und den Gerätefixes:
+
+| Modell | Bedeutung und Lebensdauer |
+| --- | --- |
+| `RoutePoint` | Benannter Breitengrad/Längengrad eines öffentlichen Haltpunkts oder Geometrieknotens; kein Gerätefix für Routinganfragen. |
+| `RoadRouteGeometry` | Geordnete öffentliche Endpunkte `from`/`to`, bis zu drei validierte Linienzüge in `alternatives` und `fetchedAtMillis`; RAM-Geometrie ohne Provider-ETA. |
+| `GpsSegmentGeometry` | Bindet `geometry` über `fromKey` und `toKey` an zwei konkrete geordnete Haltbesuche, auch bei wiederholten Stationsbesuchen. |
+
+Nur die lokale [GPS-Zeitauswertung](../module/gps-zeiten.md) verwendet geeignete Wege als räumliche Projektion. Das Pkw-Modell ist keine offizielle SEV-Busroute; seine Fahrtdauer wird nicht übernommen. Gerätepositionen werden nicht an den Router gesendet. Geometrien bleiben in Service-/Repository-RAM und erweitern weder Room noch `trip_tracking_state`; ein Neustart übernimmt keine persistierte Straßen-Geometrie. Ein alleiniger Formwechsel verwirft die Zukunftsprognose und das Bewegungsfenster, erhält aber bestätigte tatsächliche Ereignisse bei unveränderter Besuchs-/Haltbasis.
 
 ### List<StopStation>.deduplicate()
 
