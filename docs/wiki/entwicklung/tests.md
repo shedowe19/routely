@@ -302,6 +302,23 @@ Vorbereitende Läufe mit veralteten Inkrementalartefakten, einem korrigierten Te
 
 Die unabhängige Gegenprüfung umfasst GPS/Geometrie, Android-Service/Audio/Notification/Widget, API-/Daten-/Cacheconsumer, UI/Editor/Navigation/Zugänglichkeit sowie Auth/Backup/Release. Währenddessen bestätigte Folgefehler wurden vor dem Endstand korrigiert. Umsetzung und Prüfgrenzen stehen im [Main-Review](./main-review-2026-10-06.md) und in der [ADR Nachreview-Korrekturen](../entscheidungen/2026-10-06-nachreview-korrekturen.md).
 
+## Weiterer Nachreview von Main 443d6e1
+
+Der [CI-Lauf 37536735143](https://github.com/shedowe19/routely/actions/runs/37536735143) auf exakt `443d6e17af153d9b81fac8498fc04b9a93519437` ist grün. Die heruntergeladenen JUnit-/Lint-Artefakte wurden unabhängig ausgewertet: **726 Tests/56 Klassen**, null Fehler/Fehlschläge/Skips, **56 Offline-Releaseguardtests**, Debug-Lint **0 Fehler/53 Warnungen**, Debug- und unsignierter Release-Build. Alle 108 ausführbaren Tasks liefen in 4 Minuten 20 Sekunden. Elf zusätzliche erreichbare Gradle-/Maven-Versionshinweise erklären den Unterschied zum lokalen 42-Warnungen-Stand. [Wiki-Sync 37536735025](https://github.com/shedowe19/routely/actions/runs/37536735025) ist ebenfalls erfolgreich.
+
+Der erneute Quellreview verwendete fünf unabhängige Subagents plus Root. Für neue GPS-/Antwortreihenfolgefälle wurden fünf ausschließlich temporäre Quelldateien in die Testquelle kopiert, ohne Produktivcode zu verändern. Der gezielte Lauf umfasste acht Tests in vier Klassen und endete nach 31 Sekunden mit sieben erwarteten Schutzassertionen und einem bestandenen Vergleich; er ist ausdrücklich **kein grüner Suitennachweis**:
+
+| Probe | Ausgeführte Fälle | Ergebnis gegen unverändertes Main |
+| --- | --- | --- |
+| `GpsLatestReviewProbe` | Bootstrap und Gap auf echter nativer Kurve mit 24-Meter-/3-Sekunden-Fixes; 180-Meter-Haltfolge; Istabfahrt bei 100 Minuten Planfahrt und nullable Folgeankunft | Fünf Schutzassertionen scheitern; Vorbedingungen und kontrollierte ETA-Ablehnung bestehen. Belegt G8–G10. |
+| `FeedTabSwitchLikeReviewTest` | Alter Dashboard-Like bestätigt während neuer erster Globaltabladung | `[]` statt `[99]`; belegt D10. |
+| `UserProfileFollowReadReviewTest` | Alter Profil-GET nach bestätigtem Follow | `following=false` statt `true`; belegt D11. |
+| `EditedActiveDestinationReviewTest` | Gleiche plausible Fixfolge am alten Ziel bei alter gegenüber aktualisierter Zielrolle | Vergleich besteht: alte Route beendet/ansagt Ziel, aktualisierte Route fährt weiter. D9s Service-/UI-Trigger zusätzlich von zwei Sichten geprüft. |
+
+Danach wurden alle fünf temporären Quelldateien entfernt; alle 264 ursprünglichen Dateien waren vor Wikiänderung SHA-256-identisch. Der erste Wiederherstellungslauf fand noch 14 alte temporäre `.class`-Dateien in `app/build/tmp/kotlin-classes/debugUnitTest` und führte deshalb weiterhin 734 statt 726 Tests aus. Er wird nicht als Baseline-Nachweis verwendet. Nach Entfernen ausschließlich dieses Test-Ausgabeverzeichnisses und Neucompilierung mit `-Pkotlin.incremental=false` besteht `:app:testDebugUnitTest --no-build-cache` nach 31 Sekunden mit **726 Tests/56 Klassen**, null Fehler/Fehlschläge/Skips. Die temporären Proben gehören nicht zum veröffentlichten Repository. Die Releaseguardsuite wurde im neuen Review ebenfalls nochmals mit 56/56 erfolgreichen Offline-Tests ausgeführt.
+
+U8 (Zurück nach erkanntem Einstieg) ist statisch am echten Navigationszustand belegt. U9 (System-Zurück während Check-in-POST) kombiniert zwei unabhängige Codesichten mit dem [Android-Primärvertrag](https://developer.android.com/guide/components/activities/tasks-and-back-stack#back-tap-behavior-for-root-launcher-activities): Root-Back beendet Activity bis Android 11, ab Android 12 verschiebt es regulär in den Hintergrund. Keine Android-8–11-Emulator-/Geräteausführung wurde durchgeführt. Abgeschickte manuelle Zeit-PUTs bleiben durch den neuen NonCancellable-Schreibabschluss geschützt. Details und Prioritäten aller acht Befunde stehen im [weiteren Main-Review](./main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1).
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.

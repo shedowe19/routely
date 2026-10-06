@@ -22,6 +22,8 @@ Beim Nachreview von Routely-Main `f406bad` am 06.10.2026 wurde der aktuelle Upst
 
 Die Korrektur des Nachreviews lässt unveränderte Text-/Sichtbarkeitsfelder im PUT aus und ordnet konkurrierende Statusschreibaufträge pro Credential/Status. Diese Clientkorrekturen verändern keine Upstream-Endpunkte. Die erneute Quellprüfung während der Umsetzung bestätigt weiterhin denselben Upstream-SHA; keine schreibende Live-API-Prüfung wurde ausgeführt.
 
+Beim weiteren [Review von Routely-Main 443d6e1](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) wurde Upstream `develop` erneut als `4d602796da8409017314cc771b1127d169155f02` und der gelesene Changelog als identischer Blob `151ba6f1c9e012f9a665eef2f733ee1114d73015` bestätigt. Keine neue Endpunktmigration ist belegt. D9–D11 betreffen zusätzliche Clientconsumer und Antwortreihenfolgen; G10 trennt nullable Zeit-/Forecastdaten von physischer Ereignisbeobachtung. Kein echter Kontotoken oder schreibender Liveauftrag wurde verwendet.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`

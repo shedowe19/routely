@@ -156,6 +156,8 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 ## Offene Fragen
 
+- TODO: D9/P1 des [weiteren Main-Nachreviews](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) betrifft erfolgreiche Zielbearbeitung während aktiver Begleitung: Detail und Feed übernehmen den PUT, der Service behält zunächst die alte Zielrolle und schützt seinen GET nicht gegen die Statusmutation. Normale Ankunft am alten Ziel kann die Begleitung beenden. Status-/Halt-/Geometriebasis im Service mutationsgebunden übernehmen; ein Aktualisieren nur der Detailansicht genügt nicht.
+
 - TODO: EditStatusDialog Layout dokumentieren
 
 ## Verwandte Seiten

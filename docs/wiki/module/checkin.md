@@ -91,9 +91,12 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 
 ### Navigation während einer Erstellung
 
-- U5 ist korrigiert: `hasPendingSubmission` umfasst CONFIRM und SUCCESS bei laufender Erstellung beziehungsweise Nachkorrektur. Auswahl-, Zurück- und Resetpfade beachten denselben Zustand. Erkennungsnavigation zeigt einen laufenden Check-in, startet ihn aber nicht neu. Der angenommene POST kann seine Aktivierung und den manuellen Zeit-PUT zu Ende übernehmen; echte Sitzungswechsel bleiben eine getrennte Grenze. Eine Regression verwendet verzögerte Erstellung und Zeitkorrektur und bestätigt genau einen POST.
+- U5 ist korrigiert: `hasPendingSubmission` umfasst CONFIRM und SUCCESS bei laufender Erstellung beziehungsweise Nachkorrektur. Auswahl-, Toolbar-Zurück- und Resetpfade beachten denselben Zustand. Erkennungsnavigation zeigt einen laufenden Check-in, startet ihn aber nicht neu. Innerhalb dieser geschützten VM-Pfade kann der angenommene POST seine Aktivierung und den manuellen Zeit-PUT zu Ende übernehmen; echte Sitzungswechsel bleiben eine getrennte Grenze. Eine Regression verwendet verzögerte Erstellung und Zeitkorrektur und bestätigt genau einen POST. Der zusätzliche Android-System-Zurückpfad ist unter U9 noch offen.
 
 ## Offene Fragen
+
+- TODO: U9/P2 des [weiteren Main-Nachreviews](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) beheben. `CheckInScreen` besitzt keinen BackHandler. System-Zurück beendet die Launcherroot-Activity auf unterstütztem Android 8–11; ein serverseitig angenommener, aber antwortoffener POST kann dadurch vor Aktivierung/Abschlussübernahme seinen ViewModelScope verlieren. Handler ausschließlich für die sichtbare Check-in-Page an denselben Pendingguard binden und auf API 30 instrumentiert prüfen. Android 12+ Root-Back verschiebt regulär in den Hintergrund; bereits abgeschickte Zeit-PUTs bleiben NonCancellable geschützt.
+- TODO: U8/P3 desselben Nachreviews beheben: Ein frischer Erkennungsvorschlag springt ohne Abfahrtsladung direkt zur Zielauswahl; einmal Toolbar-Zurück zeigt danach die nie geladene, leere DEPARTURES-Liste. Ursprung des Auswahlpfads erhalten und zur Suche/Erkennung zurückführen oder bewusst Abfahrten laden.
 
 - U1/U3/D3 des [Main-Reviews](../entwicklung/main-review-2026-10-06.md) sind durch getrennte Plan-/Istzeitaufträge, Verfrühungsanzeige und Identitätsdeduplizierung korrigiert. Regressionen verwenden kontrollierte Antworten; es gab keine schreibenden Live-API-Tests.
 - TODO: Zeitkorrektur-Teilerfolg, Erfolgskarte und nahe verschiedene Halte auf dem Gerät prüfen.

@@ -56,6 +56,7 @@ Ein durch `Invalidated` erforderlicher Verifikationsabruf bleibt als Auftrag erh
 
 ## Offene Fragen
 
+- TODO: D10/P2 des [weiteren Main-Nachreviews](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) beheben: Dashboard-Like offen, Globaltabwechsel startet dessen erste Ladung, alter Like bestätigt. Event und Likeabschluss brechen den neuen GET ab, setzen Busy zurück und ersetzen die benötigte Ladung nicht. Eine ausgeführte Coroutineprobe zeigt deshalb `[]` statt der vorhandenen Globalkarte. Tab-/Ladebesitzer und notwendiger Neuabruf müssen zusätzlich zu den bestehenden Like-/Cachegrenzen erhalten werden.
 
 ## Verwandte Seiten
 
