@@ -149,6 +149,8 @@ Die Regressionen prüfen, dass tatsächlich bestätigte Ankünfte und Abfahrten 
 
 `GpsTimeUnavailableReason` beschreibt den fehlenden Prognosebeleg und wird im Fahrtdetail angezeigt. Die Gründe umfassen unter anderem ungenaue oder fehlende aktuelle Position, noch unbestätigten Besuch, unbrauchbaren Abschnitt, Warten am Einstieg, Lage außerhalb des Korridors sowie fehlende oder unplausible Fahrbewegung. Sie werden aus dem tatsächlichen Auswertungspfad abgeleitet; die Aufnahme allein wird keinem dieser Gründe zugeordnet.
 
+Der Main-Code `9e0212979e21028f893b155db50abaa1a2fba4b4` bestand am 06.10.2026 alle **329 Unit-Tests** ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen 15 Klassen und 65 Estimator-Fälle einschließlich der acht zusätzlichen Regressionen. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37454963229](https://github.com/shedowe19/routely/actions/runs/37454963229). Der Prüflauf belegt Kompilierung und Logikregressionen, keinen tatsächlichen Fixverlauf oder hörbare Ansage der abgebildeten Busfahrt.
+
 TODO: Auf einer echten RE1-SEV-Rückfahrt die ausgegebenen Gründe, gemessene Abfahrt und Ankunft, Zeitquellen sowie Signalverlust und Kurvenfahrt gegen einen zeitlich zugeordneten Fix-/Audioverlauf prüfen. Die Erweiterung liefert weiterhin keine Straßenroute und keine garantierte Bus-ETA.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
