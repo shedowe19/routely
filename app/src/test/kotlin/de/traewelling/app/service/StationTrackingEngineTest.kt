@@ -847,6 +847,38 @@ class StationTrackingEngineTest {
     }
 
     @Test
+    fun replacementStopCorrectionRequiresArrivalAtTheNewPhysicalPoint() {
+        val original = stop("current")
+        val engine = StationTrackingEngine(listOf(original), TrackingProgress(
+            nextStopKey = "current", arrivedAtCurrent = true,
+            announcedKeys = setOf("current"), gpsEstablished = true
+        ))
+
+        engine.updateRoute(listOf(original.copy(longitude = 350.0 / METERS_PER_DEGREE)))
+
+        assertEquals("current", engine.getProgress().nextStopKey)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        assertEquals(setOf("current"), engine.getProgress().announcedKeys)
+        val atOldStation = engine.onLocation(fix(0.0, now), now)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        assertNull(atOldStation.announcement)
+    }
+
+    @Test
+    fun apiTimeRefreshAtTheSamePhysicalStopKeepsConfirmedArrival() {
+        val original = stop("current")
+        val engine = StationTrackingEngine(listOf(original), TrackingProgress(
+            nextStopKey = "current", arrivedAtCurrent = true,
+            announcedKeys = setOf("current"), gpsEstablished = true
+        ))
+
+        engine.updateRoute(listOf(original.copy(effectiveDepartureMillis = now + 20 * MINUTE)))
+
+        assertTrue(engine.getProgress().arrivedAtCurrent)
+        assertEquals(setOf("current"), engine.getProgress().announcedKeys)
+    }
+
+    @Test
     fun earlyBusAnnouncesTheNextCloseStopBeforeLeavingThePrevious220MeterZone() {
         val engine = StationTrackingEngine(listOf(
             stop("maubis", arrival = now + 2 * MINUTE),

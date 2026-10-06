@@ -43,6 +43,16 @@ Antworten auf Status-, Halte- und Nutzeranfragen werden nur übernommen, wenn we
 
 Die frühere `propagateDelays()`-Vererbung einschließlich synthetischer Puffer wurde entfernt. Ein Rückfall zeigt dadurch tatsächliche vorhandene Providerwerte und bewahrt Verfrühungen, statt eine ältere positive Verzögerung auf weitere Halte zu übertragen. GPS-Prognosen verändern weder die API-Echtzeitfelder noch die gespeicherten Check-in-Zeiten. Das Bearbeitungsformular verwendet ausdrücklich den Resolver ohne GPS-Daten; eine Schätzung wird nicht beim Speichern zur manuellen Istzeit. Die Prognosebedingungen stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
+### SEV-Ersatzhaltestellen
+
+Busfahrten mit RE-/RB-Linienkennung erhalten automatisch die [SEV-Ergänzung](./sev-haltestellen.md). Erst wird der vollständige API-Snapshot sichtbar veröffentlicht; danach lädt eine eigene Coroutine öffentliche bahnhof.de-Karten. Der API-Refresh wartet darauf nicht. Bei unverändertem Fahrt-/Routensnapshot wird ein noch laufender Abruf weiterverwendet, damit der 30-Sekunden-Refresh langsamere Ergebnisse nicht ständig abbricht.
+
+Übernahme erfordert weiterhin dieselbe Status-ID, SEV-Generation, Trip-ID/UUID, Verkehrsmittel-/Linienkennung, Check-in-Grenzen und vollständige Haltfolge einschließlich Besuchsschlüssel, Planzeiten, Stationsdaten und Ausfallstatus. Reine API-Echtzeitänderungen machen eine räumliche Zuordnung nicht veraltet. Fahrtwechsel, Reset, Bearbeitung und ViewModel-Ende beenden die alte Anreicherung; späte Ergebnisse überschreiben keine neue Fahrt.
+
+Für die passende eigene aktive Fahrt haben die besuchsbezogenen `TrackingLiveState.sevStops` Vorrang vor dem separaten Detailabruf. Der Service ist damit für die tatsächliche Tracking-Koordinate maßgeblich; die Detailansicht kann Wegangaben bereits vor einem laufenden Service anzeigen. Es werden keine Koordinaten in API-Halte oder gespeicherte Check-in-Zeiten geschrieben.
+
+Der Fahrtkopf zeigt `Schienenersatzverkehr` und den Zustand der Ergänzung. Zugeordnete Haltzeilen zeigen `SEV-Haltestelle`, vorhandene Richtung, Wegbeschreibung und `Lageplan auf bahnhof.de`. Die Wegbeschreibung wird zunächst auf drei Zeilen begrenzt und lässt sich ausklappen. Bei Mehrdeutigkeit oder ungültiger Quelle erscheint der Auflösungsgrund in der Zeile; ohne passende Karte erläutert der Kopf den Rückfall auf vorhandene Stationsdaten. Bahn-Gleisbadges werden bei diesen SEV-Buskandidaten unterdrückt, damit ein Bahnsteig nicht als Busabfahrtsort erscheint. Gestrichene Halte erhalten keine SEV-Weganzeige.
+
 ### Bearbeitung (nur eigene Statusen)
 
 - `startEditing()`: Setzt Bearbeitungszustand
@@ -97,6 +107,8 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 | `stopovers`   | List<StopStation> | Haltestellen-Verlauf            |
 | `isOwnStatus` | Boolean           | Ist eigener Status              |
 | `trackingState` | TrackingLiveState? | Passender eigener aktiver Service-Fortschritt |
+| `sevStops` | Map<String, SevStopInfo> | Besuchsbezogene SEV-Positionen beziehungsweise Quellenhinweise des Detailabrufs |
+| `isLoadingSevStops` | Boolean | Öffentliche Karten werden im Hintergrund gesucht |
 | `isEditing`   | Boolean           | Bearbeitungsmodus               |
 | `isDeleting`  | Boolean           | Löschvorgang                    |
 | `lastUpdated` | Long              | Timestamp letzte Aktualisierung |
@@ -110,6 +122,7 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 - [Check-in](./checkin.md)
 - [TripTracking](./trip-tracking.md)
 - [GPS-Zeiten](./gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](./sev-haltestellen.md)
 - [Datenfluss](../architektur/datenfluss.md)
 - [Tests](../entwicklung/tests.md)
 - [API Überblick](../api/ueberblick.md)

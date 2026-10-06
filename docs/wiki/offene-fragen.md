@@ -6,8 +6,8 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 
 ## Offene Punkte
 
-- TODO: Die [öffentlich exportierbaren SEV-Ersatzhaltestellen](./module/gps-zeiten.md) der RE1-Busfahrt Essen → Mülheim → Duisburg eindeutig nach Ersatzverkehr, Station, Besuch, Datum und Richtung zuordnen, bevor sie in die Android-App integriert werden. `tools/extract_bahnhof_sev.py` liest öffentliche bahnhof.de-Kartendaten ohne RIS::Stations-Zugang; der Beispielabruf vom 06.10.2026 enthält drei Stationen und fünf SEV-Punkte. Der bisherige App-Code übernimmt die API-Stationskoordinaten weiterhin unverändert. Unklar: Tatsächliche Koordinaten dieser Fahrt und die Ankunftsposition des in Duisburg endenden Busses sind aus dem Screenshot nicht erkennbar. Straßenumwege benötigen eine gesonderte Prüfung des geraden GPS-Prognosekorridors.
-- TODO: Dauerhafte Nutzungsbedingungen, Änderungen der öffentlichen HTML-Struktur und Aktualisierung der [SEV-Quelle](./module/gps-zeiten.md) prüfen. Zeitweilige Verlegungen und Sonderfristen müssen als Hinweise erhalten bleiben; `properties.version` ist kein Gültigkeitsintervall. Der Beispielabruf ist eine Momentaufnahme und kein laufender Aktualisierungsdienst.
+- TODO: Die automatische [SEV-Ergänzung](./module/sev-haltestellen.md) der RE1-Busfahrt Essen → Mülheim → Duisburg vor Ort prüfen: physischer Einstieg, Richtungsbeleg aus der vollständigen API-Fahrt, Maßnahmenende, GPS-Ausfall und Wiederanlauf mit Cache. Die App lädt öffentliche bahnhof.de-Kartendaten ohne RIS::Stations-Zugang und übernimmt ausschließlich eindeutige aktuelle Punkte in die lokale GPS-Projektion. Unklar: Tatsächliche API-Koordinaten dieser Fahrt und die Ankunftsposition des in Duisburg endenden Busses sind aus dem Screenshot nicht erkennbar. Ohne Richtung bleibt die Position unbestätigt; Straßenumwege benötigen eine gesonderte Prüfung des geraden GPS-Prognosekorridors.
+- TODO: Dauerhafte Nutzungsbedingungen, Änderungen der öffentlichen HTML-Struktur, weitere Bahnhofs-Slugs und Richtungsformulierungen sowie Netzwerk-/Akkuverbrauch der [SEV-Quelle](./module/sev-haltestellen.md) prüfen. Die Bus-RE/RB-Erkennung deckt nicht sämtliche Ersatzverkehre ab. Zeitweilige Verlegungen und Sonderfristen müssen neu geprüft werden; `properties.version` ist kein Gültigkeitsintervall. Der Entwicklungs-Beispielabruf bleibt eine Momentaufnahme, kein laufender Aktualisierungsdienst.
 - TODO: Bestehende UI-Lücken abschließen: [OAuth-Anmeldung und Token-Erneuerung](./module/auth-pkce.md) anbinden, Sichtbarkeitsauswahl beim [Check-in](./module/checkin.md) und [Bearbeiten](./module/status-detail.md) anbieten, leere Herz-Handler im [eigenen](./module/profile.md) und [fremden Profil](./module/user-profile.md) verbinden sowie [Meldungsnavigation](./module/notifications.md) ergänzen. Diese Punkte sind Bestandslücken, keine beschlossene Feature-Roadmap.
 - TODO: Bei Bedarf die am 05.10.2026 erfolgreiche [Live-GET-Prüfung](./entwicklung/tests.md) als wiederholbare Integrationstests einrichten. Falls echte API-Tokens nötig sind, müssen diese lokal und nicht versioniert bereitgestellt werden.
 - TODO: Neue Träwelling-Changelog-Einträge regelmäßig mit dem tatsächlich eingesetzten Routen- und Ressourcenvertrag abgleichen. Der letzte dokumentierte Audit verwendet Upstream `develop`-Commit `4d602796da8409017314cc771b1127d169155f02`.
@@ -27,6 +27,7 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 - [Tests](./entwicklung/tests.md)
 - [TripTracking](./module/trip-tracking.md)
 - [GPS-Zeiten](./module/gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](./module/sev-haltestellen.md)
 - [StatusDetail](./module/status-detail.md)
 - [Secrets und Sicherheit](./konfiguration/secrets-und-sicherheit.md)
 - [Fahrterkennung](./module/ride-recognition.md)

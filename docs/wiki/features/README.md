@@ -13,6 +13,7 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 06.10.2026. Erre
 | [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit sowie gekennzeichnete lokale GPS-Zeiten der eigenen aktiven Fahrt, Gleise, Ausfälle, Einstieg/Ausstieg und gemeinsamer Fortschritt. Eigene Fahrt bearbeiten oder löschen. |
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
 | [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Gemeinsame Quellenwahl mit begrenzt stabilisierter gültiger Prognose und API-/Plan-Rückfall. |
+| [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md) | Automatischer öffentlicher Kartenabruf für Bus-RE/RB-Kandidaten, richtungs-/datumsabhängige lokale GPS-Punkte und Wegangaben mit Quellenlink. Unsichere Positionen behalten API-Koordinaten und zeigen den Grund. |
 | [Sprachausgabe](../module/settings.md) | Haltestellen- und Zielansagen; TTS-Engine, Sprache und Stimme konfigurierbar. |
 | [Begleitung bei Display aus](../module/settings.md) | Begrenzte CPU-WakeLock-Haltung während einer aktiven Fahrt, Anzeige des Android-Akkuoptimierungsstatus und ausdrückliche Anfrage einer Ausnahme; Display bleibt ausgeschaltet. |
 | [Fahrterkennung](../module/ride-recognition.md) | Ausdrücklich aktivierte GPS-Suche nach möglichen Fahrten; Linie prüfen, Ziel wählen und Check-in selbst bestätigen. |
@@ -41,6 +42,7 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 06.10.2026. Erre
 - Die Transitous-Live-Karte aus PR #35 wurde nicht übernommen; der PR ist geschlossen und ungemergt. Im geprüften App-Code existiert kein Transitous-Client.
 - Provider-Echtzeitfelder stammen aus der Träwelling-API und bleiben erhalten. GPS-Zeiten sind lokale Anzeigeprognosen und können bei ungeeigneten Koordinaten oder Bewegungsverläufen trotz Signal auf API/Plan zurückfallen. GPS-Nähe allein liefert keine genaue ETA; Gerätesignale, Prognosegüte, Audioausgabe und kurze Halte müssen weiterhin auf echten Fahrten geprüft werden.
 - Display-aus-Begleitung benötigt weiterhin Android-Freigaben und geeignete Hersteller-/TTS-Einstellungen. CPU-WakeLock und gewährte Akku-Ausnahme garantieren keinen Weiterbetrieb nach Nutzer-Force-Stop und keine festen GPS-/Netzwerkintervalle. Die [Geräteprüfung](../entwicklung/tests.md) bleibt offen.
+- SEV-Erkennung deckt Bus-RE/RB-Kandidaten ab, keine beliebigen Ersatzverkehrslinien. Öffentliche Karten können fehlen oder ihre HTML-Struktur ändern. Ein zeitlich und räumlich gültiger Ersatzhalt benötigt gegebenenfalls einen eindeutigen Richtungsbeleg; ohne diesen bleibt die Position unbestätigt. Haltekoordinaten allein liefern keine Straßenroute oder genaue Bus-ETA.
 
 ## Verwandte Seiten
 

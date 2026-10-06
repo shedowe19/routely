@@ -20,7 +20,11 @@ Der [GPS-Stationsalarm](../module/trip-tracking.md) verwendet `FusedLocationProv
 
 Das Manifest deklariert `location|dataSync` und `FOREGROUND_SERVICE_LOCATION`. Der Service aktiviert GPS erst nach einem Start aus der sichtbaren Activity mit präziser Runtimefreigabe; sonst läuft der Fahrplanmodus. Geofencing ist keine Hauptquelle: Hintergrundereignisse können mehrere Minuten verzögert sein.
 
-Stationskoordinaten stammen aus Träwelling-Stopovers. Die Annäherung wird lokal berechnet; Positionen werden nicht gespeichert oder an Träwelling gesendet. Eine bereits geladene Haltfolge und Besuchsfortschritt werden in DataStore gecacht und können unabhängig von weiteren API-Erfolgen verwendet werden.
+Stationskoordinaten stammen grundsätzlich aus Träwelling-Stopovers. Für erkannte Ersatzverkehrsfahrten kann die [SEV-Zuordnung](../module/sev-haltestellen.md) einen eindeutigen aktuellen Punkt aus der öffentlichen bahnhof.de-Karte in die lokale Tracking-Projektion übernehmen. Bei fehlender oder mehrdeutiger Zuordnung bleibt die API-Koordinate erhalten. Die Annäherung wird lokal berechnet; Gerätepositionen werden nicht gespeichert oder an Träwelling beziehungsweise bahnhof.de gesendet. Eine bereits geladene Haltfolge und Besuchsfortschritt werden in DataStore gecacht und können unabhängig von weiteren API-Erfolgen verwendet werden.
+
+## Öffentliche Ersatzhaltestellen
+
+`BahnhofSevParser` verwendet vorhandenes Gson für JSON-Datensätze der Bahnhofskarten; der separate öffentliche Abruf verwendet vorhandenes OkHttp. Es wird weder eine PDF-/QR-Bibliothek noch ein Karten-, Routing- oder Geocoding-SDK ergänzt. Die Website-Quelle benötigt keinen Bearer-Token. Geänderte HTML-Daten sind ein möglicher Quellenfehler und dürfen das bestehende Tracking nicht blockieren. Details: [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
 
 ## Fahrterkennung und Android-Fortschritt
 
@@ -32,6 +36,7 @@ Der [Reisefortschritt](../module/trip-progress.md) nutzt ab API 36 die Framework
 
 - [Architektur Überblick](./ueberblick.md)
 - [TripTracking](../module/trip-tracking.md)
+- [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)
 - [Fahrterkennung](../module/ride-recognition.md)
 - [Reisefortschritt](../module/trip-progress.md)
 - [Build](../entwicklung/build.md)

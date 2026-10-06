@@ -62,11 +62,13 @@ Die Erweiterung sendet weder Standortverläufe noch Prognosen an Träwelling und
 
 ## Abhängigkeiten
 
-`StationTrackingEngine`, `TrackingStop.plannedArrivalMillis` und `plannedDepartureMillis`, die bestehende Standortfreigabe sowie parsebare ISO-Zeitfelder der API. Es wird keine zusätzliche API, Preference oder Datenbank eingeführt.
+`StationTrackingEngine`, `TrackingStop.plannedArrivalMillis` und `plannedDepartureMillis`, die bestehende Standortfreigabe sowie parsebare ISO-Zeitfelder der API. Die GPS-Zeitauswertung führt keine zusätzliche API, Preference oder Datenbank ein. Für Bus-RE/RB-Kandidaten kann die getrennte [SEV-Ergänzung](./sev-haltestellen.md) den physischen Haltpunkt aus einer öffentlichen Bahnhofskarte belegen; das ändert die Prognosekriterien nicht.
 
-## SEV: öffentliche Ersatzhaltestellen und fehlende App-Zuordnung
+## SEV: öffentliche Ersatzhaltestellen und lokale App-Zuordnung
 
-Die Codeprüfung vom 06.10.2026 bestätigt: `TripTrackingService.toTrackingStops()` übernimmt weiterhin `stop.station.latitude/longitude` aus der Träwelling-API. Die Android-App hat bislang keine Zuordnung physischer Ersatzhalte. Das neue Abrufwerkzeug exportiert öffentliche Quellen unabhängig von der App; es verändert weder API-Daten noch Tracking-Koordinaten. `category = bus`, Linienname und Betreiber sind allgemeine Verkehrsmitteldaten, kein eindeutiger Beleg für einen bestimmten SEV-Halt. Die nachgereichte Aufnahme einer Busfahrt RE1 Essen Hbf → Mülheim (Ruhr) Hbf → Duisburg Hbf zeigt Namen und Fahrplanzeiten, jedoch keine tatsächlich gelieferten Koordinaten oder Location-Callbacks.
+Der anfängliche Quellenabgleich vom 06.10.2026 stellte fest, dass `TripTrackingService.toTrackingStops()` ausschließlich `stop.station.latitude/longitude` aus der Träwelling-API übernahm. Die nun integrierte [SEV-Ergänzung](./sev-haltestellen.md) lädt für Busfahrten mit RE-/RB-Linienkennung automatisch öffentliche Bahnhofskarten. Ein eindeutig zugeordneter, aktueller und richtungs-/datumsabhängig gültiger Punkt ersetzt nur die Koordinate in der internen Tracking-Projektion; fehlende oder mehrdeutige Ergebnisse erhalten die API-Koordinate. Fahrtdetailzeilen zeigen Quelle, Richtung, Wegbeschreibung und gegebenenfalls den Grund einer unbestätigten Position. Das weiterhin vorhandene Abrufwerkzeug exportiert Quellen für die Entwicklung unabhängig von der Android-App.
+
+Bus-Kategorie allein belegt keinen Ersatzverkehr. Die App-Erkennung ist deshalb auf Bus-RE/RB-Kandidaten begrenzt und muss zusätzlich die jeweilige Quellenzuordnung bestehen. Die nachgereichte Aufnahme der Busfahrt RE1 Essen Hbf → Mülheim (Ruhr) Hbf → Duisburg Hbf zeigt Namen und Fahrplanzeiten, jedoch keine tatsächlich gelieferten Koordinaten oder Location-Callbacks.
 
 ### Öffentlicher Abruf auf bahnhof.de
 
@@ -104,18 +106,21 @@ Die öffentlichen Lagepläne liefern ergänzende Orts- und Wegangaben:
 
 [DB RIS::Stations](https://developers.deutschebahn.com/db-api-marketplace/apis/product/ris-stations) bleibt eine alternative strukturierte Quelle mit `GET /replacement-transport/stops/by-bounding-box`. Dieser Dienst benötigt einen genehmigten Zugang und einen abonnierten Nutzungsplan; eine authentifizierte Datenbankabfrage wurde hier nicht durchgeführt. Dieser Zugang ist keine Voraussetzung für das neue öffentliche Abrufwerkzeug. Dauerhafte Nutzungsbedingungen und die Wartbarkeit des Website-Abrufs bleiben vor einem regelmäßigen App-Datenbezug zu prüfen.
 
-Eine spätere Zuordnung muss Stationskennung, konkreten Fahrtbesuch, Datum, Richtung und gegebenenfalls mehrere Kandidaten berücksichtigen. Nur eindeutig belegte physische Punkte dürfen die interne Tracking-Projektion ergänzen; API-Stations-ID, Stopover-UUID und Zeiten bleiben erhalten. Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträchtigen. Zusätzlich können Straßenumwege den bestehenden geraden Prognosekorridor verlassen; Ersatzhaltkoordinaten allein gewährleisten deshalb keine Bus-ETA. Eine Bus-Routenprojektion ist ein eigenständiger Ausbau und kein Anlass, die GPS-Gültigkeitsgrenzen pauschal zu lockern.
+Die lokale Auflösung prüft Station und konkreten Fahrtbesuch, Quellenalter, Datum und Richtung anhand der vollständigen API-Haltfolge. Nur eindeutig belegte physische Punkte ergänzen die interne Tracking-Projektion; API-Stations-ID, Stopover-UUID und Zeiten bleiben erhalten. Quellenalter und Maßnahmenende werden bei API-, GPS- und Fahrplanupdates erneut geprüft. Ändert sich der physische Punkt, wird die GPS-Zeitbasis invalidiert und die bisherige Ankunft an diesem Punkt nicht ungeprüft übernommen. Die genauen Grenzen und der Cache stehen unter [SEV-Ersatzhaltestellen](./sev-haltestellen.md).
+
+Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträchtigen. Zusätzlich können Straßenumwege den bestehenden geraden Prognosekorridor verlassen; Ersatzhaltkoordinaten allein gewährleisten deshalb keine Bus-ETA. Eine Bus-Routenprojektion ist ein eigenständiger Ausbau und kein Anlass, die GPS-Gültigkeitsgrenzen pauschal zu lockern.
 
 ## Offene Fragen
 
-- TODO: Die exportierten öffentlichen SEV-Punkte eindeutig einer erkannten Ersatzverkehrsfahrt sowie Station, Besuch, Datum und Richtung zuordnen, bevor die Android-App sie für GPS verwendet. Für den gemeldeten RE1 die tatsächlich von der API gelieferten Stopover-Koordinaten und die Ankunftshaltestelle in Duisburg verifizieren. Fehlende oder mehrdeutige Ersatzhalte dürfen keine pauschale Koordinatenkorrektur auslösen.
-- TODO: Website-Struktur, Quellenänderungen, Ablauf temporärer Verlegungen und Bedingungen eines regelmäßigen Abrufs prüfen. Der Beispielabruf vom 06.10.2026 ist kein automatischer Aktualisierungsdienst; Feature-Versionen sind keine Gültigkeitsintervalle.
+- TODO: Die automatische [SEV-Zuordnung](./sev-haltestellen.md) auf der gemeldeten RE1-Busfahrt vor Ort prüfen. Die tatsächlich von der API gelieferten Stopover-Koordinaten und die Ankunftshaltestelle in Duisburg verifizieren. Ein fehlender Richtungsbeleg muss den bisherigen API-Punkt mit sichtbarer unbestätigter SEV-Position erhalten.
+- TODO: Website-Struktur, Quellenänderungen, Ablauf temporärer Verlegungen und Bedingungen regelmäßiger Abrufe prüfen. Der Beispielabruf vom 06.10.2026 bleibt eine Momentaufnahme; die App lädt unabhängig davon mit begrenztem Cache und prüft das Quellenalter. Feature-Versionen sind keine Gültigkeitsintervalle.
 - TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand und der aktuellen UI-Vergleichszeit erneut prüfen. Die nachgereichte Bildschirmaufnahme bei eingeschaltetem Display zeigt wechselnde GPS-/API-Quellen für denselben Besuch und Folgehalte, enthält aber keinen Standort- oder Audioverlauf. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
 - TODO: Einheitliche Quellen-/Zeitdarstellung in Fahrtdetail, Widget und Samsung-Sperrbildschirm bei Display-aus-Betrieb und wiederkehrendem Signal prüfen. Reine Kotlin-Tests belegen keine reale ETA-Güte.
 
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)
+- [SEV-Ersatzhaltestellen](./sev-haltestellen.md)
 - [StatusDetail](./status-detail.md)
 - [Reisefortschritt](./trip-progress.md)
 - [Widget](./widget.md)

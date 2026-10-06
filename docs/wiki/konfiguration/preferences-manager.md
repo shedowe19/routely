@@ -45,6 +45,8 @@ Der Tracking-Cache enthält Status-ID, Check-in, Haltfolge und `TrackingProgress
 
 Ein TTS-Fehler beziehungsweise Abbruch kann den noch aktuellen Ansageschlüssel wieder freigeben; der Service speichert diesen korrigierten Fortschritt. Der für die Status-Timeline bereitgestellte `trackingLiveState` bleibt dagegen ausschließlich im Prozessspeicher und führt keinen zusätzlichen DataStore-Key ein. Das Tracking-Cacheformat bleibt Version 1.
 
+Die [SEV-Ergänzung](../module/sev-haltestellen.md) erweitert das vorhandene Fahrtcache-JSON optional um `fullStopovers` (vollständige API-Fahrt als Richtungskontext) und `sevMaps` (öffentliche Bahnhofskarten mit Abrufzeit). Es wird kein eigener Preference-Key eingeführt. Alte Version-1-Einträge ohne diese Felder werden mit vorhandener Haltfolge beziehungsweise leerer SEV-Quelle gelesen. Wiederhergestellte Quellen werden gegen Alter, Datum und Richtung erneut aufgelöst; die persistierten Karten enthalten öffentliche Bahnhof-/Ersatzhaltpunkte, keine GPS-Gerätepositionen oder Bewegungshistorie.
+
 ### Reisebegleitung
 
 | Key | Flow / Standard | Beschreibung |
@@ -97,6 +99,7 @@ Für nicht-reaktive Kontexte gibt es suspend-Funktionen:
 - [Config-Dateien](./config-dateien.md)
 - [TripTracking](../module/trip-tracking.md)
 - [GPS-Zeiten](../module/gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)
 - [StatusDetail](../module/status-detail.md)
 - [Settings](../module/settings.md)
 - [Fahrterkennung](../module/ride-recognition.md)

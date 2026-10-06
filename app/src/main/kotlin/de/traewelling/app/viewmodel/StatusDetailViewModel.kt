@@ -3,14 +3,19 @@ package de.traewelling.app.viewmodel
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.TrainStation
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.data.sev.SevJourneyEnricher
+import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.TrackingLiveState
 import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
@@ -26,6 +31,8 @@ data class StatusDetailUiState(
     val isDeleting: Boolean = false,
     val isOwnStatus: Boolean = false,
     val trackingState: TrackingLiveState? = null,
+    val sevStops: Map<String, SevStopInfo> = emptyMap(),
+    val isLoadingSevStops: Boolean = false,
 
     // Editing state
     val isEditing: Boolean = false,
@@ -48,6 +55,9 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     private var autoRefreshJob: Job? = null
     private var currentStatusId: Int? = null
+    private var sevEnrichmentJob: Job? = null
+    private var sevGeneration = 0L
+    private var sevSnapshot: SevDetailSnapshot? = null
 
     init {
         viewModelScope.launch {
@@ -72,6 +82,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     fun loadStatusDetail(statusId: Int) {
         if (currentStatusId != statusId) {
             autoRefreshJob?.cancel()
+            cancelSevEnrichment()
             _uiState.value = StatusDetailUiState()
         }
         currentStatusId = statusId
@@ -98,6 +109,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                         lastUpdated = System.currentTimeMillis()
                                     )
                                 }
+                                enrichSevStops(status, stops)
                             }
                             .onFailure { e ->
                                 if (currentStatusId != statusId) return@onFailure
@@ -111,6 +123,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                         error = "Halte konnten nicht geladen werden: ${e.message}"
                                     )
                                 }
+                                enrichSevStops(status, _uiState.value.stopovers)
                             }
                     } else {
                         _uiState.update {
@@ -121,6 +134,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                                 lastUpdated = System.currentTimeMillis()
                             )
                         }
+                        enrichSevStops(status, emptyList())
                     }
                     if (currentStatusId == statusId) checkIfOwnStatus(status)
                 }
@@ -162,6 +176,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             lastUpdated = System.currentTimeMillis()
                         )
                     }
+                    enrichSevStops(status, _uiState.value.stopovers)
                 }.onFailure {
                     if (currentStatusId != statusId) return@onFailure
                     _uiState.update {
@@ -172,13 +187,61 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             lastUpdated = System.currentTimeMillis()
                         )
                     }
+                    enrichSevStops(status, _uiState.value.stopovers)
                 }
             } else {
                 _uiState.update {
                     it.copy(status = status, stopovers = emptyList(), lastUpdated = System.currentTimeMillis())
                 }
+                enrichSevStops(status, emptyList())
             }
         }
+    }
+
+    /** Public map requests run after the API snapshot is visible and never block its refresh. */
+    private fun enrichSevStops(status: Status, stops: List<StopStation>) {
+        if (currentStatusId != status.id) return
+        val publishedStatus = _uiState.value.status?.takeIf { it.id == status.id } ?: return
+        val checkin = publishedStatus.checkin
+        if (checkin == null || stops.isEmpty() || !SevStopResolver.isReplacementBus(checkin)) {
+            cancelSevEnrichment()
+            _uiState.update { it.copy(sevStops = emptyMap(), isLoadingSevStops = false) }
+            return
+        }
+        val snapshot = SevDetailSnapshot.from(publishedStatus, stops)
+        val previousSnapshot = sevSnapshot
+        if (previousSnapshot == snapshot && sevEnrichmentJob?.isActive == true) return
+        sevEnrichmentJob?.cancel()
+        val generation = ++sevGeneration
+        sevSnapshot = snapshot
+        _uiState.update {
+            it.copy(
+                sevStops = it.sevStops.takeIf { previousSnapshot == snapshot } ?: emptyMap(),
+                isLoadingSevStops = previousSnapshot != snapshot || it.isLoadingSevStops
+            )
+        }
+        sevEnrichmentJob = viewModelScope.launch {
+            val resolved = try {
+                SevJourneyEnricher.enrich(checkin, stops)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                emptyMap()
+            }
+            _uiState.update { state ->
+                if (currentStatusId == status.id && generation == sevGeneration &&
+                    state.status?.let { SevDetailSnapshot.from(it, state.stopovers) } == snapshot) {
+                    state.copy(sevStops = resolved, isLoadingSevStops = false)
+                } else state
+            }
+        }
+    }
+
+    private fun cancelSevEnrichment() {
+        ++sevGeneration
+        sevEnrichmentJob?.cancel()
+        sevEnrichmentJob = null
+        sevSnapshot = null
     }
 
     private fun statusWithStopoverBoundaries(status: Status, stops: List<StopStation>): Status {
@@ -315,9 +378,12 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             isUpdating = false, 
                             isEditing = false,
                             status = statusWithStopoverBoundaries(updatedStatus, stops),
-                            stopovers = stops
+                            stopovers = stops,
+                            sevStops = emptyMap(),
+                            isLoadingSevStops = false
                         )
                     }
+                    cancelSevEnrichment()
                     // Refresh to get updated stopovers if destination changed
                     refresh()
                 }
@@ -343,6 +409,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     fun reset() {
         autoRefreshJob?.cancel()
+        cancelSevEnrichment()
         currentStatusId = null
         _uiState.value = StatusDetailUiState()
     }
@@ -350,5 +417,42 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     override fun onCleared() {
         super.onCleared()
         autoRefreshJob?.cancel()
+        cancelSevEnrichment()
     }
 }
+
+/** API real-time changes do not change the physical replacement-stop assignment. */
+private data class SevDetailSnapshot(
+    val statusId: Int,
+    val tripId: Int?,
+    val tripUuid: String?,
+    val category: String?,
+    val mode: String?,
+    val lineName: String?,
+    val originVisit: String?,
+    val destinationVisit: String?,
+    val stops: List<SevDetailVisit>
+) {
+    companion object {
+        fun from(status: Status, stops: List<StopStation>): SevDetailSnapshot {
+            val checkin = status.checkin
+            return SevDetailSnapshot(
+                status.id, checkin?.trip, checkin?.tripUuid, checkin?.category, checkin?.mode,
+                checkin?.lineName, checkin?.origin?.let(SevStopResolver::visitKey),
+                checkin?.destination?.let(SevStopResolver::visitKey),
+                stops.map { stop -> SevDetailVisit(
+                    SevStopResolver.visitKey(stop), stop.station, stop.arrivalPlanned,
+                    stop.departurePlanned, stop.cancelled
+                ) }
+            )
+        }
+    }
+}
+
+private data class SevDetailVisit(
+    val key: String,
+    val station: TrainStation?,
+    val arrivalPlanned: String?,
+    val departurePlanned: String?,
+    val cancelled: Boolean?
+)

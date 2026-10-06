@@ -7,6 +7,7 @@ Erklärt, wie Daten im Netzwerk modelliert und lokal gespeichert sind.
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/model/Models.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/model/SevModels.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/local/StatusEntity.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
@@ -123,6 +124,20 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 
 `JourneyTimeResolver` prüft je Ereignis gültige GPS-Zeit, manuelle Zeit, parsebare API-Echtzeit und Planzeit in dieser Reihenfolge. GPS-Matching bevorzugt UUID, sonst Station-ID und vorhandene Planzeiten mit eindeutigem Treffer. Es werden keine neuen Retrofit-, Room- oder Status-PUT-Felder eingeführt. Die Prognosen und Standortbeobachtungen bleiben RAM-Zustand; Details stehen unter [GPS-Zeiten](../module/gps-zeiten.md).
 
+### Lokale SEV-Quellen und Besuchshinweise
+
+Die Modelle in `SevModels.kt` ergänzen die öffentliche Bahnhofskarte, ohne den Träwelling-Vertrag zu verändern:
+
+| Modell | Bedeutung |
+| --- | --- |
+| `SevMap` | Stations-Slug, öffentliche Quellen-URL, Bahnhofkoordinate zur Plausibilitätsprüfung, SEV-Punkte, Weg-/Maßnahmenhinweise und Abrufzeit. |
+| `SevPoint` | Öffentliche `sev.*`-Kennung, physische Koordinate, optionale Richtungsbezeichnung und Quellen-Bearbeitungsstand. |
+| `SevStopInfo` | Quellenlink, Bezeichnung, Wegbeschreibung und optionales eindeutig zugeordnetes Koordinatenpaar für einen Haltbesuch; bei Rückfall zusätzlich ein Grund. |
+
+`SevStopInfo.hasCoordinates` unterscheidet einen nutzbaren Punkt von einem reinen Hinweis. GeoJSON liefert Längengrad vor Breitengrad; das App-Modell hält beide benannt. Der Bearbeitungsstand eines Punkts ersetzt kein Gültigkeitsintervall. Ein allgemeiner Kartenmittelpunkt wird niemals als SEV-Punkt ausgegeben.
+
+Die Zuordnung bleibt lokal. API-Stations-ID, Stopover-UUID, Plan-/Echtzeit und Check-in-Werte behalten ihre Identität und Bedeutung; es werden keine SEV-Koordinaten per Status-PUT übertragen. Die Auflösungsregeln und Lebensdauer stehen unter [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
+
 ### List<StopStation>.deduplicate()
 
 ```kotlin
@@ -160,4 +175,5 @@ Der Reisegrund wird beim Check-in im Feld `business` übertragen. Das Android-Mo
 - [Schemas](./schemas.md)
 - [Check-in](../module/checkin.md)
 - [GPS-Zeiten](../module/gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)
 - [Träwelling-API-Kompatibilität](../api/traewelling-kompatibilitaet.md)

@@ -28,6 +28,16 @@ Bei der Ergebnisübernahme publiziert der Service vor der ersten Suspension `Tra
 
 Route und Besuchsfortschritt werden für die passende aktive Status-ID in DataStore gespeichert. Der Live-Flow einschließlich GPS-Zeiten ist kein zusätzlicher persistierter Zustand und wird bei Fahrtwechsel beziehungsweise Service-Ende geleert. API-Ausfälle blockieren die GPS-Auswertung einer bereits verfügbaren Route nicht. Gerätepositionen und GPS-Prognosen bleiben im Speicher; Positionen werden weder im Live-DTO veröffentlicht noch an Träwelling gesendet. Details: [TripTracking](../module/trip-tracking.md).
 
+## Öffentliche SEV-Quelle und lokale Projektion
+
+Bei Busfahrten mit RE-/RB-Linienkennung startet nach dem vollständigen API-Snapshot eine separate [SEV-Anreicherung](../module/sev-haltestellen.md). `SevJourneyEnricher` lädt öffentliche Bahnhofskarten für eindeutige Slugs der eigenen Route, mit höchstens drei parallelen Stationsabrufen und einer begrenzten Abrufrunde. Ein eigener anonymer OkHttp-Client sendet keine Träwelling-Zugangsdaten oder Gerätepositionen. Der Parser liest eingebettete JSON-Daten und GeoJSON-SEV-Punkte; JavaScript wird nicht ausgeführt.
+
+`SevStopResolver` prüft Stationsnähe, eindeutige Besuchsidentität, Quellenalter sowie Maßnahmen- und Richtungsdaten. Richtungskontext kommt aus den folgenden Halten der vollständigen API-Fahrt, nicht nur aus dem persönlichen Reiseausschnitt. Unsichere Ergebnisse liefern Weg-/Quellenhinweise mit Grund statt erfundener Koordinaten.
+
+Der Service übernimmt eine abgeschlossene Abrufrunde nur für dieselbe Generation, Status-ID, Check-in-Grenzen und vollständige Route. Netzwerk liegt außerhalb des Tracking-Mutex. In `toTrackingStops()` ersetzen ausschließlich aktuelle eindeutige SEV-Punkte die lokale GPS-Koordinate; API-Objekte bleiben unverändert. API-Updates, Fahrplan-Ticks und frische GPS-Fixes prüfen die Zuordnung erneut. Veränderte physische Punkte invalidieren die GPS-Zeitbasis und eine darauf bezogene bisherige Ankunftsbestätigung.
+
+`TrackingLiveState.sevStops` versorgt die Detailansicht. Ihr zusätzlicher anonymer Abruf läuft ebenfalls nach der API-Veröffentlichung und darf keine andere Fahrt überschreiben; für die eigene aktive Fahrt hat die Service-Zuordnung Vorrang. Der bestehende Fahrtcache speichert optional vollständige API-Halte und öffentliche SEV-Karten. Beim Wiederanlauf gelten dieselben Quellen-/Datumsprüfungen; GPS-Gerätepositionen bleiben unpersistiert. Der beschränkte Repository-Prozesscache ist davon unabhängig. Die Ergänzung erzeugt keinen Träwelling-Schreibrequest.
+
 ## Fahrterkennung und Änderungshinweise
 
 Die Opt-in-[Fahrterkennung](../module/ride-recognition.md) ist vom aktiven Fahrttracking getrennt. Ein sichtbarer Location-Foreground-Service überträgt über `TraewellingRepository.getNearbyStations` die aus dem aktuellen Standort berechneten Bounding-Box-Grenzen an `GET /api/v1/stations` des konfigurierten Träwelling-Servers und lädt Abfahrten/Tripdetails. `RideRecognitionEngine` gleicht diese RAM-Kandidaten lokal mit frischer Bewegung ab. `CheckInViewModel` übernimmt ausschließlich noch gültige, vom Nutzer ausgewählte Vorschläge in den bestehenden Ziel-/Bestätigungsablauf. Kein GPS-Ergebnis löst selbst einen schreibenden Check-in aus.
@@ -41,6 +51,7 @@ Der [Änderungsmonitor](../module/trip-changes.md) vergleicht nur frische erfolg
 - [Architektur Überblick](./ueberblick.md)
 - [TripTracking](../module/trip-tracking.md)
 - [GPS-Zeiten](../module/gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)
 - [StatusDetail](../module/status-detail.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [Fahrterkennung](../module/ride-recognition.md)

@@ -105,15 +105,15 @@ class StationTrackingEngine(
         } else null
         val index = retainedIndex ?: followingIndex ?: oldIndex.coerceIn(0, route.size)
         val newKey = route.getOrNull(index)?.key
+        val newStop = route.getOrNull(index)
+        val sameCoordinates = oldStop?.latitude == newStop?.latitude &&
+            oldStop?.longitude == newStop?.longitude
         state = state.copy(
             nextIndex = index,
             nextStopKey = newKey ?: if (route.isEmpty()) oldKey else null,
-            arrivedAtCurrent = state.arrivedAtCurrent && oldKey == newKey
+            arrivedAtCurrent = state.arrivedAtCurrent && oldKey == newKey && sameCoordinates
         )
-        val newStop = currentStop()
-        if (oldKey != newKey || oldStop?.latitude != newStop?.latitude ||
-            oldStop?.longitude != newStop?.longitude
-        ) resetObservation()
+        if (oldKey != newKey || !sameCoordinates) resetObservation()
         skipCancelled()
     }
 

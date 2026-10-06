@@ -131,6 +131,14 @@ Die Test- und Ausnahmegrundlagen stehen in der [offiziellen Android-Doze-Dokumen
 
 TODO: Die obige Matrix einschließlich Akkuverbrauch über mindestens 30 Minuten auf dem Nutzergerät ausführen. Automatisierte Unit-Tests ersetzen keinen echten Doze-/OEM-/TTS-Nachweis.
 
+## Automatische SEV-Haltestellen vom 06.10.2026
+
+Die [SEV-Erweiterung](../module/sev-haltestellen.md) ergänzt 14 Parser- und 22 Zuordnungsfälle sowie zwei Tracking-Regressionen. Die Parser-Fixtures prüfen öffentliche Essen-Koordinaten, fragmentierte Next-Daten, falsche Stationszuordnung, konflikthafte Features, undefinierte Namen, Richtungszeilen und ungültige Koordinaten. Die Zuordnung prüft Bus RE/RB gegenüber normalen Bussen und Zügen, deutsche Stationsnamen, aktuelle Einzelpunkte, Richtungen aus der vollständigen Fahrt, unklare Endhalte, getrennte Fristen, Zeitfenster und Haltbesuchsidentität. Das Mülheimer Richtungslabel enthält den tatsächlich veröffentlichten Zeilenumbruch vor der Oberhausen-Frist.
+
+Die Tracking-Regressionen verlangen bei einer veränderten physischen Position einen neuen Ankunftsbeleg, erhalten aber den konkreten Besuch und bereits gesprochene Ansagen. Ein reiner API-Zeitwechsel am selben Punkt erhält dagegen die bestätigte Ankunft. Die HTTP-, Cache-, Android-Service- und Compose-Lebenszyklen werden von diesen reinen Unit-Tests nicht auf einem Gerät ausgeführt.
+
+TODO: Mit einer aktuellen Bus-RE/RB-Fahrt Essen → Mülheim → Duisburg den Abruf, den tatsächlichen Einstiegspunkt, richtungsabhängige Ansagen und die Netzunterbrechung prüfen. Die öffentliche Duisburger Abfahrtsbeschriftung belegt keinen eindeutigen Ankunftspunkt eines dort endenden Busses; dieser Fall behält API-Koordinaten. Straßenumwege können weiterhin außerhalb des geraden GPS-Zeitkorridors liegen.
+
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
 Zusätzlich wurden 16 lesende Anfragen gegen `https://traewelling.de` durchgeführt. Alle lieferten HTTP 200; die geprüften Antwortstrukturen entsprachen dem erwarteten Vertrag. Die folgenden Pfade haben jeweils das Präfix `/api/v1/`:

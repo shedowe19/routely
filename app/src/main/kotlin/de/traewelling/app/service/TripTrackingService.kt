@@ -37,6 +37,10 @@ import de.traewelling.app.MainActivity
 import de.traewelling.app.R
 import de.traewelling.app.data.model.CheckinInfo
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.SevMap
+import de.traewelling.app.data.model.SevStopInfo
+import de.traewelling.app.data.sev.SevJourneyEnricher
+import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.CancellationException
@@ -68,7 +72,9 @@ private data class CachedTripTrackingState(
     val stopovers: List<StopStation>,
     val progress: TrackingProgress,
     val changes: TripChangeMonitorState? = null,
-    val liveUpdateDismissed: Boolean = false
+    val liveUpdateDismissed: Boolean = false,
+    val fullStopovers: List<StopStation>? = null,
+    val sevMaps: Map<String, SevMap>? = null
 )
 
 class TripTrackingService : Service(), TextToSpeech.OnInitListener {
@@ -83,6 +89,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private var trackingJob: Job? = null
     private var tickJob: Job? = null
+    private var sevJob: Job? = null
     private var wakeLockRenewalJob: Job? = null
     private var trackingWakeLock: TrackingWakeLockLease? = null
     private var currentStatusId: Int? = null
@@ -99,6 +106,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private var latestLocation: Location? = null
     private var cachedCheckin: CheckinInfo? = null
     private var cachedStops: List<StopStation> = emptyList()
+    private var cachedFullStops: List<StopStation> = emptyList()
+    private var cachedSevMaps: Map<String, SevMap> = emptyMap()
+    private var cachedSevStops: Map<String, SevStopInfo> = emptyMap()
     private var engine: StationTrackingEngine? = null
     private var lastSavedJson: String? = null
     private var pendingAnnouncement: Pair<TrackingStop, TrackingSource>? = null
@@ -349,6 +359,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             stopping = false
             trackingJob?.cancel()
             tickJob?.cancel()
+            sevJob?.cancel()
             releaseTrackingWakeLock()
             completionJob?.cancel()
             completionStatusId = null
@@ -356,6 +367,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             disableLocationUpdates()
             cachedCheckin = null
             cachedStops = emptyList()
+            cachedFullStops = emptyList()
+            cachedSevMaps = emptyMap()
+            cachedSevStops = emptyMap()
             engine = null
             gpsJourneyTimes.reset()
             latestLocation = null
@@ -412,6 +426,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                                 return@withLock
                             }
                         }
+                        revalidateSevStops(System.currentTimeMillis())
                         engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
                     }
                     delay(TICK_INTERVAL_MILLIS)
@@ -478,7 +493,14 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (!valid || currentStatusId != statusId) return
         cachedCheckin = cache.checkin
         cachedStops = cache.stopovers
-        engine = StationTrackingEngine(toTrackingStops(cachedStops, cache.checkin), cache.progress, radiusMeters)
+        cachedFullStops = cache.fullStopovers ?: cache.stopovers
+        cachedSevMaps = cache.sevMaps ?: emptyMap()
+        revalidateSevStops(System.currentTimeMillis())
+        // A restored SEV point can have expired or moved while the process was dead.
+        // No location evidence survives a restart, so require a fresh physical arrival.
+        val restoredProgress = if (cachedSevMaps.isNotEmpty()) cache.progress.copy(arrivedAtCurrent = false)
+            else cache.progress
+        engine = StationTrackingEngine(toTrackingStops(cachedStops, cache.checkin), restoredProgress, radiusMeters)
         runCatching { tripChanges.reset(statusId, cache.changes) }.onFailure { tripChanges.reset(statusId) }
         liveUpdateDismissed = cache.liveUpdateDismissed
         lastSavedJson = gson.toJson(cache)
@@ -507,19 +529,73 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             ) gpsJourneyTimes.invalidateLocation()
             cachedCheckin = checkin
             cachedStops = route
+            cachedFullStops = stops
+            revalidateSevStops(System.currentTimeMillis())
             val trackingStops = toTrackingStops(route, checkin)
             val existingEngine = engine
             if (existingEngine == null) engine = StationTrackingEngine(trackingStops, radiusMeters = radiusMeters)
             else existingEngine.updateRoute(trackingStops)
             val currentEngine = engine ?: return@withLock
-            deliverTripChanges(changes, statusId, expectedGeneration)
+            val relevantChanges = if (SevStopResolver.isReplacementBus(checkin))
+                changes.filterNot { it.kind == TripChangeKind.PLATFORM } else changes
+            deliverTripChanges(relevantChanges, statusId, expectedGeneration)
             if (!isCurrentTracking(statusId, expectedGeneration)) return@withLock
             currentEngine.setGpsEnabled(gpsPreferenceEnabled)
             val update = latestLocation?.takeIf { isFreshLocation(it) }?.let {
                 currentEngine.onLocation(toFix(it), System.currentTimeMillis())
             } ?: currentEngine.onTimetable(System.currentTimeMillis())
             applyUpdate(update, statusId, expectedGeneration)
+            scheduleSevEnrichment(statusId, expectedGeneration, checkin, stops)
         }
+    }
+
+    private fun scheduleSevEnrichment(
+        statusId: Int, expectedGeneration: Long, checkin: CheckinInfo, fullRoute: List<StopStation>
+    ) {
+        if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return
+        if (!SevStopResolver.isReplacementBus(checkin)) {
+            sevJob?.cancel()
+            cachedSevMaps = emptyMap()
+            return
+        }
+        if (sevJob?.isActive == true) return
+        sevJob = serviceScope.launch {
+            try {
+                val maps = SevJourneyEnricher.loadMaps(checkin, fullRoute)
+                trackingMutex.withLock {
+                    if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null ||
+                        cachedCheckin != checkin || cachedFullStops != fullRoute
+                    ) return@withLock
+                    // Failed requests retain usable offline snapshots until the resolver's expiry.
+                    cachedSevMaps = (cachedSevMaps + maps).filterKeys { slug ->
+                        cachedStops.any { it.station?.let(SevStopResolver::stationSlug) == slug }
+                    }
+                    revalidateSevStops(System.currentTimeMillis())
+                    val currentEngine = engine ?: return@withLock
+                    // Do not reuse the old fix as new evidence after changing a physical stop.
+                    applyUpdate(currentEngine.onTimetable(System.currentTimeMillis()), statusId, expectedGeneration)
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Optional website metadata must never stop normal tracking.
+            }
+        }
+    }
+
+    private fun revalidateSevStops(nowMillis: Long) {
+        val checkin = cachedCheckin ?: return
+        val resolved = runCatching {
+            SevStopResolver.resolve(checkin, cachedFullStops, cachedSevMaps, nowMillis)
+        }.getOrDefault(emptyMap())
+        if (resolved == cachedSevStops) return
+        val coordinatesChanged = (resolved.keys + cachedSevStops.keys).any { key ->
+            resolved[key]?.latitude != cachedSevStops[key]?.latitude ||
+                resolved[key]?.longitude != cachedSevStops[key]?.longitude
+        }
+        cachedSevStops = resolved
+        engine?.updateRoute(toTrackingStops(cachedStops, checkin))
+        if (coordinatesChanged) gpsJourneyTimes.invalidateLocation()
     }
 
     private fun checkedInRoute(stops: List<StopStation>, checkin: CheckinInfo, applyManualTimes: Boolean = true): List<StopStation> {
@@ -544,12 +620,13 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private fun toTrackingStops(stops: List<StopStation>, checkin: CheckinInfo): List<TrackingStop> =
         stops.mapIndexed { index, stop ->
+            val sev = cachedSevStops[SevStopResolver.visitKey(stop)]?.takeIf { it.hasCoordinates }
             TrackingStop(
                 key = stopKey(stop, index),
                 stationId = stop.stationId,
                 name = stop.stationName ?: "Unbekannte Station",
-                latitude = stop.station?.latitude,
-                longitude = stop.station?.longitude,
+                latitude = sev?.latitude ?: stop.station?.latitude,
+                longitude = sev?.longitude ?: stop.station?.longitude,
                 plannedArrivalMillis = epochMillis(stop.arrivalPlanned),
                 effectiveArrivalMillis = epochMillis(stop.arrivalReal) ?: epochMillis(stop.arrivalPlanned),
                 effectiveDepartureMillis = epochMillis(stop.departureReal) ?: epochMillis(stop.departurePlanned),
@@ -611,6 +688,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                             if (!isCurrentTracking(callbackStatusId, callbackGeneration) || completionStatusId != null) break
                             if (!isFreshLocation(location)) continue
                             latestLocation = location
+                            revalidateSevStops(System.currentTimeMillis())
                             val currentEngine = engine ?: continue
                             val update = currentEngine.onLocation(toFix(location), System.currentTimeMillis())
                             applyUpdate(update, callbackStatusId, callbackGeneration)
@@ -690,12 +768,14 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             arrivedAtCurrent = progress.arrivedAtCurrent,
             completed = progress.completed,
             source = update.source,
-            gpsTimes = gpsTimes
+            gpsTimes = gpsTimes,
+            sevStops = cachedSevStops
         )
         mutableTrackingLiveState.value = liveState
         lastProgressModel = TripProgressModel.from(cachedStops, liveState, destinationName,
             manualDestinationArrival = checkin.manualArrival, nowMillis = nowMillis)
-        val platform = rawStop?.arrivalPlatformReal ?: rawStop?.arrivalPlatformPlanned ?: rawStop?.platform
+        val platform = if (SevStopResolver.isReplacementBus(checkin)) null else
+            rawStop?.arrivalPlatformReal ?: rawStop?.arrivalPlatformPlanned ?: rawStop?.platform
         val platformText = platform?.takeIf { it.isNotBlank() }?.let { " • Gl. $it" } ?: ""
         val manualArrival = checkin.manualArrival.takeIf { rawStop?.matchesStopover(checkin.destination) == true }
         val manualDeparture = checkin.manualDeparture.takeIf { rawStop?.matchesStopover(checkin.origin) == true }
@@ -756,7 +836,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val checkin = cachedCheckin ?: return
         val currentEngine = engine ?: return
         val json = gson.toJson(CachedTripTrackingState(statusId = statusId, checkin = checkin, stopovers = cachedStops,
-            progress = currentEngine.getProgress(), changes = tripChanges.getState(), liveUpdateDismissed = liveUpdateDismissed))
+            progress = currentEngine.getProgress(), changes = tripChanges.getState(), liveUpdateDismissed = liveUpdateDismissed,
+            fullStopovers = cachedFullStops, sevMaps = cachedSevMaps))
         if (json != lastSavedJson) {
             prefs.saveTrackingState(statusId, json)
             if (currentStatusId == statusId) lastSavedJson = json
@@ -779,7 +860,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (!prefs.getTtsEnabled() || !isCurrentTracking(statusId, expectedGeneration)) return null
         val checkin = cachedCheckin ?: return null
         val platformStop = cachedStops.withIndex().firstOrNull { (index, raw) -> stopKey(raw, index) == stop.key }?.value
-        val platform = if (stop.isOrigin) {
+        val platform = if (SevStopResolver.isReplacementBus(checkin)) null else if (stop.isOrigin) {
             platformStop?.departurePlatformReal ?: platformStop?.departurePlatformPlanned ?: platformStop?.platform
         } else platformStop?.arrivalPlatformReal ?: platformStop?.arrivalPlatformPlanned ?: platformStop?.platform
         val platformText = platform?.takeIf { it.isNotBlank() }?.let { " auf Gleis $it" } ?: ""
@@ -875,6 +956,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         completionUtteranceId = utteranceId
         trackingJob?.cancel()
         tickJob?.cancel()
+        sevJob?.cancel()
         disableLocationUpdates()
         completionJob?.cancel()
         completionJob = serviceScope.launch {
@@ -992,6 +1074,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         generation++
         trackingJob?.cancel()
         tickJob?.cancel()
+        sevJob?.cancel()
         completionJob?.cancel()
         completionStatusId = null
         completionUtteranceId = null

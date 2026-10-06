@@ -27,14 +27,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.TravelReason
+import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.service.GpsJourneyTimes
 import de.traewelling.app.service.JourneyTime
 import de.traewelling.app.service.JourneyTimeResolver
@@ -249,6 +252,12 @@ private fun StatusDetailContent(
     // the current clock, not the previous tick that may predate the new fix.
     val nowMillis = System.currentTimeMillis()
     val gpsTimes = uiState.trackingState?.takeIf { it.source == TrackingSource.GPS }?.gpsTimes
+    val isReplacementBus = checkin?.let(SevStopResolver::isReplacementBus) == true
+    // The active service owns the coordinates used for navigation. Its assignment
+    // takes precedence; the detail lookup also supplies guidance before tracking starts.
+    val sevStops = if (isReplacementBus) {
+        uiState.sevStops + uiState.trackingState?.sevStops.orEmpty()
+    } else emptyMap()
 
     val firstRealStopIndex = remember(stopovers) {
         stopovers.indexOfFirst { it.cancelled != true }
@@ -310,7 +319,8 @@ private fun StatusDetailContent(
                         animationSpec = tween(400, delayMillis = 100)
                     )
                 ) {
-                    TripInfoCard(status, gpsTimes, nowMillis)
+                    TripInfoCard(status, gpsTimes, nowMillis, isReplacementBus,
+                        sevStops.isNotEmpty(), uiState.isLoadingSevStops)
                 }
             }
         }
@@ -408,6 +418,8 @@ private fun StatusDetailContent(
                 ) {
                     StopoverItem(
                         stop = stop,
+                        sevInfo = sevStops[SevStopResolver.visitKey(stop)],
+                        isReplacementBus = isReplacementBus,
                         arrivalTime = JourneyTimeResolver.arrival(stop, gpsTimes, nowMillis,
                             if (isDestination) checkin?.manualArrival else null),
                         departureTime = JourneyTimeResolver.departure(stop, gpsTimes, nowMillis,
@@ -512,7 +524,14 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
 }
 
 @Composable
-private fun TripInfoCard(status: Status, gpsTimes: GpsJourneyTimes?, nowMillis: Long) {
+private fun TripInfoCard(
+    status: Status,
+    gpsTimes: GpsJourneyTimes?,
+    nowMillis: Long,
+    isReplacementBus: Boolean,
+    hasSevStops: Boolean,
+    isLoadingSevStops: Boolean
+) {
     val checkin = status.checkin ?: return
     val transportColor = TransportColors.forCategory(checkin.category)
 
@@ -550,6 +569,31 @@ private fun TripInfoCard(status: Status, gpsTimes: GpsJourneyTimes?, nowMillis: 
                             opName,
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        )
+                    }
+                }
+            }
+
+            if (isReplacementBus) {
+                Spacer(Modifier.height(12.dp))
+                Surface(color = AmberAccent.copy(alpha = 0.10f), shape = RoundedCornerShape(10.dp)) {
+                    Column(Modifier.fillMaxWidth().padding(10.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.DirectionsBus, null,
+                                modifier = Modifier.size(16.dp), tint = AmberAccent)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Schienenersatzverkehr", style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold, color = AmberAccent)
+                        }
+                        Text(
+                            when {
+                                hasSevStops -> "Ersatzhaltestellen und Wegbeschreibungen stehen bei den Halten."
+                                isLoadingSevStops -> "Ersatzhaltestellen werden auf bahnhof.de gesucht."
+                                else -> "Keine passenden Ersatzhaltestellen gefunden. Die Stationsdaten bleiben aktiv."
+                            },
+                            modifier = Modifier.padding(top = 4.dp),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f)
                         )
                     }
                 }
@@ -738,6 +782,8 @@ private fun formatJourneyTime(millis: Long?): String = millis?.let {
 @Composable
 private fun StopoverItem(
     stop: StopStation,
+    sevInfo: SevStopInfo?,
+    isReplacementBus: Boolean,
     arrivalTime: JourneyTime?,
     departureTime: JourneyTime?,
     progress: StopTimelineProgress,
@@ -919,7 +965,7 @@ private fun StopoverItem(
                 val plat = rawPlat?.let { p ->
                     if (p.length > 1 && p.startsWith("9") && p.drop(1).all { it.isDigit() }) p.drop(1) else p
                 }
-                if (plat != null) {
+                if (plat != null && !isReplacementBus) {
                     val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
                     Surface(
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
@@ -1060,6 +1106,53 @@ private fun StopoverItem(
                         }
                     }
                 }
+            }
+            if (!isCancelled && sevInfo != null) {
+                SevStopGuidance(sevInfo)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SevStopGuidance(info: SevStopInfo) {
+    var expanded by remember(info) { mutableStateOf(false) }
+    val uriHandler = LocalUriHandler.current
+    val accent = if (info.hasCoordinates) TealAccent else AmberAccent
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.DirectionsBus, null, modifier = Modifier.size(15.dp), tint = accent)
+            Spacer(Modifier.width(5.dp))
+            Text("SEV-Haltestelle", style = MaterialTheme.typography.labelMedium,
+                color = accent, fontWeight = FontWeight.SemiBold)
+        }
+        info.label?.takeIf { it.isNotBlank() }?.let { label ->
+            Text(label, style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f))
+        }
+        info.reason?.takeIf { it.isNotBlank() }?.let { reason ->
+            Text(reason, style = MaterialTheme.typography.bodySmall, color = AmberAccent)
+        }
+        if (info.guidance.isNotBlank()) {
+            Text(info.guidance, style = MaterialTheme.typography.bodySmall,
+                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                overflow = TextOverflow.Ellipsis,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f))
+            TextButton(onClick = { expanded = !expanded },
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                Text(if (expanded) "Wegbeschreibung einklappen" else "Wegbeschreibung anzeigen",
+                    style = MaterialTheme.typography.labelSmall)
+            }
+        }
+        if (info.sourceUrl.startsWith("https://www.bahnhof.de/")) {
+            TextButton(onClick = { runCatching { uriHandler.openUri(info.sourceUrl) } },
+                contentPadding = PaddingValues(horizontal = 0.dp, vertical = 0.dp)) {
+                Text("Lageplan auf bahnhof.de", style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.width(4.dp))
+                Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(13.dp))
             }
         }
     }

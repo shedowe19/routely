@@ -7,6 +7,7 @@
 ## Wichtige Packages
 
 - `de.traewelling.app.data`: Beinhaltet API (Retrofit), lokale DB (Room), Repositories und Models.
+- `de.traewelling.app.data.sev`: Öffentlicher Bahnhofskartenabruf, HTML-/GeoJSON-Parser, Besuchs-/Datums-/Richtungsauflösung und begrenzte asynchrone Anreicherung ([SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)).
 - `de.traewelling.app.ui`: Beinhaltet Compose Navigation, Screens und Theme/Components.
 - `de.traewelling.app.viewmodel`: MVVM ViewModels für jeden Screen.
 - `de.traewelling.app.service` & `widget`: Hintergrundservices (z.B. LocationTracking/TripTracking) und Homescreen Widgets.

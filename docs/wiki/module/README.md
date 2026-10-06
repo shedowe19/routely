@@ -17,6 +17,7 @@ Einstiegspunkt für die Beschreibung der Features und Module der App.
 - **Profile**: Eigenes Profil, Statistiken, TTS-Einstellungen (`ProfileViewModel`, `ProfileScreen`).
 - **TripTracking**: Foreground-Service für GPS-Stationsalarme mit TTS ([TripTracking](./trip-tracking.md)).
 - **GPS-Zeiten**: Lokale Zeitbeobachtung/-prognose mit gemeinsamem API-/Plan-Rückfall ([GPS-Zeiten](./gps-zeiten.md)).
+- **SEV-Ersatzhaltestellen**: Öffentliche bahnhof.de-Punkte und Wegbeschreibungen, richtungs- und datumsabhängige lokale Zuordnung mit Rückfall auf API-Koordinaten ([SEV](./sev-haltestellen.md)).
 - **Fahrterkennung**: Opt-in-GPS-Service für bestätigungspflichtige Fahrtvorschläge ([Fahrterkennung](./ride-recognition.md)).
 - **Fahrtänderungen**: Vergleich frischer API-Snapshots und gezielte Hinweise ([Fahrtänderungen](./trip-changes.md)).
 - **Reisefortschritt**: Gemeinsames Haltemodell und Android-Fortschrittsbenachrichtigung ([Live Updates](./trip-progress.md)).

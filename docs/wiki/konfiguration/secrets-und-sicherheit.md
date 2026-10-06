@@ -25,6 +25,12 @@ Auch [GPS-Zeitbeobachtungen und Prognosen](../module/gps-zeiten.md) der aktiven 
 
 `lock_screen_details_enabled = false` redaktiert die öffentlichen Anzeigen von Fahrt und Änderungshinweisen und unterdrückt die Live-Update-Promotion-Anfrage. Die Android-Sperrbildschirmeinstellungen bleiben maßgeblich. Der Debug-Interceptor bleibt im BASIC-Modus. `HttpLogSanitizer` redaktiert Standortparameter (`latitude`, `longitude`, `lat`, `lon` und die Bounding-Box-Varianten) vor Logcat; `RetrofitClient` verwendet dafür einen eigenen Logger. Release-Logging bleibt deaktiviert. Ein Gerätetest sollte dennoch die tatsächliche Logcat-Ausgabe prüfen.
 
+## Öffentlicher SEV-Abruf
+
+Die automatische [SEV-Ergänzung](../module/sev-haltestellen.md) fragt Bahnhofskarten mit einem eigenen anonymen HTTP-Client ab. Der Träwelling-Authorization-Interceptor wird nicht übernommen; es werden keine Zugangsdaten, Gerätepositionen oder GPS-Verläufe an bahnhof.de übertragen. Der Aufruf nennt den jeweiligen Bahnhof im URL-Pfad und übermittelt die übliche Netzwerkverbindung. Das Repository hält einen begrenzten Prozesscache; der aktive Fahrtcache kann öffentliche Karten zusätzlich zusammen mit der vollständigen API-Haltfolge im bestehenden DataStore-JSON speichern. Beim Wiederanlauf werden Quellenalter und Maßnahmenzeitraum erneut geprüft. Es gibt weder eine neue Preference noch eine Room-Tabelle und keine Persistenz von Gerätepositionen durch diese Ergänzung.
+
+HTML wird ausschließlich nach eingebetteten JSON-Daten durchsucht. Webseiten-JavaScript wird nicht ausgeführt. Größen-, Host-, Zeit- und Koordinatenprüfungen verhindern, dass ein ungeprüfter Kartenmittelpunkt die Tracking-Koordinate ersetzt. Fehlende oder unsichere Ergebnisse erhalten den bestehenden API-Rückfall.
+
 ## Verwandte Seiten
 
 - [Umgebungsvariablen](./umgebungsvariablen.md)
@@ -33,3 +39,4 @@ Auch [GPS-Zeitbeobachtungen und Prognosen](../module/gps-zeiten.md) der aktiven 
 - [Fahrterkennung](../module/ride-recognition.md)
 - [Reisefortschritt](../module/trip-progress.md)
 - [GPS-Zeiten](../module/gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md)

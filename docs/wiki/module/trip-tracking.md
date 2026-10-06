@@ -59,6 +59,18 @@ Ein erster Fix fern aller Stationen macht einen bereits zeitbasiert vorgerückte
 
 `trackingLiveState` veröffentlicht Cursor, Besuchsschlüssel, passenden Halt, Ankunfts-/Abschlussstatus, Fortschrittsquelle und optional `gpsTimes` als prozesslokalen `StateFlow`. Der Zustand wird beim Fahrtwechsel und Service-Ende entfernt. Er enthält keine Geräteposition und wird nicht in einem neuen DataStore-Key gespeichert. Die [Status-Detail-Timeline](./status-detail.md) übernimmt ihn nur für die eigene, angezeigte aktive Fahrt.
 
+## SEV-Punkte und asynchrone Anreicherung
+
+Für Bus-RE/RB-Kandidaten lädt der Service die [öffentliche SEV-Quelle](./sev-haltestellen.md) in einer eigenen `sevJob`-Coroutine. Der zuerst übernommene API-Zustand und frische GPS-Fixes warten nicht auf diese Netzwerkantwort. Die vollständige API-Haltfolge bleibt als Richtungskontext verfügbar; Abrufe betreffen nur die eigene eingegrenzte, nicht gestrichene Route. Ergebnisse werden ausschließlich für dieselbe Service-Generation, Status-ID, Check-in-Grenzen und vollständige Haltfolge übernommen.
+
+`cachedSevMaps` hält die öffentliche Quelle; `cachedSevStops` enthält die aktuell aufgelösten Hinweise je Besuch. Bei API-Aktualisierung, Fahrplan-Tick und frischem GPS-Fix werden Quellenalter und Gültigkeit erneut geprüft. `toTrackingStops()` verwendet ein eindeutig belegtes SEV-Koordinatenpaar, sonst die vorhandene API-Koordinate. Providerhalte, Stations-ID, Besuchsschlüssel, Zeiten und Gleise werden nicht überschrieben.
+
+Bei einem veränderten physischen Punkt invalidiert der Service die GPS-Zeitbasis. `StationTrackingEngine.updateRoute()` entfernt eine Ankunftsbestätigung, wenn sich die aktuelle Koordinate ändert, erhält jedoch denselben Besuch und bereits gesprochene Schlüssel. Der Kartenabschluss verwendet einen Fahrplan-Tick; ein bereits verarbeiteter alter GPS-Fix wird nicht als neuer Bewegungsbeleg eingespeist.
+
+Der vorhandene Cache kann `fullStopovers` und `sevMaps` enthalten. Beide Felder sind optional; alte Version-1-Caches bleiben lesbar. Wiederhergestellte SEV-Karten werden neu gegen Alter, Datum und Richtung geprüft. Wenn SEV-Karten vorliegen, wird die alte Ankunftsbestätigung bis zu einem frischen physischen Fix entfernt. Bei Netzwerkfehlern darf ein zuvor gültiger öffentlicher Snapshot nur bis zur Auflösungsgrenze weiterwirken. Die Hinweise werden über `TrackingLiveState.sevStops` an die Detailansicht publiziert. GPS-Gerätepositionen und Prognosen bleiben weiterhin unpersistiert. Fahrtwechsel, Zielabschluss und Service-Ende brechen `sevJob` ab.
+
+Bei Bus-RE/RB-Kandidaten werden Bahn-Gleisangaben für Fahrtbenachrichtigung, Widget und TTS unterdrückt. Reine `PLATFORM`-Ereignisse des Änderungsmonitors werden für diese Fahrten nicht zugestellt; andere Änderungshinweise bleiben bestehen. Dies entfernt keine Gleisfelder aus der API und ersetzt sie nicht durch eine erfundene Bussteigangabe.
+
 ## GPS-Trigger und Fortschritt
 
 Ein brauchbarer Fix hat gültige Koordinaten, höchstens 100 Meter gemeldete Ungenauigkeit und ist höchstens 30 Sekunden alt. Ungültige, alte oder bereits verarbeitete Zeitstempel bestätigen keine neue Annäherung. Nach einer längeren Signallücke muss ein neuer Annäherungstrend entstehen.
@@ -162,6 +174,7 @@ Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS
 - [Fahrtänderungen](./trip-changes.md)
 - [Reisefortschritt](./trip-progress.md)
 - [GPS-Zeiten](./gps-zeiten.md)
+- [SEV-Ersatzhaltestellen](./sev-haltestellen.md)
 - [Settings](./settings.md)
 - [PreferencesManager](../konfiguration/preferences-manager.md)
 - [Widget](./widget.md)
