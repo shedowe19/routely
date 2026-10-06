@@ -84,33 +84,16 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 .onSuccess statusLoaded@ { status ->
                     if (currentStatusId != statusId) return@statusLoaded
                     // Keep API stopovers intact. Manual and GPS times are resolved only for display.
-                    val checkin = status.checkin
-                    val origin = checkin?.origin
-                    val destination = checkin?.destination
-
-                    _uiState.update { it.copy(status = status) }
-                    checkIfOwnStatus(status)
-
                     // Load stopovers using the trip ID from the checkin
                     val tripId = status.checkin?.trip
                     if (tripId != null) {
-                        val loadedCheckin = status.checkin
                         repo.getStopovers(tripId)
                             .onSuccess stopsLoaded@ { stops ->
                                 if (currentStatusId != statusId) return@stopsLoaded
-                                val finalOrigin = stops.find { it.matchesStopover(origin) } ?: origin
-                                val finalDestination = stops.find { it.matchesStopover(destination) } ?: destination
-                                val finalStatus = status.copy(
-                                    checkin = loadedCheckin.copy(
-                                        origin = finalOrigin,
-                                        destination = finalDestination
-                                    )
-                                )
-
                                 _uiState.update {
                                     it.copy(
                                         isLoading = false,
-                                        status = finalStatus,
+                                        status = statusWithStopoverBoundaries(status, stops),
                                         stopovers = stops,
                                         lastUpdated = System.currentTimeMillis()
                                     )
@@ -119,12 +102,27 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                             .onFailure { e ->
                                 if (currentStatusId != statusId) return@onFailure
                                 _uiState.update {
-                                    it.copy(isLoading = false, error = "Halte konnten nicht geladen werden: ${e.message}")
+                                    val stops = compatibleExistingStopovers(status, it)
+                                    it.copy(
+                                        isLoading = false,
+                                        status = statusWithStopoverBoundaries(status, stops),
+                                        stopovers = stops,
+                                        lastUpdated = System.currentTimeMillis(),
+                                        error = "Halte konnten nicht geladen werden: ${e.message}"
+                                    )
                                 }
                             }
                     } else {
-                        _uiState.update { it.copy(isLoading = false) }
+                        _uiState.update {
+                            it.copy(
+                                isLoading = false,
+                                status = status,
+                                stopovers = emptyList(),
+                                lastUpdated = System.currentTimeMillis()
+                            )
+                        }
                     }
+                    if (currentStatusId == statusId) checkIfOwnStatus(status)
                 }
                 .onFailure { e ->
                     if (currentStatusId != statusId) return@onFailure
@@ -153,37 +151,67 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         // Silently update — no loading spinner
         repo.getStatusDetail(statusId).onSuccess statusRefreshed@ { status ->
             if (currentStatusId != statusId) return@statusRefreshed
-            val checkin = status.checkin
-            val origin = checkin?.origin
-            val destination = checkin?.destination
-
-            _uiState.update { it.copy(status = status) }
-
             val tripId = status.checkin?.trip
             if (tripId != null) {
-                val loadedCheckin = status.checkin
                 repo.getStopovers(tripId).onSuccess stopsRefreshed@ { stops ->
                     if (currentStatusId != statusId) return@stopsRefreshed
-                    val finalOrigin = stops.find { it.matchesStopover(origin) } ?: origin
-                    val finalDestination = stops.find { it.matchesStopover(destination) } ?: destination
-                    val finalStatus = status.copy(
-                        checkin = loadedCheckin.copy(
-                            origin = finalOrigin,
-                            destination = finalDestination
-                        )
-                    )
-
                     _uiState.update {
                         it.copy(
-                            status = finalStatus,
+                            status = statusWithStopoverBoundaries(status, stops),
+                            stopovers = stops,
+                            lastUpdated = System.currentTimeMillis()
+                        )
+                    }
+                }.onFailure {
+                    if (currentStatusId != statusId) return@onFailure
+                    _uiState.update {
+                        val stops = compatibleExistingStopovers(status, it)
+                        it.copy(
+                            status = statusWithStopoverBoundaries(status, stops),
                             stopovers = stops,
                             lastUpdated = System.currentTimeMillis()
                         )
                     }
                 }
+            } else {
+                _uiState.update {
+                    it.copy(status = status, stopovers = emptyList(), lastUpdated = System.currentTimeMillis())
+                }
             }
         }
     }
+
+    private fun statusWithStopoverBoundaries(status: Status, stops: List<StopStation>): Status {
+        val checkin = status.checkin ?: return status
+        return status.copy(checkin = checkin.copy(
+            origin = stops.singleOrNull { it.matchesStopover(checkin.origin) } ?: checkin.origin,
+            destination = stops.singleOrNull { it.matchesStopover(checkin.destination) } ?: checkin.destination
+        ))
+    }
+
+    private fun compatibleExistingStopovers(status: Status, state: StatusDetailUiState): List<StopStation> {
+        val checkin = status.checkin ?: return emptyList()
+        val previousCheckin = state.status?.checkin ?: return emptyList()
+        if (state.status?.id != status.id || checkin.trip == null || checkin.trip != previousCheckin.trip ||
+            (checkin.tripUuid != null && previousCheckin.tripUuid != null &&
+                checkin.tripUuid != previousCheckin.tripUuid)) return emptyList()
+
+        // A failed stopover refresh may keep the old snapshot, but never a changed visit or timetable.
+        val boundaries = listOfNotNull(checkin.origin, checkin.destination)
+        val compatible = boundaries.all { boundary ->
+            state.stopovers.singleOrNull { stop ->
+                stop.matchesStopover(boundary) &&
+                    (boundary.stationId == null || stop.stationId == boundary.stationId) &&
+                    plannedTimesCompatible(stop.arrivalPlanned, boundary.arrivalPlanned) &&
+                    plannedTimesCompatible(stop.departurePlanned, boundary.departurePlanned)
+            } != null
+        }
+        return state.stopovers.takeIf { compatible } ?: emptyList()
+    }
+
+    private fun plannedTimesCompatible(previous: String?, incoming: String?): Boolean =
+        incoming == null || previous == incoming ||
+            runCatching { Instant.parse(previous) == Instant.parse(incoming) }.getOrDefault(false)
 
     fun refresh() {
         currentStatusId?.let { loadStatusDetail(it) }
@@ -282,10 +310,12 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             repo.updateStatus(statusId, request)
                 .onSuccess { updatedStatus ->
                     _uiState.update { 
+                        val stops = compatibleExistingStopovers(updatedStatus, it)
                         it.copy(
                             isUpdating = false, 
                             isEditing = false,
-                            status = updatedStatus
+                            status = statusWithStopoverBoundaries(updatedStatus, stops),
+                            stopovers = stops
                         )
                     }
                     // Refresh to get updated stopovers if destination changed

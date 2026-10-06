@@ -26,7 +26,7 @@ Fortschritt basiert auf Halten, nicht auf Entfernung oder Fahrzeit. Unbekannte Z
 
 Sobald der konkrete nicht gestrichene Zielbesuch als angekommen markiert ist, sind null Halte übrig: Die Anzeige lautet `Am Ziel · Ankunft wird geprüft`. Haltezählung und Fahrtabschluss bleiben getrennt. Solange `TrackingLiveState.completed` nicht bestätigt ist, bleibt der Balken eine Fortschrittseinheit unter seinem Maximum; bei drei gezählten Halten sind das 299 von 300. Bei bloßer Annäherung bleibt der Zielhalt noch übrig. Gestrichene oder nicht eindeutig zugeordnete Besuche bestätigen keine Zielankunft.
 
-Die Zielzeit stammt über `JourneyTimeResolver` aus frischer zugeordneter GPS-Beobachtung/-Schätzung, sonst manueller Zielzeit, parsebarer API-Echtzeit oder Fahrplan. Die jeweilige Zeitquelle steht direkt bei der Zielankunft. Bei ungeeignetem GPS fällt die Uhrzeit zurück, ohne den Besuchscursor neu zu erfinden. „Noch n Halte“ und der Fortschrittsbalken sind kein Nachweis der Prognosegüte; Grenzen der konservativen Interpolation stehen unter [GPS-Zeiten](./gps-zeiten.md).
+Die Zielzeit stammt über `JourneyTimeResolver` aus frischer zugeordneter GPS-Beobachtung/-Schätzung, sonst manueller Zielzeit, parsebarer API-Echtzeit oder Fahrplan. Die jeweilige Zeitquelle steht direkt bei der Zielankunft. Eine belegte GPS-Zeit kann bei passenden frischen Folgefixes trotz Bremsen oder geordnetem Haltwechsel bis zu ihrem ursprünglichen Gültigkeitsende erhalten bleiben. Bei ungeeignetem oder abgelaufenem GPS fällt die Uhrzeit zurück, ohne den Besuchscursor neu zu erfinden. „Noch n Halte“ und der Fortschrittsbalken sind kein Nachweis der Prognosegüte; Grenzen der konservativen Interpolation stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 ## Android-Darstellung
 

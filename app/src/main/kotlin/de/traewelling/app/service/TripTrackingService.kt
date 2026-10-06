@@ -708,14 +708,29 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (!prefs.getTtsEnabled() || !isCurrentTracking(statusId, expectedGeneration)) return null
         val checkin = cachedCheckin ?: return null
         val platformStop = cachedStops.withIndex().firstOrNull { (index, raw) -> stopKey(raw, index) == stop.key }?.value
-        val platform = platformStop?.arrivalPlatformReal ?: platformStop?.arrivalPlatformPlanned ?: platformStop?.platform
+        val platform = if (stop.isOrigin) {
+            platformStop?.departurePlatformReal ?: platformStop?.departurePlatformPlanned ?: platformStop?.platform
+        } else platformStop?.arrivalPlatformReal ?: platformStop?.arrivalPlatformPlanned ?: platformStop?.platform
         val platformText = platform?.takeIf { it.isNotBlank() }?.let { " auf Gleis $it" } ?: ""
         val approximate = if (source == TrackingSource.TIMETABLE) "Voraussichtlich " else ""
+        val departureTime = stop.effectiveDepartureMillis?.let {
+            Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
+        }
         val announcement = when {
-            stop.isOrigin -> "${approximate}Der ${checkin.lineName ?: "Zug"} erreicht in Kürze deine Anfangshaltestelle ${stop.name}. Bitte einsteigen."
+            stop.isOrigin -> {
+                val line = checkin.lineName?.takeIf { it.isNotBlank() }?.let { " mit der Linie $it" }.orEmpty()
+                val departure = if (source == TrackingSource.TIMETABLE) "Voraussichtliche Abfahrt" else "Abfahrt"
+                "Deine Fahrt$line startet in Kürze in ${stop.name}. $departure${departureTime?.let { " um $it" }.orEmpty()}$platformText. Bitte mach dich zum Einsteigen bereit."
+            }
             stop.isDestination -> "${approximate}Du erreichst in Kürze deine Ausstiegshaltestelle ${stop.name}$platformText."
             else -> "${approximate}Nächste Haltestelle in Kürze: ${stop.name}$platformText."
         }
+        // Preference/voice reads and TTS initialization can outlive the original
+        // trigger. Never replay boarding advice once departure or movement passed it.
+        if (stop.isOrigin && engine?.isOriginAnnouncementRelevant(stop.key, source, System.currentTimeMillis()) != true) return null
+        // Retry while boarding advice is still timely instead of putting it
+        // behind an ongoing change/stop utterance that could finish after departure.
+        if (stop.isOrigin && !speechDeliveries.isEmpty) return null
         if (!requestAudioFocus()) return null
         val delivery = speechDeliveries.begin(statusId, expectedGeneration, stop.key)
         return if (tts?.speak(announcement, TextToSpeech.QUEUE_ADD, null, delivery.utteranceId) == TextToSpeech.SUCCESS) {

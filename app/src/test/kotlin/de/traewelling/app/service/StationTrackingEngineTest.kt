@@ -473,6 +473,226 @@ class StationTrackingEngineTest {
     }
 
     @Test
+    fun confirmedGpsWaitingAtOriginAnnouncesDepartureBeforeTheTrainMoves() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", arrival = now - 2 * MINUTE, origin = true).copy(
+                effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+
+        val first = engine.onLocation(fix(0.0, now, speed = 0.0), now)
+        val waiting = engine.onLocation(fix(0.0, now + 3 * SECOND, speed = 0.0), now + 3 * SECOND)
+        val repeated = engine.onTimetable(now + 4 * SECOND)
+
+        assertNull(first.announcement)
+        assertEquals("origin", waiting.announcement?.key)
+        assertEquals(TrackingSource.GPS, waiting.source)
+        assertNull(repeated.announcement)
+        assertEquals("origin", engine.getProgress().nextStopKey)
+        assertTrue(engine.getProgress().arrivedAtCurrent)
+        assertFalse(engine.getProgress().completed)
+    }
+
+    @Test
+    fun apiDepartureWindowCanTriggerVoiceWhileGpsContinuesToProveWaiting() {
+        val route = listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + 10 * MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        )
+        val engine = StationTrackingEngine(route)
+        engine.onLocation(fix(0.0, now), now)
+        val waiting = engine.onLocation(fix(0.0, now + 3 * SECOND), now + 3 * SECOND)
+        assertNull(waiting.announcement)
+
+        engine.updateRoute(route.map { if (it.isOrigin) it.copy(effectiveDepartureMillis = now + MINUTE) else it })
+        val refreshed = engine.onTimetable(now + 4 * SECOND)
+
+        assertEquals("origin", refreshed.announcement?.key)
+        assertEquals(TrackingSource.GPS, refreshed.source)
+        assertEquals(0, engine.getProgress().nextIndex)
+        assertFalse(refreshed.destinationReached)
+    }
+
+    @Test
+    fun earlyDepartureWithAnInwardGpsFluctuationNeverAnnouncesTheOldOrigin() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", arrival = now - 2 * MINUTE, origin = true).copy(
+                effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        val departures = listOf(50.0, 40.0, 130.0, 240.0).mapIndexed { index, position ->
+            val time = now + index * 3 * SECOND
+            engine.onLocation(fix(position, time, speed = 12.0), time)
+        }
+
+        assertTrue(departures.all { it.announcement?.key != "origin" })
+        assertEquals("next", departures.last().stop?.key)
+        assertFalse(engine.getProgress().completed)
+    }
+
+    @Test
+    fun originWaitingUsesRealtimeDepartureAndDoesNotReplayAnElapsedDeparture() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", arrival = now - 3 * MINUTE, origin = true).copy(
+                plannedDepartureMillis = now + MINUTE,
+                effectiveDepartureMillis = now - SECOND),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(0.0, now), now)
+        val waiting = engine.onLocation(fix(0.0, now + 3 * SECOND), now + 3 * SECOND)
+        val later = engine.onTimetable(now + 4 * SECOND)
+
+        assertNull(waiting.announcement)
+        assertNull(later.announcement)
+        assertEquals("origin", later.stop?.key)
+        assertFalse(later.destinationReached)
+    }
+
+    @Test
+    fun unknownSpeedRequiresStableOriginDwellBeforeDepartureAdvice() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(0.0, now, speed = null), now)
+        val shortDwell = engine.onLocation(fix(0.0, now + 3 * SECOND, speed = null), now + 3 * SECOND)
+        val confirmed = engine.onLocation(fix(0.0, now + 10 * SECOND, speed = null), now + 10 * SECOND)
+
+        assertNull(shortDwell.announcement)
+        assertEquals("origin", confirmed.announcement?.key)
+        assertEquals(TrackingSource.GPS, confirmed.source)
+        assertFalse(confirmed.destinationReached)
+    }
+
+    @Test
+    fun movementDespiteReportedZeroSpeedResetsTheOriginWaitingEvidence() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(0.0, now, speed = 0.0), now)
+        val departing = engine.onLocation(fix(60.0, now + 3 * SECOND, speed = 0.0), now + 3 * SECOND)
+        val continuing = engine.onLocation(fix(100.0, now + 6 * SECOND, speed = 0.0), now + 6 * SECOND)
+
+        assertNull(departing.announcement)
+        assertNull(continuing.announcement)
+        assertEquals("origin", continuing.stop?.key)
+        assertFalse(continuing.destinationReached)
+    }
+
+    @Test
+    fun releasedOriginAdviceWaitsForFreshStationaryEvidenceBeforeRetrying() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(0.0, now), now)
+        val waiting = engine.onLocation(fix(0.0, now + 3 * SECOND), now + 3 * SECOND)
+        assertEquals("origin", waiting.announcement?.key)
+        engine.releaseAnnouncement("origin")
+
+        val moving = engine.onLocation(fix(70.0, now + 6 * SECOND, speed = 12.0), now + 6 * SECOND)
+        val jittering = engine.onLocation(fix(65.0, now + 9 * SECOND, speed = 12.0), now + 9 * SECOND)
+
+        assertNull(moving.announcement)
+        assertNull(jittering.announcement)
+        assertFalse(engine.getProgress().announcedKeys.contains("origin"))
+    }
+
+    @Test
+    fun twoMinuteEarlyGpsDepartureStillAnnouncesTheOrderedSuccessorBeforeArrival() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", arrival = now, origin = true).copy(
+                plannedDepartureMillis = now + 2 * MINUTE,
+                effectiveDepartureMillis = now + 2 * MINUTE),
+            stop("next", positionMeters = 1_000.0, stationId = 2, arrival = now + 4 * MINUTE),
+            stop("destination", positionMeters = 2_000.0, stationId = 3, destination = true)
+        ), radiusMeters = 300)
+        val updates = listOf(0.0, 60.0, 130.0, 240.0, 600.0, 720.0).mapIndexed { index, position ->
+            val time = now + index * 6 * SECOND
+            engine.onLocation(fix(position, time, speed = 12.0), time)
+        }
+
+        assertTrue(updates.all { it.announcement?.key != "origin" })
+        assertEquals("next", updates.last().announcement?.key)
+        assertEquals("next", updates.last().stop?.key)
+        assertFalse(engine.getProgress().arrivedAtCurrent)
+        assertFalse(engine.getProgress().completed)
+    }
+
+    @Test
+    fun reservedOriginAdviceIsStillRelevantOnlyBeforeItsDepartureTime() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + 30 * SECOND),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(0.0, now), now)
+        val event = engine.onLocation(fix(0.0, now + 3 * SECOND), now + 3 * SECOND)
+        assertEquals("origin", event.announcement?.key)
+        assertTrue(engine.getProgress().announcedKeys.contains("origin"))
+
+        assertTrue(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now + 4 * SECOND))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now + 31 * SECOND))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now + 31 * SECOND))
+    }
+
+    @Test
+    fun movementCancelsPendingOriginAdviceBeforeTheCursorLeavesTheOrigin() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ))
+        engine.onLocation(fix(0.0, now), now)
+        engine.onLocation(fix(0.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.onLocation(fix(65.0, now + 6 * SECOND, speed = 12.0), now + 6 * SECOND)
+
+        assertEquals("origin", engine.getProgress().nextStopKey)
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now + 6 * SECOND))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now + 6 * SECOND))
+    }
+
+    @Test
+    fun staleGpsOrAReplacedVisitInvalidatesPendingOriginAdvice() {
+        val origin = stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE)
+        val next = stop("next", positionMeters = 2_000.0, stationId = 2)
+        val engine = StationTrackingEngine(listOf(origin, next))
+        engine.onLocation(fix(0.0, now), now)
+        engine.onLocation(fix(0.0, now + 3 * SECOND), now + 3 * SECOND)
+
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now + 34 * SECOND))
+        engine.updateRoute(listOf(origin.copy(key = "replacement-origin"), next))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now + 4 * SECOND))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now + 4 * SECOND))
+    }
+
+    @Test
+    fun originAdviceRequiresConfirmedWaitingEvenIfThePhoneApproachesTheBoardingStation() {
+        val engine = StationTrackingEngine(listOf(
+            stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE),
+            stop("next", positionMeters = 2_000.0, stationId = 2)
+        ), radiusMeters = 300)
+        engine.onLocation(fix(-400.0, now, speed = 12.0), now)
+        val approaching = engine.onLocation(fix(-250.0, now + 3 * SECOND, speed = 12.0), now + 3 * SECOND)
+
+        assertEquals("origin", approaching.announcement?.key)
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now + 3 * SECOND))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now + 3 * SECOND))
+        assertFalse(engine.getProgress().completed)
+    }
+
+    @Test
+    fun clockOnlyOriginAdviceUsesTheFutureDepartureWindowWithoutInventingGpsEvidence() {
+        val origin = stop("origin", origin = true).copy(effectiveDepartureMillis = now + MINUTE)
+        val engine = StationTrackingEngine(listOf(origin))
+
+        assertTrue(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.GPS, now))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now + 2 * MINUTE))
+        engine.updateRoute(listOf(origin.copy(effectiveDepartureMillis = now + 10 * MINUTE)))
+        assertFalse(engine.isOriginAnnouncementRelevant("origin", TrackingSource.TIMETABLE, now))
+    }
+
+    @Test
     fun twoFreshFixesRecoverAnObservedIntermediatePassAfterGpsOutage() {
         val engine = StationTrackingEngine(listOf(
             stop("passed"),

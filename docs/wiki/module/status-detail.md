@@ -20,22 +20,24 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 
 ### Lade-Prozess
 
-1. `loadStatusDetail(statusId)` lädt Status-Details
-2. Behält `manualDeparture` und `manualArrival` von CheckinInfo für die getrennte Anzeigenauflösung
-3. Lädt Stopovers via `repo.getStopovers(tripId)`
-4. Prüft via `checkIfOwnStatus()` ob eigener Status (für Bearbeiten/Löschen-Buttons)
+1. `loadStatusDetail(statusId)` lädt Status-Details und behält `manualDeparture` und `manualArrival` von CheckinInfo für die getrennte Anzeigenauflösung.
+2. Lädt Stopovers via `repo.getStopovers(tripId)`.
+3. Veröffentlicht Status, eindeutig zugeordnete Ein-/Ausstiegshalte, Timeline und Aktualisierungszeitpunkt gemeinsam. Ohne Trip wird die Timeline geleert.
+4. Prüft via `checkIfOwnStatus()` ob eigener Status (für Bearbeiten/Löschen-Buttons).
 
 Die Timeline verwendet `StopStation.stationName` und `stationId` aus dem verschachtelten Stationsobjekt. Einstieg und Ziel werden über `matchesStopover` statt über die alte Stopover-`id` zugeordnet. API-Halte bleiben unverändert im UI-Zustand; manuelle Zeiten und GPS-Werte werden nur für die Anzeige aufgelöst.
 
 ### Auto-Refresh
 
-Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Der aktualisierte Status wird im UIState gespeichert.
+Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Während die frische Haltantwort aussteht, bleibt der vorherige vollständige Snapshot sichtbar. Der neue Status wird mit seinen zugeordneten Stopover-Grenzen und der neuen Timeline in einem UIState-Update übernommen; ein vorübergehender Rohstatus ohne passend hydratisierte Grenzen wird nicht angezeigt. Dadurch wechseln Headerzeiten nicht allein wegen nacheinander eintreffender API-Antworten zwischen GPS und API. Der Speichern-Erfolg ordnet ebenfalls noch kompatible vorhandene Grenzen vor der Veröffentlichung zu.
+
+Schlägt die Halteanfrage fehl, werden dennoch die neuen Status-/Text-/manuellen Zeitfelder übernommen. Vorhandene Stopovers bleiben nur bei derselben Status-ID und Trip-ID, kompatibler vorhandener Trip-UUID sowie eindeutig passenden gelieferten Grenzen mit unveränderten gelieferten Planzeiten verwendbar. Andernfalls wird die alte Timeline geleert und die eingehenden API-Grenzen bleiben bestehen. Beim initialen Laden wird der Haltefehler angezeigt; der stille Refresh bleibt still. Dies ist keine Anzeigeverzögerung für abgelaufene GPS-Werte.
 
 Antworten auf Status-, Halte- und Nutzeranfragen werden nur übernommen, wenn weiterhin dieselbe Status-ID angezeigt wird. Späte Antworten einer zuvor geöffneten Fahrt überschreiben dadurch nicht die neue Ansicht.
 
 ### GPS-Zeiten und API-Rückfall
 
-`JourneyTimeResolver` entscheidet für Header und Halte dieselbe Priorität: frische GPS-Zeit des konkreten Ereignisses, manuelle Check-in-Zeit, parsebare API-Echtzeit, Planzeit. GPS-Werte werden nur aus dem passenden eigenen aktiven `TrackingLiveState` übernommen. Ankunft und Abfahrt erhalten getrennte Quellenhinweise; beobachtete Ankunft und Prognose sind unterscheidbar. Fehlende GPS-Abfahrt verhindert keine gültige API-Abfahrt desselben Halts.
+`JourneyTimeResolver` entscheidet für Header und Halte dieselbe Priorität: frische GPS-Zeit des konkreten Ereignisses, manuelle Check-in-Zeit, parsebare API-Echtzeit, Planzeit. GPS-Werte werden nur aus dem passenden eigenen aktiven `TrackingLiveState` übernommen. Ankunft und Abfahrt erhalten getrennte Quellenhinweise; beobachtete Ankunft und Prognose sind unterscheidbar. Fehlende GPS-Abfahrt verhindert keine gültige API-Abfahrt desselben Halts. Ein bereits belegter passender GPS-Wert kann bei Bremsen und geordnetem Haltwechsel bis zu seinem ursprünglichen Gültigkeitsende erhalten bleiben; die UI führt dafür keine eigene Quellenverzögerung ein. Unbrauchbare oder abgelaufene Werte fallen weiterhin auf die nächsten Quellen zurück.
 
 Die frühere `propagateDelays()`-Vererbung einschließlich synthetischer Puffer wurde entfernt. Ein Rückfall zeigt dadurch tatsächliche vorhandene Providerwerte und bewahrt Verfrühungen, statt eine ältere positive Verzögerung auf weitere Halte zu übertragen. GPS-Prognosen verändern weder die API-Echtzeitfelder noch die gespeicherten Check-in-Zeiten. Das Bearbeitungsformular verwendet ausdrücklich den Resolver ohne GPS-Daten; eine Schätzung wird nicht beim Speichern zur manuellen Istzeit. Die Prognosebedingungen stehen unter [GPS-Zeiten](./gps-zeiten.md).
 

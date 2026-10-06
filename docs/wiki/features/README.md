@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 05.10.2026. Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
+Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 06.10.2026. Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
 ## Vorhandene Funktionen
 
@@ -12,7 +12,7 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 05.10.2026. Erre
 | [Check-in](../module/checkin.md) | Stationssuche, Stationen in der Nähe, Abfahrten mit Gleis/Verspätung/Ausfall, Fahrt und Ausstieg auswählen, Status-Text, Reisegrund und manuelle Zeiten. |
 | [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit sowie gekennzeichnete lokale GPS-Zeiten der eigenen aktiven Fahrt, Gleise, Ausfälle, Einstieg/Ausstieg und gemeinsamer Fortschritt. Eigene Fahrt bearbeiten oder löschen. |
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
-| [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Gemeinsame Quellenwahl mit API-/Plan-Rückfall. |
+| [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Gemeinsame Quellenwahl mit begrenzt stabilisierter gültiger Prognose und API-/Plan-Rückfall. |
 | [Sprachausgabe](../module/settings.md) | Haltestellen- und Zielansagen; TTS-Engine, Sprache und Stimme konfigurierbar. |
 | [Fahrterkennung](../module/ride-recognition.md) | Ausdrücklich aktivierte GPS-Suche nach möglichen Fahrten; Linie prüfen, Ziel wählen und Check-in selbst bestätigen. |
 | [Fahrtänderungen](../module/trip-changes.md) | Hinweise zu Gleiswechseln, Haltausfällen/Wiederherstellungen und Verspätungsänderungen ab fünf Minuten. Optional TTS. |

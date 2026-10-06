@@ -166,6 +166,20 @@ class StationTrackingEngine(
     fun hasReliableLocation(nowMillis: Long): Boolean =
         gpsEnabled && lastReliableFix?.let { isReliable(it, nowMillis) } == true
 
+    /** Revalidate delayed TTS work against the current visit, not its old reservation. */
+    @Synchronized
+    fun isOriginAnnouncementRelevant(key: String, source: TrackingSource, nowMillis: Long): Boolean {
+        val stop = currentStop() ?: return false
+        if (state.completed || stop.cancelled || !stop.isOrigin || stop.key != key) return false
+        val departure = stop.effectiveDepartureMillis ?: stop.effectiveArrivalMillis ?: return false
+        if (departure < nowMillis || departure - nowMillis > TIMETABLE_ANNOUNCEMENT_MILLIS) return false
+        val fix = lastReliableFix?.takeIf { gpsEnabled && isReliable(it, nowMillis) }
+        // A pending clock event can outlive GPS becoming available. Fresh
+        // movement evidence must win over the old event's source label.
+        if (fix != null) return shouldAnnounceWaitingOrigin(stop, fix, nowMillis, requireUnannounced = false)
+        return source == TrackingSource.TIMETABLE
+    }
+
     @Synchronized
     fun onLocation(fix: LocationFix, nowMillis: Long): TrackingUpdate {
         if (!gpsEnabled) return onTimetable(nowMillis)
@@ -240,7 +254,10 @@ class StationTrackingEngine(
         // Reserve an event only once we know this visit remains selected. A
         // departing visit must not consume the successor's one event per fix.
         val announcementCandidate = stop.takeIf {
-            (approachingNow || retryPending) && distance <= announcementRadius() &&
+            // Once boarding has been observed, a small inward GPS fluctuation
+            // must not announce the origin again while the train is departing.
+            (!stop.isOrigin || !state.arrivedAtCurrent) &&
+                (approachingNow || retryPending) && distance <= announcementRadius() &&
                 stop.key !in state.announcedKeys
         }
 
@@ -291,7 +308,11 @@ class StationTrackingEngine(
             return observeCurrentStop(fix, previousFix, nowMillis, canAdvance = false)
         }
         previousDistance = distance
-        return TrackingUpdate(stop, sourceForCurrent(nowMillis), announcementCandidate?.let(::announce))
+        val originAnnouncement = stop.takeIf {
+            announcementCandidate == null && shouldAnnounceWaitingOrigin(it, fix, nowMillis)
+        }
+        return TrackingUpdate(stop, sourceForCurrent(nowMillis),
+            (announcementCandidate ?: originAnnouncement)?.let(::announce))
     }
 
     @Synchronized
@@ -300,7 +321,10 @@ class StationTrackingEngine(
         if (state.completed) return finishedUpdate(sourceForCurrent(nowMillis))
         var stop = currentStop() ?: return TrackingUpdate(null, TrackingSource.TIMETABLE)
         if (hasCoordinates(stop) && hasReliableLocation(nowMillis)) {
-            return TrackingUpdate(stop, sourceForCurrent(nowMillis))
+            val announcement = lastReliableFix?.takeIf {
+                shouldAnnounceWaitingOrigin(stop, it, nowMillis)
+            }?.let { announce(stop) }
+            return TrackingUpdate(stop, sourceForCurrent(nowMillis), announcement)
         }
         // After GPS tracking starts, a tunnel or a lost fix must not make a
         // delayed train jump ahead merely because the schedule has elapsed.
@@ -322,6 +346,31 @@ class StationTrackingEngine(
             stop.key !in state.announcedKeys
         ) announce(stop) else null
         return TrackingUpdate(stop, TrackingSource.TIMETABLE, announcement)
+    }
+
+    /** Departure-time advice remains useful while GPS proves waiting at the origin. */
+    private fun shouldAnnounceWaitingOrigin(
+        stop: TrackingStop,
+        fix: LocationFix,
+        nowMillis: Long,
+        requireUnannounced: Boolean = true
+    ): Boolean {
+        if (!stop.isOrigin || !state.arrivedAtCurrent ||
+            (requireUnannounced && stop.key in state.announcedKeys) ||
+            insideArrivalFixCount < 2 || !hasCoordinates(stop)
+        ) return false
+        val departure = stop.effectiveDepartureMillis ?: stop.effectiveArrivalMillis ?: return false
+        if (departure < nowMillis || departure - nowMillis > TIMETABLE_ANNOUNCEMENT_MILLIS) return false
+        val distance = distanceMeters(fix.latitude, fix.longitude, stop.latitude!!, stop.longitude!!)
+        if (distance + fix.accuracyMeters > ARRIVAL_RADIUS_METERS) return false
+        val stableSince = insideArrivalSinceMillis ?: return false
+        val stableFor = fix.timeMillis - stableSince
+        val lowSpeed = fix.speedMetersPerSecond?.takeIf { it.isFinite() && it >= 0.0 }
+            ?.let { it <= ORIGIN_WAIT_MAX_SPEED_METERS_PER_SECOND } == true
+        // The stable anchor resets on movement. Neither a first fix, reported
+        // zero speed while driving away, nor elapsed timetable time suffices.
+        return stableFor >= ORIGIN_WAIT_MIN_MILLIS &&
+            (lowSpeed || (fix.speedMetersPerSecond == null && stableFor >= DESTINATION_DWELL_MILLIS))
     }
 
     private fun alignCursor() {
@@ -552,6 +601,8 @@ class StationTrackingEngine(
         private const val MIDWAY_CORRIDOR_MARGIN_METERS = 300.0
         private const val DESTINATION_MAX_SPEED_METERS_PER_SECOND = 3.0
         private const val DESTINATION_DWELL_MILLIS = 10_000L
+        private const val ORIGIN_WAIT_MAX_SPEED_METERS_PER_SECOND = 1.5
+        private const val ORIGIN_WAIT_MIN_MILLIS = 3_000L
         private const val EARTH_RADIUS_METERS = 6_371_000.0
 
         private fun validCoordinates(latitude: Double, longitude: Double): Boolean =

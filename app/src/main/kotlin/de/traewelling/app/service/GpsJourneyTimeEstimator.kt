@@ -136,6 +136,11 @@ class GpsJourneyTimeEstimator {
         highestFixTime = fix.timeMillis
         val previousFix = lastFix?.takeIf { fix.timeMillis - it.timeMillis in 1..MAX_FIX_AGE_MILLIS }
         if (lastFix != null && previousFix == null) clearLocationState()
+        if (previousFix != null && distance(previousFix.latitude, previousFix.longitude,
+                fix.latitude, fix.longitude) / ((fix.timeMillis - previousFix.timeMillis) / 1000.0) > MAX_TRAVEL_SPEED) {
+            invalidateLocation()
+            return null
+        }
         val stop = route[index]
         val previousIndex = (index - 1 downTo 0).firstOrNull { !route[it].cancelled }
         val previousStop = previousIndex?.let(route::get)
@@ -143,6 +148,7 @@ class GpsJourneyTimeEstimator {
             fix.accuracyMeters <= ARRIVAL_RADIUS_METERS
         val observedArrival = observeArrival(stop, progress.arrivedAtCurrent, fix, insideStation)
         var offset: Long? = null
+        var compatiblePosition = false
         if (observedArrival != null && insideStation && progress.arrivedAtCurrent && !stop.isOrigin) {
             // A departure-only visit establishes no measured arrival offset.
             // Origin waiting is excluded above: its departure needs movement.
@@ -158,17 +164,23 @@ class GpsJourneyTimeEstimator {
                 }
             }
             segmentSamples.clear()
-        } else if (!progress.arrivedAtCurrent && previousStop != null) {
-            val projection = project(previousStop, stop, fix)
+        } else if (previousStop != null) {
+            // An arriving train can stop just beyond the stop centroid. Only an
+            // established approach to this same visit may use the inner arrival
+            // zone while its slow-fix/dwell observation is being confirmed.
+            val arrivalEndpoint = progress.arrivedAtCurrent && insideStation && lastVisitKey == stop.key
+            val projection = project(previousStop, stop, fix, arrivalEndpoint)
             val departure = previousStop.plannedDepartureMillis
             val arrival = stop.plannedArrivalMillis
             if (projection != null && departure != null && arrival != null &&
-                arrival - departure in MIN_TRAVEL_MILLIS..MAX_TRAVEL_MILLIS
+                arrival - departure in MIN_TRAVEL_MILLIS..MAX_TRAVEL_MILLIS &&
+                compatibleProgress(previousStop, stop, previousFix, fix, projection, arrivalEndpoint)
             ) {
+                compatiblePosition = true
                 // A station exit can precede the forecast window on a long
                 // segment; capture that event at the engine's visit transition.
                 observeDeparture(previousStop, stop, previousFix, fix, projection)
-                if (projection.fraction in MIN_SEGMENT_FRACTION..MAX_SEGMENT_FRACTION) {
+                if (!progress.arrivedAtCurrent && projection.fraction in MIN_SEGMENT_FRACTION..MAX_SEGMENT_FRACTION) {
                     offset = observeSegment(stop.key, fix, projection)?.let { supported ->
                         fix.timeMillis - (departure + ((arrival - departure) * supported.fraction).roundToLong())
                     }
@@ -182,7 +194,15 @@ class GpsJourneyTimeEstimator {
         lastFix = fix
         lastVisitKey = stop.key
         val supportedOffset = offset
-        if (supportedOffset == null || abs(supportedOffset) > MAX_OFFSET_MILLIS) {
+        if (supportedOffset == null) {
+            // Acquisition needs a meaningful movement window; maintaining an
+            // established forecast does not re-run that requirement for every
+            // braking fix or station handover. Only a compatible fresh position
+            // may retain it, and its original support/expiry is never extended.
+            return cached?.takeIf { compatiblePosition && nowMillis <= it.validUntilMillis }
+                .also { cached = it }
+        }
+        if (abs(supportedOffset) > MAX_OFFSET_MILLIS) {
             cached = null
             return null
         }
@@ -233,20 +253,26 @@ class GpsJourneyTimeEstimator {
 
     private fun observeSegment(key: String, fix: LocationFix, projection: Projection): SegmentSample? {
         val previous = segmentSamples.lastOrNull()
-        if (previous != null && (previous.key != key ||
-                fix.timeMillis - previous.fix.timeMillis > MAX_FIX_AGE_MILLIS ||
-                (previous.fraction - projection.fraction) * projection.length >
-                max(10.0, (previous.fix.accuracyMeters + fix.accuracyMeters) / 2.0) ||
-                distance(previous.fix.latitude, previous.fix.longitude, fix.latitude, fix.longitude) /
-                    ((fix.timeMillis - previous.fix.timeMillis) / 1000.0) > MAX_TRAVEL_SPEED
+        if (previous != null && previous.key != key) segmentSamples.clear()
+        val preceding = segmentSamples.lastOrNull()
+        if (preceding != null && (
+                fix.timeMillis - preceding.fix.timeMillis > MAX_FIX_AGE_MILLIS ||
+                (preceding.fraction - projection.fraction) * projection.length >
+                max(10.0, (preceding.fix.accuracyMeters + fix.accuracyMeters) / 2.0)
             )) {
             segmentSamples.clear()
             cached = null
             return null
         }
         val sample = SegmentSample(key, fix, projection.fraction, projection.length)
-        segmentSamples.addLast(sample)
-        while (segmentSamples.size > 8 || segmentSamples.firstOrNull()?.let {
+        // Keep evidence by elapsed time instead of eight callback occurrences.
+        // A 1 Hz location provider previously could never span the required 8 s.
+        // Downsampling bounds memory even for much faster callbacks; the newest
+        // fix still participates in the directed-progress calculation below.
+        if (segmentSamples.lastOrNull()?.let {
+                fix.timeMillis - it.fix.timeMillis >= MIN_SAMPLE_INTERVAL_MILLIS
+            } != false) segmentSamples.addLast(sample)
+        while (segmentSamples.size > MAX_SEGMENT_SAMPLES || segmentSamples.firstOrNull()?.let {
                 fix.timeMillis - it.fix.timeMillis > MAX_FIX_AGE_MILLIS
             } == true) segmentSamples.removeFirst()
         val first = segmentSamples.first()
@@ -255,6 +281,25 @@ class GpsJourneyTimeEstimator {
             segmentSamples.size >= 3 && fix.timeMillis - first.fix.timeMillis >= MIN_MOVEMENT_MILLIS &&
                 movement >= max(50.0, 3.0 * max(first.fix.accuracyMeters, fix.accuracyMeters))
         }
+    }
+
+    private fun compatibleProgress(
+        from: TrackingStop, to: TrackingStop, previous: LocationFix?,
+        fix: LocationFix, projection: Projection, arrivalEndpoint: Boolean = false
+    ): Boolean {
+        if (previous == null) return true
+        val sameVisit = lastVisitKey == to.key
+        val departedVisit = lastVisitKey == from.key
+        if (!sameVisit && !departedVisit) return false
+        val prior = project(from, to, previous, arrivalEndpoint)
+        if (prior == null) {
+            // On a genuine visit transition the last inner-station fix can lie
+            // just before the next segment. It must be close to its origin.
+            return departedVisit && distance(previous.latitude, previous.longitude,
+                from.latitude!!, from.longitude!!) + previous.accuracyMeters <= ARRIVAL_RADIUS_METERS
+        }
+        return (prior.fraction - projection.fraction) * projection.length <=
+            max(10.0, (previous.accuracyMeters + fix.accuracyMeters) / 2.0)
     }
 
     private fun observeDeparture(
@@ -298,7 +343,7 @@ class GpsJourneyTimeEstimator {
                 other.plannedDepartureMillis == stop.plannedDepartureMillis } > 1 }
     }
 
-    private fun project(from: TrackingStop, to: TrackingStop, fix: LocationFix): Projection? {
+    private fun project(from: TrackingStop, to: TrackingStop, fix: LocationFix, arrivalEndpoint: Boolean = false): Projection? {
         if (!coordinates(from) || !coordinates(to)) return null
         val fromLatitude = from.latitude ?: return null
         val fromLongitude = from.longitude ?: return null
@@ -314,7 +359,10 @@ class GpsJourneyTimeEstimator {
         val fy = Math.toRadians(fix.latitude - fromLatitude) * EARTH_RADIUS_METERS
         val fraction = (fx * x + fy * y) / (length * length)
         val across = abs(fx * y - fy * x) / length
-        if (!fraction.isFinite() || fraction !in 0.0..1.0 || across > max(100.0, fix.accuracyMeters * 2)) return null
+        val supportedEndpoint = arrivalEndpoint && distance(fix.latitude, fix.longitude,
+            toLatitude, toLongitude) + fix.accuracyMeters <= ARRIVAL_RADIUS_METERS
+        if (!fraction.isFinite() || fraction < 0.0 || (fraction > 1.0 && !supportedEndpoint) ||
+            across > max(100.0, fix.accuracyMeters * 2)) return null
         return Projection(fraction, length)
     }
 
@@ -325,6 +373,8 @@ class GpsJourneyTimeEstimator {
         private const val MAX_STATIONARY_SPEED = 3.0
         private const val MIN_DWELL_MILLIS = 8_000L
         private const val MIN_MOVEMENT_MILLIS = 8_000L
+        private const val MIN_SAMPLE_INTERVAL_MILLIS = 1_000L
+        private const val MAX_SEGMENT_SAMPLES = 32
         private const val MIN_TRAVEL_MILLIS = 15_000L
         private const val MAX_TRAVEL_MILLIS = 5_400_000L
         private const val MAX_OFFSET_MILLIS = 21_600_000L

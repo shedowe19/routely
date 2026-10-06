@@ -53,6 +53,180 @@ class GpsJourneyTimeEstimatorTest {
     }
 
     @Test
+    fun oneSecondLocationUpdatesCanEstablishAndMaintainAGpsForecast() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (second in 0..7) {
+            val fix = fractionFix(.10 + second * .02).copy(timeMillis = base + 20_000 + second * 1_000)
+            assertNull(update(estimator, fix, progress()))
+        }
+        for (second in 8..20) {
+            val fix = fractionFix(.10 + second * .02).copy(timeMillis = base + 20_000 + second * 1_000)
+            assertNotNull(update(estimator, fix, progress()))
+        }
+    }
+
+    @Test
+    fun veryFrequentLocationUpdatesRetainEnoughElapsedMovementEvidence() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (tick in 0..39) {
+            val fix = fractionFix(.10 + tick * .004).copy(timeMillis = base + 20_000 + tick * 200)
+            assertNull(update(estimator, fix, progress()))
+        }
+        for (tick in 40..65) {
+            val fix = fractionFix(.10 + tick * .004).copy(timeMillis = base + 20_000 + tick * 200)
+            assertNotNull(update(estimator, fix, progress()))
+        }
+    }
+
+    @Test
+    fun establishedForecastSurvivesBrakingFixesWithoutRenewingItsExpiry() {
+        val estimator = GpsJourneyTimeEstimator()
+        val established = travel(estimator)!!
+        var previous = established
+        for (seconds in 3..51 step 3) {
+            val fix = fractionFix(.35 + seconds * .0001).copy(timeMillis = established.updatedAtMillis + seconds * 1_000,
+                speedMetersPerSecond = .5)
+            val estimate = update(estimator, fix, progress())!!
+            if (seconds >= 27) {
+                assertEquals(previous, estimate)
+                assertEquals(previous.validUntilMillis, estimate.validUntilMillis)
+            }
+            previous = estimate
+        }
+    }
+
+    @Test
+    fun acceptedAccuracyVariationDoesNotDiscardASupportedForecast() {
+        val estimator = GpsJourneyTimeEstimator()
+        val established = travel(estimator)!!
+        val noisy = fractionFix(.36).copy(timeMillis = established.updatedAtMillis + 3_000, accuracyMeters = 70.0)
+        assertEquals(established, update(estimator, noisy, progress()))
+        val recovered = fractionFix(.40).copy(timeMillis = established.updatedAtMillis + 6_000)
+        assertNotNull(update(estimator, recovered, progress()))
+    }
+
+    @Test
+    fun normalThreeSecondFixesAndClockTicksNeverAlternateGpsWithApi() {
+        val estimator = GpsJourneyTimeEstimator()
+        var established = false
+        for (second in 0..60 step 3) {
+            val fix = fractionFix(.10 + second * .01).copy(timeMillis = base + 20_000 + second * 1_000)
+            val estimate = update(estimator, fix, progress())
+            if (estimate != null) established = true
+            if (established) {
+                assertNotNull(estimate)
+                assertEquals(estimate, update(estimator, fix, progress(), now = fix.timeMillis + 1_000))
+                assertEquals(estimate, update(estimator, fix, progress(), now = fix.timeMillis + 2_000))
+            }
+        }
+        assertTrue(established)
+    }
+
+    @Test
+    fun freshStationaryFixesCannotExtendAnUnsupportedMidSegmentForecastForever() {
+        val estimator = GpsJourneyTimeEstimator()
+        val established = travel(estimator)!!
+        var lastSupported = established
+        for (seconds in 5..50 step 5) {
+            val fix = fractionFix(.35).copy(timeMillis = established.updatedAtMillis + seconds * 1_000,
+                speedMetersPerSecond = 0.0)
+            val estimate = update(estimator, fix, progress())!!
+            if (seconds >= 25) assertEquals(lastSupported, estimate)
+            lastSupported = estimate
+        }
+        val tooLate = fractionFix(.35).copy(timeMillis = lastSupported.validUntilMillis + 1,
+            speedMetersPerSecond = 0.0)
+        assertNull(update(estimator, tooLate, progress()))
+    }
+
+    @Test
+    fun arrivalHandoverKeepsForecastUntilTheSecondSlowFixObservesArrival() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (fraction in listOf(.85, .90, .95)) {
+            update(estimator, fractionFix(fraction), progress())
+        }
+        val arriving = stationFix(1, base + 120_000)
+        val first = update(estimator, arriving, progress(arrived = true))!!
+        assertFalse(first.stopTimes.first { it.stopKey == "middle" }.arrivalObserved)
+        val second = update(estimator, arriving.copy(timeMillis = arriving.timeMillis + 3_000), progress(arrived = true))!!
+        assertTrue(second.stopTimes.first { it.stopKey == "middle" }.arrivalObserved)
+        assertEquals(arriving.timeMillis, second.stopTimes.first { it.stopKey == "middle" }.arrivalMillis)
+    }
+
+    @Test
+    fun arrivingJustBeyondStationCentroidKeepsGpsUntilSlowArrivalIsConfirmed() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (fraction in listOf(.85, .90, .95)) update(estimator, fractionFix(fraction), progress())
+        val arriving = stationFix(1, base + 120_000).copy(longitude = .0204)
+        val first = update(estimator, arriving, progress(arrived = true))!!
+        assertFalse(first.stopTimes.first { it.stopKey == "middle" }.arrivalObserved)
+        val second = update(estimator, arriving.copy(timeMillis = arriving.timeMillis + 3_000), progress(arrived = true))!!
+        assertTrue(second.stopTimes.first { it.stopKey == "middle" }.arrivalObserved)
+        assertEquals(arriving.timeMillis, second.stopTimes.first { it.stopKey == "middle" }.arrivalMillis)
+    }
+
+    @Test
+    fun arrivalOvershootWithUnknownSpeedKeepsGpsThroughRequiredDwell() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (fraction in listOf(.85, .90, .95)) update(estimator, fractionFix(fraction), progress())
+        val arriving = stationFix(1, base + 120_000).copy(longitude = .0204, speedMetersPerSecond = null)
+        val first = update(estimator, arriving, progress(arrived = true))!!
+        val secondFix = arriving.copy(timeMillis = arriving.timeMillis + 3_000)
+        assertEquals(first, update(estimator, secondFix, progress(arrived = true)))
+        assertEquals(first, update(estimator, secondFix, progress(arrived = true), now = arriving.timeMillis + 6_000))
+        val confirmed = update(estimator, arriving.copy(timeMillis = arriving.timeMillis + 8_000), progress(arrived = true))!!
+        assertTrue(confirmed.stopTimes.first { it.stopKey == "middle" }.arrivalObserved)
+        assertEquals(arriving.timeMillis, confirmed.stopTimes.first { it.stopKey == "middle" }.arrivalMillis)
+    }
+
+    @Test
+    fun arrivalZoneDoesNotPermitAnOffCorridorFixEvenWhenTheVisitIsArrived() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (fraction in listOf(.85, .90, .95)) update(estimator, fractionFix(fraction), progress())
+        val offCorridor = stationFix(1, base + 120_000).copy(latitude = 50.00095, speedMetersPerSecond = null)
+        assertNull(update(estimator, offCorridor, progress(arrived = true)))
+    }
+
+    @Test
+    fun arrivalOvershootDoesNotPermitBackwardMovement() {
+        val estimator = GpsJourneyTimeEstimator()
+        for (fraction in listOf(.85, .90, .95)) update(estimator, fractionFix(fraction), progress())
+        val arriving = stationFix(1, base + 120_000).copy(longitude = .0208, speedMetersPerSecond = null)
+        assertNotNull(update(estimator, arriving, progress(arrived = true)))
+        val backwards = arriving.copy(longitude = .0192, timeMillis = arriving.timeMillis + 3_000)
+        assertNull(update(estimator, backwards, progress(arrived = true)))
+    }
+
+    @Test
+    fun nextLegHandoverKeepsGpsWhileItsOwnMovementWindowIsBuilt() {
+        val estimator = GpsJourneyTimeEstimator()
+        update(estimator, stationFix(1, base + 120_000), progress(arrived = true))
+        val atStation = update(estimator, stationFix(1, base + 123_000), progress(arrived = true))!!
+        for ((step, fraction) in listOf(.10, .13, .16, .19, .22).withIndex()) {
+            val fix = fractionFix(fraction, index = 2).copy(timeMillis = base + 135_000 + step * 3_000)
+            assertNotNull(update(estimator, fix, progress(2)))
+        }
+        assertEquals(base + 153_000, atStation.validUntilMillis)
+    }
+
+    @Test
+    fun incompatibleBackwardFixStillInvalidatesABrieflyMaintainedForecastImmediately() {
+        val estimator = GpsJourneyTimeEstimator()
+        val established = travel(estimator)!!
+        assertNotNull(update(estimator, fractionFix(.351).copy(timeMillis = established.updatedAtMillis + 3_000), progress()))
+        assertNull(update(estimator, fractionFix(.30).copy(timeMillis = established.updatedAtMillis + 6_000), progress()))
+    }
+
+    @Test
+    fun incompatibleOffRouteFixStillInvalidatesABrieflyMaintainedForecastImmediately() {
+        val estimator = GpsJourneyTimeEstimator()
+        val established = travel(estimator)!!
+        assertNotNull(update(estimator, fractionFix(.351).copy(timeMillis = established.updatedAtMillis + 3_000), progress()))
+        assertNull(update(estimator, fractionFix(.36).copy(timeMillis = established.updatedAtMillis + 6_000,
+            latitude = 50.002), progress()))
+    }
+
+    @Test
     fun jitterWithoutDirectedProgressFallsBackToApi() {
         val estimator = GpsJourneyTimeEstimator()
         for (index in 0..5) {
