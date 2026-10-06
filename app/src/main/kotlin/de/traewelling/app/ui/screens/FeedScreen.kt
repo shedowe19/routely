@@ -7,12 +7,10 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
-import androidx.compose.material3.pulltorefresh.PullToRefreshContainer
-import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
@@ -30,21 +28,6 @@ fun FeedScreen(
 ) {
     val uiState     by viewModel.uiState.collectAsState()
     val listState   = rememberLazyListState()
-    val pullRefreshState = rememberPullToRefreshState()
-
-    if (pullRefreshState.isRefreshing) {
-        LaunchedEffect(true) {
-            if (!uiState.isRefreshing) viewModel.refresh()
-        }
-    }
-    LaunchedEffect(uiState.isRefreshing) {
-        if (uiState.isRefreshing) {
-            pullRefreshState.startRefresh()
-        } else {
-            pullRefreshState.endRefresh()
-        }
-    }
-
     // Trigger initial load
     LaunchedEffect(Unit) {
         if (uiState.statuses.isEmpty() && !uiState.isLoading) {
@@ -103,7 +86,11 @@ fun FeedScreen(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
             }
         }
-        Box(modifier = Modifier.nestedScroll(pullRefreshState.nestedScrollConnection).fillMaxSize()) {
+        PullToRefreshBox(
+            isRefreshing = uiState.isRefreshing,
+            onRefresh = { viewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
+        ) {
             when {
                 (uiState.isLoading || uiState.isRefreshing) && uiState.statuses.isEmpty() ->
                     StateMessage(
@@ -147,12 +134,6 @@ fun FeedScreen(
                         }
                     }
                 }
-            }
-            if (pullRefreshState.progress > 0 || pullRefreshState.isRefreshing || uiState.isRefreshing) {
-                PullToRefreshContainer(
-                    state = pullRefreshState,
-                    modifier = Modifier.align(Alignment.TopCenter)
-                )
             }
         }
     }

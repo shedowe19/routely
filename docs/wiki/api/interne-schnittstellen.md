@@ -54,6 +54,10 @@ class AuthRepository(prefs: PreferencesManager)
 
 OAuth-Methoden sind vorhandene Helfer, kein angebundener Login-/Auto-Refresh. Vergleichende Session-Schreiboperationen in `AuthSessionStore` verhindern, dass verspätete Antworten eine neuere Anmeldung überschreiben oder löschen. Logout entfernt die lokale Sitzung vor dem optionalen Netzwerkaufruf.
 
+### TransitRouteRepository
+
+`TransitRouteRepository(session: AuthSession)` lädt den nativen Status-Linienzug über einen eigenen HTTPS-OkHttp-Client. `getRoute(request: TransitRouteRequest)` liefert optional eine besuchsgebundene `TransitRouteGeometry`; `close()` beendet gemeinsame Abrufe und löscht den sessiongebundenen RAM-Cache. Der Request enthält die vollständige eigene Besuchsfolge, keine Gerätepositionen. Dieser Geometrieabruf ist kein neuer Retrofit-/Status-PUT-Vertrag. Parser-, Cache- und Privacy-Grenzen stehen unter [Externe Schnittstellen](./externe-schnittstellen.md) und [GPS-Zeiten](../module/gps-zeiten.md).
+
 ## Retrofit Services
 
 ### TraewellingApiService

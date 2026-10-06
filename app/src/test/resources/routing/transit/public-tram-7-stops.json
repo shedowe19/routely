@@ -1,0 +1,238 @@
+{
+  "data": [
+    {
+      "uuid": "090dfb3c-aae1-4dd5-96e6-5ab1ba201a1d",
+      "station": {
+        "id": 168773039,
+        "uuid": "5356eb70-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Weixdorf (Rathenaustra\u00dfe)",
+        "latitude": 51.14406,
+        "longitude": 13.803935
+      },
+      "arrivalPlanned": "2026-10-06T19:27:00+00:00",
+      "departurePlanned": "2026-10-06T19:27:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "f0b1ef59-ebb4-4926-9d53-3af26f32cd4b",
+      "station": {
+        "id": 69778,
+        "uuid": "522aff03-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Weixdorf Bad",
+        "latitude": 51.13974,
+        "longitude": 13.801516
+      },
+      "arrivalPlanned": "2026-10-06T19:29:00+00:00",
+      "departurePlanned": "2026-10-06T19:29:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "cc6d4947-2d6f-422f-a9ff-ea9323a8db87",
+      "station": {
+        "id": 168773036,
+        "uuid": "5356eadf-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Weixdorf Fuchsberg",
+        "latitude": 51.133907,
+        "longitude": 13.795419
+      },
+      "arrivalPlanned": "2026-10-06T19:31:00+00:00",
+      "departurePlanned": "2026-10-06T19:31:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "6b51d978-492c-43ea-8a16-e750b83978c2",
+      "station": {
+        "id": 168773035,
+        "uuid": "5356eaae-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "DD Industriepark Klotzsche",
+        "latitude": 51.127674,
+        "longitude": 13.792877
+      },
+      "arrivalPlanned": "2026-10-06T19:32:00+00:00",
+      "departurePlanned": "2026-10-06T19:32:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "02b99578-e7f1-46fe-9bd4-ae94a70c4136",
+      "station": {
+        "id": 168730993,
+        "uuid": "532d76e3-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Arkonastra\u00dfe",
+        "latitude": 51.12269,
+        "longitude": 13.791385
+      },
+      "arrivalPlanned": "2026-10-06T19:33:00+00:00",
+      "departurePlanned": "2026-10-06T19:33:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "950c8edd-578c-485d-b6ff-45920915c0a6",
+      "station": {
+        "id": 168730992,
+        "uuid": "532d76b2-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden K\u00e4the-Kollwitz-Platz",
+        "latitude": 51.118427,
+        "longitude": 13.789508
+      },
+      "arrivalPlanned": "2026-10-06T19:35:00+00:00",
+      "departurePlanned": "2026-10-06T19:35:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "5533c107-4520-4e9c-a18a-6d02f3414584",
+      "station": {
+        "id": 168730991,
+        "uuid": "532d7682-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Zur Neuen Br\u00fccke",
+        "latitude": 51.114086,
+        "longitude": 13.783444
+      },
+      "arrivalPlanned": "2026-10-06T19:37:00+00:00",
+      "departurePlanned": "2026-10-06T19:37:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "46ca0948-eb14-474b-8a41-fe7fce05469c",
+      "station": {
+        "id": 168730990,
+        "uuid": "532d7651-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Karl-Marx-Stra\u00dfe",
+        "latitude": 51.11069,
+        "longitude": 13.775943
+      },
+      "arrivalPlanned": "2026-10-06T19:38:00+00:00",
+      "departurePlanned": "2026-10-06T19:38:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "83acbe58-21cc-4e87-acf9-caaad157af1b",
+      "station": {
+        "id": 168730989,
+        "uuid": "532d75ff-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Infineon Nord",
+        "latitude": 51.108013,
+        "longitude": 13.773186
+      },
+      "arrivalPlanned": "2026-10-06T19:40:00+00:00",
+      "departurePlanned": "2026-10-06T19:40:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "37a28767-e816-405b-ab10-6b658fb74c91",
+      "station": {
+        "id": 168730988,
+        "uuid": "532d75a5-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Infineon S\u00fcd",
+        "latitude": 51.102917,
+        "longitude": 13.770266
+      },
+      "arrivalPlanned": "2026-10-06T19:41:00+00:00",
+      "departurePlanned": "2026-10-06T19:41:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "e3870047-fb8a-45dc-9b09-9a3b0905c4cc",
+      "station": {
+        "id": 168730987,
+        "uuid": "532d7552-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Moritzburger Weg",
+        "latitude": 51.09926,
+        "longitude": 13.768721
+      },
+      "arrivalPlanned": "2026-10-06T19:42:00+00:00",
+      "departurePlanned": "2026-10-06T19:42:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "b90a135b-4a64-488d-aa89-4395e4526e0b",
+      "station": {
+        "id": 168730986,
+        "uuid": "532d74ff-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Hellersiedlung",
+        "latitude": 51.09186,
+        "longitude": 13.765146
+      },
+      "arrivalPlanned": "2026-10-06T19:43:00+00:00",
+      "departurePlanned": "2026-10-06T19:43:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "6a41e847-62d6-4457-8887-d8303595384c",
+      "station": {
+        "id": 7381,
+        "uuid": "51f631a9-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Industriegel\u00e4nde",
+        "latitude": 51.087441,
+        "longitude": 13.762773
+      },
+      "arrivalPlanned": "2026-10-06T19:45:00+00:00",
+      "departurePlanned": "2026-10-06T19:45:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "421dd892-0ab9-4c4a-954c-16c78bb7770a",
+      "station": {
+        "id": 168730985,
+        "uuid": "532d74ac-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Heeresb\u00e4ckerei",
+        "latitude": 51.08201,
+        "longitude": 13.760223
+      },
+      "arrivalPlanned": "2026-10-06T19:46:00+00:00",
+      "departurePlanned": "2026-10-06T19:46:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "dca45ef7-da70-4659-9984-14f4084ef736",
+      "station": {
+        "id": 168730984,
+        "uuid": "532d7456-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Stauffenbergallee",
+        "latitude": 51.07714,
+        "longitude": 13.756153
+      },
+      "arrivalPlanned": "2026-10-06T19:48:00+00:00",
+      "departurePlanned": "2026-10-06T19:48:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "754489fd-fc10-4558-9af6-00444d4edcc2",
+      "station": {
+        "id": 168730983,
+        "uuid": "532d7403-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Tannenstra\u00dfe",
+        "latitude": 51.074146,
+        "longitude": 13.75327
+      },
+      "arrivalPlanned": "2026-10-06T19:49:00+00:00",
+      "departurePlanned": "2026-10-06T19:49:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "00b84e16-470b-4a36-bf31-152be59304d6",
+      "station": {
+        "id": 168730982,
+        "uuid": "532d73b1-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Bischofsweg",
+        "latitude": 51.071106,
+        "longitude": 13.750512
+      },
+      "arrivalPlanned": "2026-10-06T19:51:00+00:00",
+      "departurePlanned": "2026-10-06T19:51:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "846e4472-d68d-436e-9563-e56f76e903d0",
+      "station": {
+        "id": 6662,
+        "uuid": "51f5622f-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Dresden Bischofsplatz",
+        "latitude": 51.072204,
+        "longitude": 13.746385
+      },
+      "arrivalPlanned": "2026-10-06T19:52:00+00:00",
+      "departurePlanned": "2026-10-06T19:52:00+00:00",
+      "cancelled": false
+    }
+  ]
+}

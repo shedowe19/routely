@@ -22,6 +22,10 @@ Room wird von Version 1 auf 2 angehoben. `StatusEntity` verwendet nun `(id, type
 
 Die [SEV-Ergänzung](../module/sev-haltestellen.md) ändert keine Room-Tabelle und keine Datenbankversion. Im vorhandenen Version-1-DataStore-JSON sind `fullStopovers` und `sevMaps` neu und optional. Der Service liest alte Einträge mit der vorhandenen Haltfolge als Richtungskontext und einer leeren SEV-Quelle. Neue Einträge bewahren öffentliche Karten samt Abrufzeit; Alter, Maßnahme und Richtung werden nach Wiederanlauf neu geprüft. Eine SQL-Migration oder neue Preference ist dafür nicht erforderlich.
 
+## Native Geometrie und Bibliotheksstand vom 06.10.2026
+
+Die zusätzliche Bahn-/Tram-Geometrie bleibt RAM-Zustand und verlangt kein neues Room-/DataStore-Feld. Das aktive Fahrtcache-JSON bleibt Version 1, Room bleibt Version 2. Auch das Bibliotheksupdate ist kein Grund, eine andere Schemaänderung zu erfinden; die bestehenden Feedcache-Upgraderegeln gelten weiter. Der vorhandene Fahrtcache liefert nur die Haltbasis für erneutes Geometrieladen. Details: [GPS-Zeiten](../module/gps-zeiten.md) und [Build](../entwicklung/build.md).
+
 ## Verwandte Seiten
 
 - [Datenbank](./datenbank.md)

@@ -16,6 +16,8 @@ Die vorhandenen Endpunktpfade sind gültig. Die gefundenen Inkompatibilitäten b
 
 Am 06.10.2026 wurden Changelog, Routen, Stopover-Modell/-Resource sowie Status-, Statistik- und Dashboard-Controller auf `develop` erneut als Primärquellen gelesen. Dieser Abruf lieferte keinen sicheren neuen Commit-SHA; er wird deshalb nicht mit dem gepinnten Prüfstand vom 05.10. gleichgesetzt. Die erneute Prüfung bestätigt weiterhin die verwendeten Routen. Das Dashboard nutzt numerische Pagination mit 15 Einträgen, `statuses` ist unpaginiert, und Gleisstrings werden ohne unbelegte Präfixkürzung übernommen. Die späteren [Auth-/Cache-Korrekturen](../module/auth.md) ändern keine Träwelling-Endpunkte.
 
+Bei der anschließenden Streckenverlauf-Recherche am 06.10. bestätigte ein GitHub-Commitvergleich `develop` als identisch mit `4d602796da8409017314cc771b1127d169155f02`. Zusätzlich wurden `polyline/{parameters}`, der Status-/Location-Controller und die GeoJSON-DTOs gegen diesen gepinnten Stand geprüft. Dieser spätere Nachweis ergänzt den vorherigen Abruf ohne SHA. Der native [Polyline-Vertrag](./externe-schnittstellen.md) enthält mögliche Stationssehnen und darf deshalb keine ungeprüfte amtliche Gleisführung versprechen.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`

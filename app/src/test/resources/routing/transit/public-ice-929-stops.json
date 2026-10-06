@@ -1,0 +1,69 @@
+{
+  "data": [
+    {
+      "uuid": "d7f096c1-e6d7-4043-ae8b-b6cc922255d9",
+      "station": {
+        "id": 1,
+        "uuid": "51f22888-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Frankfurt(Main)Hbf",
+        "latitude": 50.106817,
+        "longitude": 8.663003
+      },
+      "arrivalPlanned": "2026-10-06T18:13:00+00:00",
+      "departurePlanned": "2026-10-06T18:19:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "c91fc9f9-ae83-4a1d-a88a-3069bc07104f",
+      "station": {
+        "id": 5501,
+        "uuid": "51f3fa00-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Hanau Hbf",
+        "latitude": 50.120903,
+        "longitude": 8.92921
+      },
+      "arrivalPlanned": "2026-10-06T18:34:00+00:00",
+      "departurePlanned": "2026-10-06T18:35:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "ccfe3d05-89aa-4b0f-b4ff-d16f161a579c",
+      "station": {
+        "id": 5154,
+        "uuid": "51f3ae99-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "Aschaffenburg Hbf",
+        "latitude": 49.98059,
+        "longitude": 9.143854
+      },
+      "arrivalPlanned": "2026-10-06T18:50:00+00:00",
+      "departurePlanned": "2026-10-06T18:51:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "aaa1f890-1a50-4cb1-aa34-08ba538b2431",
+      "station": {
+        "id": 5457,
+        "uuid": "51f3f2b8-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "W\u00fcrzburg Hbf",
+        "latitude": 49.802163,
+        "longitude": 9.93593
+      },
+      "arrivalPlanned": "2026-10-06T19:31:00+00:00",
+      "departurePlanned": "2026-10-06T19:34:00+00:00",
+      "cancelled": false
+    },
+    {
+      "uuid": "55db332c-e690-4feb-93b9-783a27cc4fc0",
+      "station": {
+        "id": 11,
+        "uuid": "51f22d82-8e7e-11f1-8f6c-e66fecdc9574",
+        "name": "N\u00fcrnberg Hbf",
+        "latitude": 49.445435,
+        "longitude": 11.08227
+      },
+      "arrivalPlanned": "2026-10-06T20:30:00+00:00",
+      "departurePlanned": "2026-10-06T20:30:00+00:00",
+      "cancelled": false
+    }
+  ]
+}

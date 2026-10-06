@@ -35,6 +35,7 @@ Der persönliche Dashboard-Vertrag verwendet numerische Seiten mit `simplePagina
 
 - **Trip Detail**: `GET /api/v1/trains/trip` – Liefert den gesamten Fahrtverlauf, benötigt `hafasTripId` und `lineName`.
 - **Stopovers**: `GET /api/v1/stopovers/{tripId}` – Detaillierte Route eines getätigten Check-ins.
+- **Streckenverlauf**: `GET /api/v1/polyline/{statusId}` – GeoJSON der eigenen eingecheckten Bahn-/Tramstrecke; optionaler Linienzug für lokale GPS-Projektion, kein garantiert amtlicher Fahrweg. Der Status-Identifier ist nicht die Trip-ID.
 
 **4. Benutzer & Authentifizierung**
 

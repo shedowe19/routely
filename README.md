@@ -1,6 +1,6 @@
 # 🚅 Routely (Optimierte Version)
 
-[![Kotlin](https://img.shields.io/badge/kotlin-1.9.23-blue.svg)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/kotlin-2.3.21-blue.svg)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-orange.svg)](https://developer.android.com/jetpack/compose)
 
 Diese Version von **Routely** wurde speziell optimiert, um eine perfekte Brücke zwischen der Träwelling-Webplattform und dem mobilen Erlebnis zu schlagen. Der Fokus lag dabei auf der präzisen Darstellung von manuell korrigierten Reisedaten und einem erstklassigen User Interface.
@@ -24,6 +24,7 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 
 ### 🧭 Reisebegleitung
 -   GPS-Fortschritt und lokale Zeitprognosen mit API-/Fahrplan-Rückfall bei fehlendem Empfang.
+-   Geeignete Träwelling-Streckenverläufe für Bahn und Tram statt ausschließlich gerader Haltverbindungen; Quellenqualität und geordnete Besuchsbindung werden lokal geprüft.
 -   Haltestellenansagen, aktive Hinweise auf Fahrtänderungen und Reisefortschritt in Notification und Widget.
 -   Optionale Fahrterkennung und SEV-Ersatzhaltestellen aus öffentlichen Bahnhofskarten.
 

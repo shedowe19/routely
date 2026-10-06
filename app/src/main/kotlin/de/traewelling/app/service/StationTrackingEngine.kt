@@ -1,5 +1,8 @@
 package de.traewelling.app.service
 
+import de.traewelling.app.data.model.GpsGeometrySource
+import de.traewelling.app.data.model.GpsSegmentGeometry
+import de.traewelling.app.data.model.RoutePoint
 import kotlin.math.asin
 import kotlin.math.cos
 import kotlin.math.max
@@ -89,6 +92,15 @@ class StationTrackingEngine(
     private var recoveryEligible = !progress.completed
     private var recoveryPending = false
     private var recoveryCandidate: RecoveryCandidate? = null
+    private var segmentGeometries: List<GpsSegmentGeometry> = emptyList()
+    private data class PreparedRail(val binding: GpsSegmentGeometry, val from: RoutePoint, val to: RoutePoint,
+                                    val segment: TrackingRouteGeometry.Segment?)
+    private val preparedRail = mutableMapOf<Pair<String, String>, PreparedRail>()
+    private var lastEvaluationMillis = 0L
+    private data class MovementBasis(val fromKey: String, val toKey: String,
+                                     val from: RoutePoint?, val to: RoutePoint?, val points: List<RoutePoint>?)
+    private var movementBasis: MovementBasis? = null
+    private var movementBasisSinceMillis = 0L
     private val releasedAnnouncements = mutableSetOf<String>()
 
     private data class RecoveryCandidate(
@@ -141,6 +153,26 @@ class StationTrackingEngine(
         configuredRadius = normalizeRadius(radiusMeters)
     }
 
+    /** A network completion supplies public shapes, never a new physical observation. */
+    @Synchronized
+    fun updateSegmentGeometries(snapshot: List<GpsSegmentGeometry>) {
+        segmentGeometries = snapshot.toList()
+        val keys = snapshot.map { it.fromKey to it.toKey }.toSet()
+        preparedRail.keys.retainAll(keys)
+    }
+
+    @Synchronized
+    fun geometrySource(): GpsGeometrySource? {
+        val fix = lastReliableFix?.takeIf { state.gpsEstablished && !recoveryPending &&
+            gpsEnabled && isReliable(it, lastEvaluationMillis) } ?: return null
+        val stop = currentStop() ?: return null
+        val previous = route.take(state.nextIndex).lastOrNull { !it.cancelled }
+        val from = previous ?: stop.takeIf { it.isOrigin } ?: return null
+        val to = if (previous != null) stop else route.drop(state.nextIndex + 1).firstOrNull { !it.cancelled } ?: return null
+        val segment = railSegment(from, to, lastEvaluationMillis) ?: return null
+        return segment.source.takeIf { TrackingRouteGeometry.project(segment.paths.single(), fix).projection != null }
+    }
+
     /** User-selected clock mode is distinct from a temporary GPS outage. */
     @Synchronized
     fun setGpsEnabled(enabled: Boolean) {
@@ -155,6 +187,7 @@ class StationTrackingEngine(
         recoveryEligible = enabled && !state.completed
         recoveryPending = false
         recoveryCandidate = null
+        movementBasis = null
         resetObservation()
     }
 
@@ -165,6 +198,7 @@ class StationTrackingEngine(
         smoothedSpeed = null
         recoveryEligible = gpsEnabled && !state.completed
         recoveryCandidate = null
+        movementBasis = null
         resetObservation()
     }
 
@@ -210,6 +244,7 @@ class StationTrackingEngine(
 
     @Synchronized
     fun onLocation(fix: LocationFix, nowMillis: Long): TrackingUpdate {
+        lastEvaluationMillis = nowMillis
         if (!gpsEnabled) return onTimetable(nowMillis)
         // API/clock refreshes may replay the latest cached fix. They neither
         // add new evidence nor discard a still valid in-progress fix window.
@@ -243,17 +278,18 @@ class StationTrackingEngine(
             // permanently and prevent a later safe near-station correction.
             if (anchored || state.nextIndex == 0) establishGpsCursor()
         }
+        observeMovementBasis(fix, nowMillis)
         var advanced = false
         if (mayBootstrapOrigin && oldFix != null) {
-            advanced = bootstrapDepartedOrigin(oldFix, fix)
+            advanced = bootstrapDepartedOrigin(oldFix, fix, nowMillis)
             if (advanced) mayBootstrapOrigin = false
         }
-        if (!advanced && oldFix != null) advanced = recoverPassedStopAfterGap(oldFix, fix)
+        if (!advanced && oldFix != null) advanced = recoverPassedStopAfterGap(oldFix, fix, nowMillis)
         if (advanced) clearPendingRecovery()
         // Supported ordinary movement wins over a nearby recovery candidate.
         // Preview only the existing physical advance rules: observing first
         // could otherwise reserve speech for a stale visit before re-anchoring.
-        if (!advanced && canAdvanceObservedVisit(fix, oldFix)) {
+        if (!advanced && canAdvanceObservedVisit(fix, oldFix, nowMillis)) {
             return observeCurrentStop(fix, oldFix, nowMillis, canAdvance = true)
         }
         if (!advanced && recoverLaterVisit(fix, oldFix, nowMillis)) {
@@ -277,6 +313,7 @@ class StationTrackingEngine(
         if (state.completed) return finishedUpdate(TrackingSource.GPS)
         val stop = currentStop() ?: return TrackingUpdate(null, sourceForCurrent(nowMillis))
         if (!hasCoordinates(stop)) return onTimetable(nowMillis)
+        observeMovementBasis(fix, nowMillis)
 
         if (observedKey != stop.key) {
             resetObservation()
@@ -340,7 +377,7 @@ class StationTrackingEngine(
                 announcementCandidate?.let(::announce), destinationReached = true)
         }
 
-        if (canAdvance && shouldAdvanceCurrentStop(stop, fix, previousFix, distance)) {
+        if (canAdvance && shouldAdvanceCurrentStop(stop, fix, previousFix, distance, nowMillis)) {
             establishGpsCursor()
             advance()
             // Departure/pass establishes the old visit, not the successor.
@@ -363,6 +400,7 @@ class StationTrackingEngine(
 
     @Synchronized
     fun onTimetable(nowMillis: Long): TrackingUpdate {
+        lastEvaluationMillis = nowMillis
         skipCancelled()
         if (state.completed) return finishedUpdate(sourceForCurrent(nowMillis))
         var stop = currentStop() ?: return TrackingUpdate(null, TrackingSource.TIMETABLE)
@@ -535,7 +573,7 @@ class StationTrackingEngine(
         recoveryCandidate = null
     }
 
-    private fun bootstrapDepartedOrigin(previous: LocationFix, fix: LocationFix): Boolean {
+    private fun bootstrapDepartedOrigin(previous: LocationFix, fix: LocationFix, nowMillis: Long): Boolean {
         if (state.nextIndex != 0 || state.arrivedAtCurrent || state.completed ||
             fix.timeMillis - previous.timeMillis > MAX_FIX_AGE_MILLIS
         ) return false
@@ -545,6 +583,7 @@ class StationTrackingEngine(
         val originLongitude = origin.longitude ?: return false
         val next = route.drop(1).firstOrNull { !it.cancelled } ?: return false
         if (!hasCoordinates(next)) return false
+        if (!hasMovementOnCurrentBasis(previous)) return false
         val nextLatitude = next.latitude ?: return false
         val nextLongitude = next.longitude ?: return false
         val fromOrigin = distanceMeters(fix.latitude, fix.longitude, originLatitude, originLongitude)
@@ -556,6 +595,21 @@ class StationTrackingEngine(
         val trendChange = max(5.0, fix.accuracyMeters * 0.1)
         val departureMovement = max(fromOrigin - priorFromOrigin,
             fromOrigin - (minimumDistance ?: priorFromOrigin))
+        val rail = railSegment(origin, next, nowMillis)
+        if (rail != null) {
+            val pair = directedRailPair(rail, previous, fix) ?: return false
+            val from = pair.second.fraction * pair.second.length
+            val remaining = pair.second.length - from
+            if ((fromOrigin > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
+                    remaining + 2 * fix.accuracyMeters < from) &&
+                (pair.second.fraction - pair.first.fraction) * pair.second.length >= supportedMovement &&
+                fromOrigin - priorFromOrigin >= trendChange) {
+                establishGpsCursor()
+                advance()
+                return true
+            }
+            return false
+        }
         if ((fromOrigin > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
                 toNext + 2 * fix.accuracyMeters < fromOrigin) &&
             departureMovement >= supportedMovement && fromOrigin - priorFromOrigin >= trendChange &&
@@ -586,13 +640,14 @@ class StationTrackingEngine(
         }
     }
 
-    private fun recoverPassedStopAfterGap(previous: LocationFix, fix: LocationFix): Boolean {
+    private fun recoverPassedStopAfterGap(previous: LocationFix, fix: LocationFix, nowMillis: Long): Boolean {
         val stop = currentStop() ?: return false
         if (gapPassCandidateKey != stop.key || stop.isDestination ||
             fix.timeMillis - previous.timeMillis > MAX_FIX_AGE_MILLIS
         ) return false
         val next = route.drop(state.nextIndex + 1).firstOrNull { !it.cancelled } ?: return false
         if (!hasCoordinates(stop) || !hasCoordinates(next)) return false
+        if (!hasMovementOnCurrentBasis(previous)) return false
         val latitude = stop.latitude ?: return false
         val longitude = stop.longitude ?: return false
         val nextLatitude = next.latitude ?: return false
@@ -606,6 +661,21 @@ class StationTrackingEngine(
         val trendChange = max(5.0, fix.accuracyMeters * 0.1)
         val departureMovement = max(fromStop - priorFromStop,
             fromStop - (minimumDistance ?: priorFromStop))
+        val rail = railSegment(stop, next, nowMillis)
+        if (rail != null) {
+            val pair = directedRailPair(rail, previous, fix) ?: return false
+            val from = pair.second.fraction * pair.second.length
+            val remaining = pair.second.length - from
+            if ((fromStop > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
+                    remaining + 2 * fix.accuracyMeters < from) &&
+                (pair.second.fraction - pair.first.fraction) * pair.second.length >= movement &&
+                fromStop - priorFromStop >= trendChange) {
+                establishGpsCursor()
+                advance()
+                return true
+            }
+            return false
+        }
         if ((fromStop > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
                 toNext + 2 * fix.accuracyMeters < fromStop) &&
             departureMovement >= movement && fromStop - priorFromStop >= trendChange &&
@@ -620,13 +690,13 @@ class StationTrackingEngine(
     }
 
     /** Pure preview: no observation, arrival or speech state is consumed here. */
-    private fun canAdvanceObservedVisit(fix: LocationFix, previous: LocationFix?): Boolean {
+    private fun canAdvanceObservedVisit(fix: LocationFix, previous: LocationFix?, nowMillis: Long): Boolean {
         val stop = currentStop() ?: return false
         if (observedKey != stop.key || !hasCoordinates(stop) || previous == null ||
             fix.timeMillis - previous.timeMillis !in 1..MAX_FIX_AGE_MILLIS
         ) return false
         val distance = distanceMeters(fix.latitude, fix.longitude, stop.latitude!!, stop.longitude!!)
-        return shouldAdvanceCurrentStop(stop, fix, previous, distance)
+        return shouldAdvanceCurrentStop(stop, fix, previous, distance, nowMillis)
     }
 
     /** Shared by the priority preview and the actual current-visit observation. */
@@ -634,13 +704,14 @@ class StationTrackingEngine(
         stop: TrackingStop,
         fix: LocationFix,
         previousFix: LocationFix?,
-        distance: Double
+        distance: Double,
+        nowMillis: Long
     ): Boolean {
         val previous = previousDistance ?: return false
         val rising = distance > previous + max(5.0, fix.accuracyMeters * 0.1)
         val riseFromMinimum = distance - minOf(minimumDistance ?: distance, distance)
         val towardSuccessor = previousFix != null &&
-            movingTowardSuccessor(stop, previousFix, fix, distance, riseFromMinimum)
+            movingTowardSuccessor(stop, previousFix, fix, distance, riseFromMinimum, nowMillis)
         val leftArrival = !stop.isDestination && state.arrivedAtCurrent && rising &&
             (distance > DEPARTURE_RADIUS_METERS || towardSuccessor) &&
             riseFromMinimum >= DEPARTURE_INCREASE_METERS
@@ -657,11 +728,22 @@ class StationTrackingEngine(
         previous: LocationFix,
         fix: LocationFix,
         fromStop: Double,
-        riseFromMinimum: Double
+        riseFromMinimum: Double,
+        nowMillis: Long
     ): Boolean {
         if (fix.timeMillis - previous.timeMillis !in 1..MAX_FIX_AGE_MILLIS) return false
         val next = route.drop(state.nextIndex + 1).firstOrNull { !it.cancelled } ?: return false
         if (!hasCoordinates(stop) || !hasCoordinates(next)) return false
+        if (!hasMovementOnCurrentBasis(previous)) return false
+        val rail = railSegment(stop, next, nowMillis)
+        if (rail != null) {
+            val pair = directedRailPair(rail, previous, fix) ?: return false
+            val progress = pair.second.fraction * pair.second.length
+            val movement = (pair.second.fraction - pair.first.fraction) * pair.second.length
+            return movement >= max(DEPARTURE_INCREASE_METERS,
+                (fix.accuracyMeters + previous.accuracyMeters) / 2) &&
+                pair.second.length - progress + 2 * fix.accuracyMeters < progress
+        }
         val nextLatitude = next.latitude ?: return false
         val nextLongitude = next.longitude ?: return false
         val toNext = distanceMeters(fix.latitude, fix.longitude, nextLatitude, nextLongitude)
@@ -675,6 +757,53 @@ class StationTrackingEngine(
         // closest observed position. A sparse pair can provide it directly.
         return approachingNext && max(priorToNext - toNext, riseFromMinimum) >= supportedMovement &&
             toNext + 2 * fix.accuracyMeters < fromStop
+    }
+
+    private fun railSegment(from: TrackingStop, to: TrackingStop, nowMillis: Long): TrackingRouteGeometry.Segment? {
+        if (!hasCoordinates(from) || !hasCoordinates(to) || from.key.isBlank() || to.key.isBlank() ||
+            route.count { it.key == from.key } != 1 || route.count { it.key == to.key } != 1) return null
+        val binding = segmentGeometries.filter { it.source == GpsGeometrySource.TRIP_POLYLINE &&
+            it.fromKey == from.key && it.toKey == to.key }.singleOrNull() ?: return null
+        if (binding.geometry.fetchedAtMillis <= 0 || nowMillis - binding.geometry.fetchedAtMillis !in 0..900_000L) return null
+        val first = RoutePoint(from.latitude!!, from.longitude!!)
+        val last = RoutePoint(to.latitude!!, to.longitude!!)
+        val key = from.key to to.key
+        val cached = preparedRail[key]
+        if (cached == null || cached.binding != binding || cached.from != first || cached.to != last) {
+            preparedRail[key] = PreparedRail(binding, first, last,
+                TrackingRouteGeometry.prepare(binding.geometry, from, to, binding.source, nowMillis))
+        }
+        return preparedRail[key]?.segment
+    }
+
+    private fun observeMovementBasis(fix: LocationFix, nowMillis: Long) {
+        val from = currentStop() ?: return
+        val to = route.drop(state.nextIndex + 1).firstOrNull { !it.cancelled } ?: return
+        val points = railSegment(from, to, nowMillis)?.paths?.singleOrNull()?.points
+        val first = if (hasCoordinates(from)) RoutePoint(from.latitude!!, from.longitude!!) else null
+        val last = if (hasCoordinates(to)) RoutePoint(to.latitude!!, to.longitude!!) else null
+        val basis = MovementBasis(from.key, to.key, first, last, points)
+        if (basis != movementBasis) {
+            movementBasis = basis
+            // The first new fix on a changed projection basis cannot reuse an
+            // earlier fix as its second departure/shortcut observation.
+            movementBasisSinceMillis = fix.timeMillis
+        }
+    }
+
+    private fun hasMovementOnCurrentBasis(previous: LocationFix): Boolean =
+        movementBasis != null && previous.timeMillis >= movementBasisSinceMillis
+
+    private fun directedRailPair(segment: TrackingRouteGeometry.Segment, previous: LocationFix,
+                                 fix: LocationFix): Pair<TrackingRouteGeometry.Projection, TrackingRouteGeometry.Projection>? {
+        val elapsed = fix.timeMillis - previous.timeMillis
+        if (elapsed !in 1..MAX_FIX_AGE_MILLIS) return null
+        val path = segment.paths.singleOrNull() ?: return null
+        val prior = TrackingRouteGeometry.project(path, previous).projection ?: return null
+        val current = TrackingRouteGeometry.project(path, fix).projection ?: return null
+        val movement = (current.fraction - prior.fraction) * path.length
+        return (prior to current).takeIf { movement >= 0.0 && movement <=
+            RECOVERY_MAX_SPEED_METERS_PER_SECOND * elapsed / 1000.0 + previous.accuracyMeters + fix.accuracyMeters }
     }
 
     private fun currentStop(): TrackingStop? = route.getOrNull(state.nextIndex)

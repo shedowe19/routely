@@ -9,6 +9,7 @@ Erklärt, wie Daten im Netzwerk modelliert und lokal gespeichert sind.
 - `app/src/main/kotlin/de/traewelling/app/data/model/Models.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/model/SevModels.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/model/RoadRouteModels.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/model/TransitRouteModels.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/local/StatusEntity.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
@@ -122,6 +123,7 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 | `TrackingStop.plannedDepartureMillis` | Geplante Abfahrt des konkreten Besuchs, getrennt von `effectiveDepartureMillis`; optional für alte Cache-Routen. |
 | `TrackingLiveState.gpsTimes` | Optionales prozesslokales Ergebnis der GPS-Zeitauswertung; nur passende eigene aktive Fahrt, nicht serialisiert. |
 | `TrackingLiveState.sessionRevision` | Bindet den RAM-Livezustand an die Zugangsgeneration; gleicher numerischer Status eines anderen Kontos darf ihn nicht übernehmen. Kein Fahrtcache-Feld und keine Zugangsdaten. |
+| `TrackingLiveState.gpsGeometrySource` | Optional `TRIP_POLYLINE` beziehungsweise `ROAD_MODEL` aus der aktuellen Zeitauswertung, sonst frischer aktiver Railprojektion der Stationsengine. Kein Prefetchmarker oder ETA-Beleg; nicht persistiert. |
 | `RideRecognitionState.authSessionRevision` | Bindet prozesslokale Fahrtvorschläge an dieselbe aktuelle Zugangsgeneration; das Check-in-ViewModel verwirft fremde oder frühere Revisionen. Nicht persistiert. |
 | `GpsStopTime` | Besuchsschlüssel, Station-ID, Plan-Ankunft/-Abfahrt und optionale lokale Ankunft/-Abfahrt; Flags unterscheiden beobachtet und geschätzt. |
 | `GpsJourneyTimes` | Liste besuchsbezogener GPS-Zeiten, Unterstützungs-Fixzeitpunkt und Gültigkeitsende; spätestens nach 30 Sekunden unbrauchbar. Geeignete Folgefixes ohne neue Prognose dürfen das Ende nicht verlängern. |
@@ -143,17 +145,21 @@ Die Modelle in `SevModels.kt` ergänzen die öffentliche Bahnhofskarte, ohne den
 
 Die Zuordnung bleibt lokal. API-Stations-ID, Stopover-UUID, Plan-/Echtzeit und Check-in-Werte behalten ihre Identität und Bedeutung; es werden keine SEV-Koordinaten per Status-PUT übertragen. Die Auflösungsregeln und Lebensdauer stehen unter [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
 
-### Lokale Straßen-Geometrien
+### Lokale Linienzug-Geometrien
 
-`RoadRouteModels.kt` trennt mögliche Straßenwege von den öffentlichen SEV-Punkten und den Gerätefixes:
+`RoadRouteModels.kt` definiert gemeinsame Geometrieformen; `TransitRouteModels.kt` ergänzt die native Fahrtbindung. Quellen bleiben ausdrücklich getrennt von Gerätefixes:
 
 | Modell | Bedeutung und Lebensdauer |
 | --- | --- |
 | `RoutePoint` | Benannter Breitengrad/Längengrad eines öffentlichen Haltpunkts oder Geometrieknotens; kein Gerätefix für Routinganfragen. |
-| `RoadRouteGeometry` | Geordnete öffentliche Endpunkte `from`/`to`, bis zu drei validierte Linienzüge in `alternatives` und `fetchedAtMillis`; RAM-Geometrie ohne Provider-ETA. |
-| `GpsSegmentGeometry` | Bindet `geometry` über `fromKey` und `toKey` an zwei konkrete geordnete Haltbesuche, auch bei wiederholten Stationsbesuchen. |
+| `RouteGeometry` / Alias `RoadRouteGeometry` | Geordnete Endpunkte `from`/`to`, Kandidatenlinienzüge in `alternatives` und `fetchedAtMillis`; keine Provider-ETA. Road erlaubt bis zu drei, native Abschnitte genau einen Kandidaten. |
+| `GpsGeometrySource` | `ROAD_MODEL` für approximative SEV-Straßenwege beziehungsweise `TRIP_POLYLINE` für einen nativen Träwelling-Streckenverlauf. |
+| `GpsSegmentGeometry` | Bindet `geometry` über `fromKey`, `toKey` und `source` an zwei konkrete geordnete Haltbesuche, auch bei wiederholten Stationsbesuchen. Bestehende Road-Aufrufer behalten `ROAD_MODEL` als Standard. |
+| `TransitRouteVisit` | Besuchsschlüssel, Stations-ID/-UUID, nullable Planpaar, öffentliche Stationskoordinate und Ausfallstatus; keine Echtzeit, Gleise oder Geräteposition. |
+| `TransitRouteRequest` | Status-ID, Tripidentität und vollständige geordnete Check-in-Besuchsfolge inklusive gestrichener Zwischenbesuche. |
+| `TransitRouteGeometry` | Derselbe Request, eindeutig gebundene verwendbare Abschnitte und Abrufzeit; native Form höchstens 15 Minuten verwendbar. |
 
-Nur die lokale [GPS-Zeitauswertung](../module/gps-zeiten.md) verwendet geeignete Wege als räumliche Projektion. Das Pkw-Modell ist keine offizielle SEV-Busroute; seine Fahrtdauer wird nicht übernommen. Gerätepositionen werden nicht an den Router gesendet. Geometrien bleiben in Service-/Repository-RAM und erweitern weder Room noch `trip_tracking_state`; ein Neustart übernimmt keine persistierte Straßen-Geometrie. Ein alleiniger Formwechsel verwirft die Zukunftsprognose und das Bewegungsfenster, erhält aber bestätigte tatsächliche Ereignisse bei unveränderter Besuchs-/Haltbasis.
+Die lokale [GPS-Zeitauswertung](../module/gps-zeiten.md) projiziert auf geeignete Formen. Native Abschnitte können zusätzlich gerichtete Trackinghilfen stützen; physische Ankunft und Zielabschluss bleiben Stationsbelege. Das Pkw-Modell ist keine offizielle SEV-Busroute; der native Backend-Linienzug ist ebenfalls keine garantierte aktuelle Gleisführung. Weder eine Routingdauer noch ein Netzabschluss erzeugt eine GPS-Istzeit. Gerätepositionen werden nicht an diese Quellen gesendet. Geometrien bleiben in Service-/Repository-RAM und erweitern weder Room noch `trip_tracking_state`; ein Neustart übernimmt keine persistierte Geometrie. Ein tatsächlicher Formwechsel verwirft Zukunftsprognose und Bewegungsfenster, erhält aber bestätigte tatsächliche Ereignisse bei unveränderter Besuchs-/Haltbasis.
 
 ### List<StopStation>.deduplicate()
 

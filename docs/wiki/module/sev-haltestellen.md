@@ -71,6 +71,8 @@ Das ViewModel veröffentlicht die API-Antwort vor seiner separaten Anreicherung 
 
 Die SEV-Punkte verbessern den Bezugspunkt der Halterkennung. Sie enthalten selbst keinen Busfahrweg. Für die GPS-Zeitprognose lädt der Service zusätzlich optionale Straßen-Geometrien zwischen eindeutig aufgelösten aufeinanderfolgenden Ersatzhalten. Diese vom FOSSGIS-OSRM-Dienst berechneten Pkw-Wege sind ein Modell möglicher Straßenführung, keine offiziellen SEV-Routen. Der Schätzer verwirft unpassende oder mehrdeutige Wege; fehlende Straßen-Geometrie wird für SEV nicht durch die Bahnhofsluftlinie ersetzt. Genauigkeits-, Bewegungs- und Gültigkeitsgrenzen bleiben erhalten. Einzelheiten: [GPS-Zeiten](./gps-zeiten.md).
 
+Die zusätzliche native Bahn-/Tram-Quelle verwendet dieselbe lokale Projektionshilfe, bleibt aber von SEV ausgeschlossen. Eine Träwelling-Statusform darf weder fehlende Ersatzhaltbelege noch fehlende SEV-Straßen-Geometrie ersetzen. Der Quellenhinweis `SEV-Straßenmodell` benennt eine tatsächlich gestützte Straßenprojektion, keine bloß geladene Form und keine Zusicherung einer GPS-ETA.
+
 Beim Nutzerbericht zur Gegenrichtung Duisburg → Mülheim → Essen kann daher die GPS-Haltmarkierung bereits aktiv sein, während Ankunftszeiten aus dem Fahrplan stammen. Der Besuchscursor benötigt andere Belege als die Zeitprognose. Die spätere Aufnahme nennt `OUTSIDE_CORRIDOR`, rekonstruiert aber weder den vollständigen Fixverlauf noch den tatsächlichen Busweg oder eine beobachtete Abfahrt. Bestätigte lokale Ereignisse und künftige ETA werden getrennt veröffentlicht; Gründe für einen Prognoserückfall stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 ### Getrennter Abruf der Straßen-Geometrie

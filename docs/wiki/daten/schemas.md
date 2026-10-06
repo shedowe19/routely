@@ -40,6 +40,8 @@ Der SHA-256-Digest partitioniert den Cache, ohne den Bearer-Token als Cachekey z
 
 Das Wiederherstellen vertraut nicht unmittelbar auf eine frühere Auflösung: Quellenalter, Maßnahmendatum und Richtung werden erneut geprüft. Gerätepositionen, Bewegungshistorie und GPS-Zeitprognosen werden nicht in diesen Feldern gespeichert. Details zum Schreiben/Löschen: [PreferencesManager](../konfiguration/preferences-manager.md).
 
+Native Träwelling-Linienzüge und SEV-Straßen-Geometrien sind keine zusätzlichen Schemafelder. Beide bleiben im RAM; die restaurierte Haltfolge bildet bei sichtbarem Wiederanlauf nur die Basis für neue passende Geometrieabrufe. Quelle und Lebensdauer stehen unter [GPS-Zeiten](../module/gps-zeiten.md).
+
 ## Verwandte Seiten
 
 - [Datenbank](./datenbank.md)

@@ -55,6 +55,8 @@ Ein TTS-Fehler beziehungsweise Abbruch kann den noch aktuellen Ansageschlüssel 
 
 Die [SEV-Ergänzung](../module/sev-haltestellen.md) erweitert das vorhandene Fahrtcache-JSON optional um `fullStopovers` (vollständige API-Fahrt als Richtungskontext) und `sevMaps` (öffentliche Bahnhofskarten mit Abrufzeit). Es wird kein eigener Preference-Key eingeführt. Alte Version-1-Einträge ohne diese Felder werden mit vorhandener Haltfolge beziehungsweise leerer SEV-Quelle gelesen. Wiederhergestellte Quellen werden gegen Alter, Datum und Richtung erneut aufgelöst; die persistierten Karten enthalten öffentliche Bahnhof-/Ersatzhaltpunkte, keine GPS-Gerätepositionen oder Bewegungshistorie.
 
+Native Bahn-/Tram-Linienzüge und OSRM-Straßen-Geometrien bleiben ausschließlich im RAM, ohne zusätzliche Preference oder Erweiterung des Fahrtcache-JSON. Nach Wiederanlauf muss die zur restaurierten Haltfolge passende Geometrie erneut geladen werden. Ein Download speichert keinen Gerätefix und verlängert keine GPS-Zeitgültigkeit.
+
 ### Reisebegleitung
 
 | Key | Flow / Standard | Beschreibung |

@@ -32,7 +32,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil.compose.AsyncImage
+import coil3.compose.AsyncImage
+import de.traewelling.app.data.model.GpsGeometrySource
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.model.Status
@@ -395,6 +396,18 @@ private fun StatusDetailContent(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                     )
+                                    if (timelineProgress.source == TimelinePositionSource.GPS) {
+                                        uiState.trackingState?.gpsGeometrySource?.let { source ->
+                                            Text(
+                                                when (source) {
+                                                    GpsGeometrySource.TRIP_POLYLINE -> "Streckenbasis: Träwelling-Streckenverlauf"
+                                                    GpsGeometrySource.ROAD_MODEL -> "Streckenbasis: SEV-Straßenmodell"
+                                                },
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                            )
+                                        }
+                                    }
                                     gpsTimeReasonMessage?.let { reason ->
                                         Text(
                                             reason,

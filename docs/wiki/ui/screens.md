@@ -52,6 +52,8 @@ Die Status-Detail-Timeline nutzt für die eigene aktive Fahrt einen gemeinsamen 
 
 Header und Haltzeiten verwenden den gemeinsamen `JourneyTimeResolver` einschließlich frischer lokaler [GPS-Zeiten](../module/gps-zeiten.md). Jede Zeit kennzeichnet beobachtet, geschätzt, manuell, API-Echtzeit oder Fahrplan. GPS-Verlust wechselt die Zeitquelle, ohne für eine etablierte eigene Fahrt einen neuen Uhrzeitcursor zu erfinden. Fremde oder frühere Fahrten erhalten keine aktuellen GPS-Prognosen; das Bearbeitungsformular bleibt ebenfalls ohne GPS-Werte.
 
+Bei GPS-Fortschritt kennzeichnet StatusDetail einen tatsächlich verwendeten nativen `Träwelling-Streckenverlauf` oder ein `SEV-Straßenmodell` getrennt von der Zeitquelle. Eine frische eindeutige Railprojektion kann diesen Hinweis auch ohne GPS-ETA liefern. Nur vorgeladene, abgelaufene oder nicht sicher verwendete Formen erhalten keinen Quellenhinweis; ein leerer Quellenwert wird nicht pauschal als Haltgerade beschriftet.
+
 Die Einstellungs-Card `Begleitung bei ausgeschaltetem Display` liest den Akkuoptimierungsstatus direkt aus Android und aktualisiert ihn bei Rückkehr in die sichtbare Activity. Eine Ausnahme wird ausschließlich über einen ausdrücklichen Nutzertipp auf die Systemfreigabe angefragt. Sie ist kein gespeicherter App-Schalter; Start-/Fallbackverhalten steht unter [Settings](../module/settings.md).
 
 ## Verwandte Seiten

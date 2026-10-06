@@ -61,6 +61,7 @@ Der Main-Audit vom 06.10.2026 ergänzt die bestehenden Verträge für [Sitzungen
 
 - [Entscheidungen](./entscheidungen/README.md)
 - [ADR Template](./entscheidungen/adr-template.md)
+- [Native Bahn-/Tram-Streckenverläufe](./entscheidungen/2026-10-06-native-streckenverlaeufe.md)
 
 ## UI
 

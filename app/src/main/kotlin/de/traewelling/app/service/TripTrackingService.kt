@@ -46,6 +46,7 @@ import de.traewelling.app.data.sev.SevJourneyEnricher
 import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.data.routing.RoadRouteRepository
+import de.traewelling.app.data.routing.TransitRouteRepository
 import de.traewelling.app.util.PreferencesManager
 import de.traewelling.app.util.AuthSession
 import kotlinx.coroutines.CancellationException
@@ -99,6 +100,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private var roadRequestWindow: List<RoadSegmentRequest> = emptyList()
     private val cachedRoadRoutes = linkedMapOf<RoadSegmentRequest, RoadRouteGeometry>()
     private val roadAttempts = linkedMapOf<RoadSegmentRequest, Long>()
+    private var transitRouteJob: Job? = null
+    private var transitRouteRepository: TransitRouteRepository? = null
+    private val transitRoutes = TransitRouteTrackingCache()
+    private var lastTransitAttemptMillis: Long? = null
     private var wakeLockRenewalJob: Job? = null
     private var trackingWakeLock: TrackingWakeLockLease? = null
     private var currentStatusId: Int? = null
@@ -451,6 +456,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             tickJob?.cancel()
             sevJob?.cancel()
             clearRoadRoutes()
+            clearTransitRoutes()
             releaseTrackingWakeLock()
             completionJob?.cancel()
             completionStatusId = null
@@ -520,6 +526,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                             }
                         }
                         revalidateSevStops(System.currentTimeMillis())
+                        syncTransitRoutes(System.currentTimeMillis())
                         engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
                     }
                     delay(TICK_INTERVAL_MILLIS)
@@ -633,6 +640,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             if (existingEngine == null) engine = StationTrackingEngine(trackingStops, radiusMeters = radiusMeters)
             else existingEngine.updateRoute(trackingStops)
             val currentEngine = engine ?: return@withLock
+            syncTransitRoutes(System.currentTimeMillis())
             val relevantChanges = if (SevStopResolver.isReplacementBus(checkin))
                 changes.filterNot { it.kind == TripChangeKind.PLATFORM } else changes
             deliverTripChanges(relevantChanges, statusId, expectedGeneration)
@@ -728,10 +736,79 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     private fun segmentGeometries(progress: TrackingProgress, nowMillis: Long): List<GpsSegmentGeometry> =
-        roadWindow(progress).mapNotNull { request ->
+        transitRoutes.segments(nowMillis) + roadWindow(progress).mapNotNull { request ->
             cachedRoadRoutes[request]?.takeIf { RoadRouteSelection.usable(request, it, nowMillis) }
                 ?.let { GpsSegmentGeometry(request.fromKey, request.toKey, it) }
         }
+
+    /** Route ownership excludes realtime/platforms, but includes every ordered visit and planned marker. */
+    private fun syncTransitRoutes(nowMillis: Long) {
+        val statusId = currentStatusId
+        val session = currentAuthSession
+        val checkin = cachedCheckin
+        val request = if (statusId != null && session != null && checkin != null &&
+            !stopping && completionStatusId == null && gpsRequestedByActivity && gpsPreferenceEnabled
+        ) TransitRouteSelection.request(statusId, checkin, cachedFullStops, cachedStops,
+            cachedStops.mapIndexed { index, stop -> stopKey(stop, index) }) else null
+        val lease = if (request != null && session != null && statusId != null)
+            TransitRouteTrackingCache.Lease(statusId, generation, session, request) else null
+        if (transitRoutes.bind(lease)) {
+            transitRouteJob?.cancel()
+            transitRouteJob = null
+            transitRouteRepository?.close()
+            transitRouteRepository = null
+            lastTransitAttemptMillis = null
+        }
+        engine?.updateSegmentGeometries(transitRoutes.segments(nowMillis))
+    }
+
+    private fun clearTransitRoutes() {
+        transitRouteJob?.cancel()
+        transitRouteJob = null
+        transitRouteRepository?.close()
+        transitRouteRepository = null
+        transitRoutes.bind(null)
+        lastTransitAttemptMillis = null
+        engine?.updateSegmentGeometries(emptyList())
+    }
+
+    /** The session-owned HTTP request never holds trackingMutex and contains no device location. */
+    private fun scheduleTransitRoute(statusId: Int, expectedGeneration: Long, nowMillis: Long) {
+        if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return
+        val lease = transitRoutes.lease ?: return
+        if (transitRouteJob?.isActive == true || !transitRoutes.needsRefresh(nowMillis) ||
+            lastTransitAttemptMillis?.let { nowMillis - it in 0 until TRANSIT_RETRY_INTERVAL_MILLIS } == true
+        ) return
+        val repository = transitRouteRepository ?: runCatching {
+            TransitRouteRepository(lease.session)
+        }.getOrNull()?.also { transitRouteRepository = it } ?: return
+        transitRouteJob = serviceScope.launch {
+            if (!isCurrentTracking(statusId, expectedGeneration) || transitRoutes.lease != lease ||
+                prefs.getAuthSession() != lease.session || !isActive
+            ) return@launch
+            lastTransitAttemptMillis = System.currentTimeMillis()
+            val geometry = try {
+                repository.getRoute(lease.request)
+            } catch (error: CancellationException) {
+                throw error
+            } catch (_: Exception) {
+                null
+            } ?: return@launch
+            trackingMutex.withLock {
+                if (!isActive || !isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null ||
+                    prefs.getAuthSession() != lease.session
+                ) return@withLock
+                val loadedAt = System.currentTimeMillis()
+                // Rebuild from today's complete route before accepting an in-flight result.
+                syncTransitRoutes(loadedAt)
+                if (!isActive || !transitRoutes.adopt(lease, geometry, loadedAt)) return@withLock
+                val currentEngine = engine ?: return@withLock
+                currentEngine.updateSegmentGeometries(transitRoutes.segments(loadedAt))
+                // A loaded path is not a new GPS fix, arrival or directed movement observation.
+                applyUpdate(currentEngine.onTimetable(loadedAt), statusId, expectedGeneration)
+            }
+        }
+    }
 
     /** Network waits run in a separate child; they never delay a GPS update under trackingMutex. */
     private fun scheduleRoadRoutes(statusId: Int, expectedGeneration: Long, progress: TrackingProgress, nowMillis: Long) {
@@ -883,6 +960,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                             if (!isFreshLocation(location)) continue
                             latestLocation = location
                             revalidateSevStops(System.currentTimeMillis())
+                            syncTransitRoutes(System.currentTimeMillis())
                             val currentEngine = engine ?: continue
                             val update = currentEngine.onLocation(toFix(location), System.currentTimeMillis())
                             applyUpdate(update, callbackStatusId, callbackGeneration)
@@ -948,6 +1026,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val progress = engine?.getProgress() ?: return
         val nowMillis = System.currentTimeMillis()
         pruneRoadRoutes(nowMillis)
+        syncTransitRoutes(nowMillis)
         val gpsTimes = gpsJourneyTimes.update(
             route = toTrackingStops(cachedStops, checkin),
             progress = progress,
@@ -970,7 +1049,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             gpsTimes = gpsTimes,
             sevStops = cachedSevStops,
             gpsTimeUnavailableReason = gpsJourneyTimes.unavailableReason(),
-            sessionRevision = session.revision
+            sessionRevision = session.revision,
+            gpsGeometrySource = gpsJourneyTimes.geometrySource() ?: engine?.geometrySource()
         )
         mutableTrackingLiveState.value = liveState
         lastProgressModel = TripProgressModel.from(cachedStops, liveState, destinationName,
@@ -1028,6 +1108,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             } else stopTracking(statusId)
         } else {
             scheduleRoadRoutes(statusId, expectedGeneration, progress, nowMillis)
+            scheduleTransitRoute(statusId, expectedGeneration, nowMillis)
         }
     }
 
@@ -1168,6 +1249,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         tickJob?.cancel()
         sevJob?.cancel()
         clearRoadRoutes()
+        clearTransitRoutes()
         disableLocationUpdates()
         completionJob?.cancel()
         completionJob = serviceScope.launch {
@@ -1280,6 +1362,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val stoppingGeneration = generation
         stopping = true
         clearRoadRoutes()
+        clearTransitRoutes()
         disableLocationUpdates()
         // Keep the current bounded CPU lease through the atomic ID+progress clear.
         // Renewal sees stopping=true, so a stalled commit cannot extend the lease.
@@ -1300,6 +1383,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         tickJob?.cancel()
         sevJob?.cancel()
         clearRoadRoutes()
+        clearTransitRoutes()
         completionJob?.cancel()
         completionStatusId = null
         completionUtteranceId = null
@@ -1326,6 +1410,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     override fun onDestroy() {
         startRequests.clear()
         clearRoadRoutes()
+        clearTransitRoutes()
         releaseTrackingWakeLock()
         disableLocationUpdates()
         publishWidgetWaiting()
@@ -1368,6 +1453,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     companion object {
         private const val ROAD_RETRY_INTERVAL_MILLIS = 60_000L
         private const val MAX_CACHED_ROAD_SEGMENTS = 8
+        private const val TRANSIT_RETRY_INTERVAL_MILLIS = 60_000L
         /** Settings also call this when the service is no longer alive. */
         fun clearChangeNotifications(context: Context) {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager

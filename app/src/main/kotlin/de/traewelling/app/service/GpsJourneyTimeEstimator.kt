@@ -4,6 +4,7 @@ import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.GpsSegmentGeometry
 import de.traewelling.app.data.model.RoadRouteGeometry
 import de.traewelling.app.data.model.RoutePoint
+import de.traewelling.app.data.model.GpsGeometrySource
 import java.time.Instant
 import kotlin.math.abs
 import kotlin.math.cos
@@ -68,8 +69,8 @@ data class GpsJourneyTimes(
 
 /**
  * Derives a local schedule offset from an already GPS-established ordered visit.
- * Between stations it uses supported progress along a validated road path when
- * requested, otherwise a straight stop-to-stop corridor, and the scheduled travel
+ * Between stations it prefers an ordered trip polyline when available, requires
+ * a road path for SEV, otherwise uses the conservative stop corridor and scheduled travel
  * interval, never instantaneous distance/speed. Corridors are conservative: parallel routes may
  * leave future events to the original API/plan times. Confirmed actual events can
  * still be published independently while the location and ordered visit stay valid.
@@ -85,14 +86,14 @@ class GpsJourneyTimeEstimator {
     private data class ObservedVisit(val arrival: Long, var departure: Long? = null)
     private data class SegmentSample(
         val key: String, val fix: LocationFix, val fraction: Double, val segmentMeters: Double,
-        val path: List<RoutePoint>? = null, val uniqueRoadCandidate: Boolean = false
+        val path: TrackingRouteGeometry.Path? = null, val uniqueRoadCandidate: Boolean = false
     )
     private data class Projection(
-        val fraction: Double, val length: Double, val path: List<RoutePoint>? = null,
+        val fraction: Double, val length: Double, val path: TrackingRouteGeometry.Path? = null,
         val across: Double = 0.0, val uniqueRoadCandidate: Boolean = false
     )
-    private data class RoadShape(val from: RoutePoint, val to: RoutePoint, val alternatives: List<List<RoutePoint>>)
-    private data class RoadSegment(val paths: List<List<RoutePoint>>)
+    private data class RoadShape(val from: RoutePoint, val to: RoutePoint, val alternatives: List<List<RoutePoint>>,
+                                 val source: GpsGeometrySource)
     private data class RoadProjection(val projection: Projection?, val ambiguous: Boolean = false)
 
     private var baseline: List<Baseline>? = null
@@ -102,11 +103,15 @@ class GpsJourneyTimeEstimator {
     private var cached: GpsJourneyTimes? = null
     private var cachedHasForecast = false
     private var cachedRequiresRoadGeometry = false
-    private var roadMode = false
+    private var roadMode: GpsGeometrySource? = null
     private var geometrySegmentKey: Pair<String, String>? = null
     private var geometryShape: RoadShape? = null
-    private var selectedRoadPath: List<RoutePoint>? = null
-    private var lockedRoadPath: List<RoutePoint>? = null
+    private var selectedRoadPath: TrackingRouteGeometry.Path? = null
+    private var lockedRoadPath: TrackingRouteGeometry.Path? = null
+    private var activeGeometrySource: GpsGeometrySource? = null
+    private var preparedGeometry: RoadRouteGeometry? = null
+    private var preparedSegment: TrackingRouteGeometry.Segment? = null
+    private var preparedEndpoints: Pair<RoutePoint, RoutePoint>? = null
     private var forecastUnavailableReason: GpsTimeUnavailableReason? = GpsTimeUnavailableReason.NO_FRESH_LOCATION
     private val arrivals = mutableMapOf<String, ArrivalCandidate>()
     private val observed = mutableMapOf<String, ObservedVisit>()
@@ -130,6 +135,10 @@ class GpsJourneyTimeEstimator {
     /** Observed event times may still be available while this forecast reason is non-null. */
     @Synchronized
     fun unavailableReason(): GpsTimeUnavailableReason? = forecastUnavailableReason
+
+    /** The currently supported incoming projection, never a merely prefetched shape. */
+    @Synchronized
+    fun geometrySource(): GpsGeometrySource? = activeGeometrySource
 
     @Synchronized
     fun update(
@@ -176,13 +185,17 @@ class GpsJourneyTimeEstimator {
         val stop = route[currentIndex]
         val previousIndex = (currentIndex - 1 downTo 0).firstOrNull { !route[it].cancelled }
         val previousStop = previousIndex?.let(route::get)
+        val requestedSource = if (useRoadGeometry) GpsGeometrySource.ROAD_MODEL else GpsGeometrySource.TRIP_POLYLINE
         val candidateGeometry = previousStop?.let { previous ->
-            segmentGeometries.filter { it.fromKey == previous.key && it.toKey == stop.key }.singleOrNull()?.geometry
+            segmentGeometries.filter { it.fromKey == previous.key && it.toKey == stop.key &&
+                it.source == requestedSource }.singleOrNull()?.geometry
         }
-        val roadSegment = if (useRoadGeometry && previousStop != null)
-            validateRoad(candidateGeometry, previousStop, stop, nowMillis) else null
-        updateRoadBasis(useRoadGeometry, previousStop?.let { it.key to stop.key }, candidateGeometry)
-        if (useRoadGeometry && previousStop != null && roadSegment == null && cachedRequiresRoadGeometry) {
+        val roadSegment = previousStop?.let { validateRoad(candidateGeometry, it, stop, requestedSource, nowMillis) }
+        val projectionSource = if (useRoadGeometry) GpsGeometrySource.ROAD_MODEL else roadSegment?.source
+        val usesPolyline = projectionSource != null
+        updateRoadBasis(projectionSource, previousStop?.let { it.key to stop.key },
+            candidateGeometry.takeIf { roadSegment != null })
+        if (usesPolyline && previousStop != null && roadSegment == null && cachedRequiresRoadGeometry) {
             clearPredictionState()
             forecastUnavailableReason = GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE
         }
@@ -205,6 +218,7 @@ class GpsJourneyTimeEstimator {
             return if (sameFixAndVisit) publishObservedOnly(route, currentIndex, currentFix) else null
         }
         highestFixTime = currentFix.timeMillis
+        activeGeometrySource = null
         val previousFix = lastFix?.takeIf { currentFix.timeMillis - it.timeMillis in 1..MAX_FIX_AGE_MILLIS }
         if (lastFix != null && previousFix == null) clearLocationState()
         if (previousFix != null && distance(previousFix.latitude, previousFix.longitude,
@@ -240,21 +254,21 @@ class GpsJourneyTimeEstimator {
             // established approach to this same visit may use the inner arrival
             // zone while its slow-fix/dwell observation is being confirmed.
             val arrivalEndpoint = progress.arrivedAtCurrent && insideStation && lastVisitKey == stop.key
-            val roadProjection = if (useRoadGeometry && roadSegment != null)
+            val roadProjection = if (usesPolyline && roadSegment != null)
                 projectRoad(roadSegment, currentFix, arrivalEndpoint) else null
-            val projection = if (useRoadGeometry) roadProjection?.projection
+            val projection = if (usesPolyline) roadProjection?.projection
                 else project(previousStop, stop, currentFix, arrivalEndpoint)
             val departure = previousStop.plannedDepartureMillis
             val arrival = stop.plannedArrivalMillis
             val supportedRoute = coordinates(previousStop) && departure != null && arrival != null &&
                 arrival - departure in MIN_TRAVEL_MILLIS..MAX_TRAVEL_MILLIS &&
-                (if (useRoadGeometry) roadSegment != null else
+                (if (usesPolyline) roadSegment != null else
                     distance(previousStop.latitude!!, previousStop.longitude!!, stop.latitude!!, stop.longitude!!) in
                         MIN_SEGMENT_METERS..MAX_SEGMENT_METERS)
             val compatible = projection != null &&
                 compatibleProgress(previousStop, stop, previousFix, currentFix, projection, arrivalEndpoint)
             unavailable = when {
-                useRoadGeometry && roadSegment == null -> GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE
+                usesPolyline && roadSegment == null -> GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE
                 !supportedRoute -> GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
                 roadProjection?.ambiguous == true -> GpsTimeUnavailableReason.AMBIGUOUS_ROUTE
                 projection == null -> GpsTimeUnavailableReason.OUTSIDE_CORRIDOR
@@ -262,12 +276,13 @@ class GpsJourneyTimeEstimator {
                 else -> GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
             }
             if (supportedRoute && projection != null && departure != null && arrival != null && compatible) {
-                if (useRoadGeometry && selectedRoadPath != null && selectedRoadPath != projection.path) {
+                if (usesPolyline && selectedRoadPath != null && selectedRoadPath != projection.path) {
                     // A different candidate road must build its own movement support.
                     // Confirmed physical arrivals/departures are independent of that choice.
                     clearPredictionState()
                 }
                 selectedRoadPath = projection.path
+                activeGeometrySource = projectionSource
                 compatiblePosition = true
                 // A station exit can precede the forecast window on a long
                 // segment; capture that event at the engine's visit transition.
@@ -279,7 +294,8 @@ class GpsJourneyTimeEstimator {
                     offsetFromSegment = offset != null
                 } else segmentSamples.clear()
             } else {
-                if (useRoadGeometry && !compatible) clearPredictionState() else segmentSamples.clear()
+                activeGeometrySource = null
+                if (usesPolyline && !compatible) clearPredictionState() else segmentSamples.clear()
             }
         } else {
             segmentSamples.clear()
@@ -331,7 +347,7 @@ class GpsJourneyTimeEstimator {
         }
         cachedHasForecast = times.any { (it.arrivalMillis != null && !it.arrivalObserved) ||
             (it.departureMillis != null && !it.departureObserved) }
-        cachedRequiresRoadGeometry = cachedHasForecast && useRoadGeometry && offsetFromSegment
+        cachedRequiresRoadGeometry = cachedHasForecast && usesPolyline && offsetFromSegment
         forecastUnavailableReason = if (cachedHasForecast) null else unavailable
         return GpsJourneyTimes(currentFix.timeMillis, currentFix.timeMillis + MAX_FIX_AGE_MILLIS, times).also { cached = it }
     }
@@ -495,7 +511,7 @@ class GpsJourneyTimeEstimator {
         observed.clear()
     }
 
-    /** A road choice changes forecasts, never the separately confirmed stop events. */
+    /** A projection basis changes forecasts, never the separately confirmed stop events. */
     private fun clearPredictionState() {
         cached = null
         cachedHasForecast = false
@@ -503,61 +519,47 @@ class GpsJourneyTimeEstimator {
         segmentSamples.clear()
         selectedRoadPath = null
         lockedRoadPath = null
+        activeGeometrySource = null
     }
 
-    private fun updateRoadBasis(enabled: Boolean, key: Pair<String, String>?, geometry: RoadRouteGeometry?) {
-        val shape = geometry?.takeIf { enabled }?.let { route ->
-            RoadShape(route.from, route.to, route.alternatives.map { it.toList() })
+    private fun updateRoadBasis(source: GpsGeometrySource?, key: Pair<String, String>?, geometry: RoadRouteGeometry?) {
+        val shape = geometry?.takeIf { source != null }?.let { route ->
+            RoadShape(route.from, route.to, route.alternatives.map { it.toList() }, source!!)
         }
-        if (enabled != roadMode || (key == geometrySegmentKey && shape != geometryShape)) {
+        if (source != roadMode || (key == geometrySegmentKey && shape != geometryShape)) {
             clearPredictionState()
             forecastUnavailableReason = GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
         } else if (key != geometrySegmentKey) {
-            // An ordered next leg may briefly retain the preceding supported
-            // offset, but must establish its own samples and candidate identity.
+            // Ordered handovers rebuild movement without renewing the old forecast's TTL.
             segmentSamples.clear()
             selectedRoadPath = null
             lockedRoadPath = null
+            activeGeometrySource = null
         }
-        roadMode = enabled
+        roadMode = source
         geometrySegmentKey = key
         geometryShape = shape
     }
 
     private fun validateRoad(
-        geometry: RoadRouteGeometry?, from: TrackingStop, to: TrackingStop, nowMillis: Long
-    ): RoadSegment? {
+        geometry: RoadRouteGeometry?, from: TrackingStop, to: TrackingStop,
+        source: GpsGeometrySource, nowMillis: Long
+    ): TrackingRouteGeometry.Segment? {
+        val ageLimit = if (source == GpsGeometrySource.TRIP_POLYLINE) 900_000L else 86_400_000L
         if (geometry == null || !coordinates(from) || !coordinates(to) || geometry.fetchedAtMillis <= 0 ||
-            nowMillis < geometry.fetchedAtMillis || nowMillis - geometry.fetchedAtMillis > MAX_ROAD_AGE_MILLIS ||
-            geometry.alternatives.size !in 1..MAX_ROAD_ALTERNATIVES ||
-            !validCoordinates(geometry.from.latitude, geometry.from.longitude) ||
-            !validCoordinates(geometry.to.latitude, geometry.to.longitude)
-        ) return null
-        val fromPoint = RoutePoint(from.latitude!!, from.longitude!!)
-        val toPoint = RoutePoint(to.latitude!!, to.longitude!!)
-        if (pointDistance(geometry.from, fromPoint) > 1.0 || pointDistance(geometry.to, toPoint) > 1.0) return null
-        val chord = pointDistance(fromPoint, toPoint)
-        val paths = geometry.alternatives.mapNotNull { points ->
-            if (points.size !in 2..MAX_ROAD_POINTS ||
-                points.any { !validCoordinates(it.latitude, it.longitude) } ||
-                pointDistance(points.first(), fromPoint) > MAX_ROAD_SNAP_METERS ||
-                pointDistance(points.last(), toPoint) > MAX_ROAD_SNAP_METERS
-            ) return@mapNotNull null
-            // Routing engines snap to a road. Short endpoint connectors retain
-            // the verified physical SEV points without relocating arrival zones.
-            val path = buildList {
-                add(fromPoint)
-                points.forEach { if (pointDistance(last(), it) > .01) add(it) }
-                if (pointDistance(last(), toPoint) > .01) add(toPoint)
-            }
-            val length = path.zipWithNext().sumOf { (a, b) -> pointDistance(a, b) }
-            path.takeIf { it.size >= 2 && length.isFinite() && length in MIN_SEGMENT_METERS..MAX_SEGMENT_METERS &&
-                length <= chord * 5 + 1_000.0 }
+            nowMillis - geometry.fetchedAtMillis !in 0..ageLimit) return null
+        val endpoints = RoutePoint(from.latitude!!, from.longitude!!) to RoutePoint(to.latitude!!, to.longitude!!)
+        // Prepared segment lengths are reused across callbacks, not recomputed per fix.
+        if (preparedGeometry != geometry || preparedSegment?.source != source ||
+            preparedEndpoints != endpoints || geometrySegmentKey != (from.key to to.key)) {
+            preparedSegment = TrackingRouteGeometry.prepare(geometry, from, to, source, nowMillis)
+            preparedGeometry = geometry
+            preparedEndpoints = endpoints
         }
-        return paths.takeIf { it.isNotEmpty() }?.let(::RoadSegment)
+        return preparedSegment
     }
 
-    private fun projectRoad(segment: RoadSegment, fix: LocationFix, arrivalEndpoint: Boolean): RoadProjection {
+    private fun projectRoad(segment: TrackingRouteGeometry.Segment, fix: LocationFix, arrivalEndpoint: Boolean): RoadProjection {
         lockedRoadPath?.takeIf { it in segment.paths }?.let { locked ->
             val result = projectPath(locked, fix, arrivalEndpoint)
             if (result.projection != null) {
@@ -580,50 +582,18 @@ class GpsJourneyTimeEstimator {
         return RoadProjection(chosen.copy(uniqueRoadCandidate = supported.size == 1))
     }
 
-    /** All plausible nonadjacent projections must agree; nearest alone is unsafe at crossings. */
-    private fun projectPath(path: List<RoutePoint>, fix: LocationFix, arrivalEndpoint: Boolean): RoadProjection {
-        val lengths = path.zipWithNext().map { (a, b) -> pointDistance(a, b) }
-        val total = lengths.sum()
-        var cumulative = 0.0
-        val candidates = mutableListOf<Projection>()
-        val corridor = max(100.0, fix.accuracyMeters * 2)
-        val supportedEnd = arrivalEndpoint && distance(fix.latitude, fix.longitude,
-            path.last().latitude, path.last().longitude) + fix.accuracyMeters <= ARRIVAL_RADIUS_METERS
-        for (index in lengths.indices) {
-            val from = path[index]
-            val to = path[index + 1]
-            val length = lengths[index]
-            if (length <= .01) continue
-            val longitudeScale = EARTH_RADIUS_METERS * cos(Math.toRadians((from.latitude + to.latitude) / 2))
-            val x = Math.toRadians(to.longitude - from.longitude) * longitudeScale
-            val y = Math.toRadians(to.latitude - from.latitude) * EARTH_RADIUS_METERS
-            val fx = Math.toRadians(fix.longitude - from.longitude) * longitudeScale
-            val fy = Math.toRadians(fix.latitude - from.latitude) * EARTH_RADIUS_METERS
-            val along = (fx * x + fy * y) / (length * length)
-            val clamped = along.coerceIn(0.0, 1.0)
-            val across = hypot(fx - clamped * x, fy - clamped * y)
-            if (!(index == 0 && along < 0.0) &&
-                !(index == lengths.lastIndex && along > 1.0 && !supportedEnd) && across <= corridor
-            ) candidates += Projection((cumulative + clamped * length) / total, total, path, across)
-            cumulative += length
-        }
-        if (candidates.isEmpty()) return RoadProjection(null)
-        val nearest = candidates.minBy { it.across }
-        val plausible = candidates.filter { it.across <= nearest.across + max(10.0, fix.accuracyMeters * 2) }
-        val agreement = max(50.0, fix.accuracyMeters * 2)
-        if (plausible.any { abs(it.fraction - nearest.fraction) * total > agreement }) {
-            return RoadProjection(null, ambiguous = true)
-        }
-        return RoadProjection(nearest)
+    private fun projectPath(path: TrackingRouteGeometry.Path, fix: LocationFix,
+                            arrivalEndpoint: Boolean = false): RoadProjection {
+        val result = TrackingRouteGeometry.project(path, fix, arrivalEndpoint)
+        return RoadProjection(result.projection?.let {
+            Projection(it.fraction, it.length, it.path, it.across)
+        }, result.ambiguous)
     }
 
     private fun projectSamePath(
         from: TrackingStop, to: TrackingStop, fix: LocationFix, current: Projection, arrivalEndpoint: Boolean = false
     ): Projection? = current.path?.let { projectPath(it, fix, arrivalEndpoint).projection }
         ?: if (current.path == null) project(from, to, fix, arrivalEndpoint) else null
-
-    private fun pointDistance(a: RoutePoint, b: RoutePoint): Double =
-        distance(a.latitude, a.longitude, b.latitude, b.longitude)
 
     private fun uniqueVisits(route: List<TrackingStop>): Boolean {
         if (route.any { (it.plannedArrivalMillis != null && it.plannedArrivalMillis <= 0) ||
@@ -679,10 +649,6 @@ class GpsJourneyTimeEstimator {
         private const val MIN_SEGMENT_FRACTION = 0.05
         private const val MAX_SEGMENT_FRACTION = 0.98
         private const val MAX_TRAVEL_SPEED = 100.0
-        private const val MAX_ROAD_AGE_MILLIS = 86_400_000L
-        private const val MAX_ROAD_SNAP_METERS = 150.0
-        private const val MAX_ROAD_ALTERNATIVES = 3
-        private const val MAX_ROAD_POINTS = 5_000
         private const val EARTH_RADIUS_METERS = 6_371_000.0
 
         private fun reliable(fix: LocationFix, nowMillis: Long): Boolean =

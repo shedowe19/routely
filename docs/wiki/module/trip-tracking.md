@@ -10,6 +10,10 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 - `app/src/main/kotlin/de/traewelling/app/service/StationTrackingEngine.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/TrackingRouteGeometry.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/TransitRouteTracking.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/routing/TransitRouteRepository.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/routing/TransitRouteParser.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/routing/RoadRouteRepository.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/routing/RoadRouteParser.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
@@ -83,6 +87,14 @@ Der vorhandene Cache kann `fullStopovers` und `sevMaps` enthalten. Beide Felder 
 
 Bei Bus-RE/RB-Kandidaten werden Bahn-Gleisangaben für Fahrtbenachrichtigung, Widget und TTS unterdrückt. Reine `PLATFORM`-Ereignisse des Änderungsmonitors werden für diese Fahrten nicht zugestellt; andere Änderungshinweise bleiben bestehen. Dies entfernt keine Gleisfelder aus der API und ersetzt sie nicht durch eine erfundene Bussteigangabe.
 
+## Nativer Bahn-/Tramverlauf
+
+Für passende Bahn-/S-/U-Bahn-/Tramkategorien lädt `transitRouteJob` den [Träwelling-Streckenverlauf](./gps-zeiten.md) über `polyline/{statusId}`. Die gesamte eindeutig eingegrenzte eigene Route einschließlich gestrichener Zwischenbesuche bildet die Zuordnungsbasis; unbekannte Kategorien, Busmodus und SEV werden ausgeschlossen. Planmarker, Stationsidentität/-koordinaten und eindeutige Service-Besuchsschlüssel gehören zum Request, Echtzeit-/Gleisänderungen und Gerätefixes nicht. Netzwerk liegt außerhalb des Tracking-Mutex.
+
+Ein sessiongebundenes `TransitRouteRepository` gehört zur aktuellen Lease aus Status-ID, Fahrtgeneration, Auth-Snapshot und vollständigem Request. Übernahme prüft diese Basis erneut. Der eigene Service-Cache akzeptiert eine Form höchstens 15 Minuten, erlaubt Refresh ab 14 Minuten und wartet nach fehlgeschlagenem Laden mindestens eine Minute; der Repository-Fehlversuchcache beträgt zwei Minuten. Bei GPS aus, Fahrt-/Sitzungswechsel, Zielabschluss, Beenden und Zerstörung werden Abruf und Repository geschlossen. Ein Netzabschluss führt ausschließlich zur Fahrplanauswertung mit denselben verbrauchten Fixmarkern, nie zu einer neuen GPS-Beobachtung.
+
+Der Parser übernimmt ausschließlich eindeutige geordnete Abschnitte mit zusätzlichem Formbeleg; reine Stationssehnen und mehrdeutige Schleifen liefern keinen neuen Linienzug. `TrackingRouteGeometry` stellt eine gemeinsame Projektion für Zeitschätzer und gerichtete Abfahrts-/Lücken-/Nahhalt-Hilfen bereit. Physische Haltankunft, Zielabschluss, Mehrhalt-Wiederverankerung und der normale Ansageradius bleiben unabhängige Stationsregeln. Eine native Form zertifiziert keine derzeit befahrene offizielle Gleisführung. Ohne geeignete Form bleibt die bisherige konservative Geradenprüfung für normale Bahn/Tram bestehen; der strengere SEV-Straßenvertrag bleibt getrennt.
+
 ## GPS-Trigger und Fortschritt
 
 Die optionale Straßen-Geometrie für SEV-Zeitprognosen verändert die folgenden Regeln der `StationTrackingEngine` nicht. Halterkennung, Ansageradius und Zielabschluss verwenden weiterhin die eigenen geordneten Besuchs- und Entfernungsbelege.
@@ -119,7 +131,7 @@ Die bestätigte Auswahl geht ausschließlich vorwärts zum konkret belegten Besu
 
 Eine Auswahl im äußeren 150-Meter-Bereich kann einen bereits verlassenen Halt treffen. Daher entfernt sie nur den offenen Kandidatenzustand, ohne die Möglichkeit einer weiteren Wiederverankerung zu sperren. Gleiches gilt für eine vorläufige Initialauswahl und weitere Einhalt-Übergänge während dieser Phase. Eine Abfahrt oder Vorbeifahrt bestätigt den verlassenen Besuch, nicht automatisch dessen Nachfolger. Erst eine eigene innere Ankunftsbestätigung des neuen aktuellen Besuchs beziehungsweise der bestätigte Zielabschluss beendet die Wiederfindungsphase; sonst könnte der Cursor nach der ersten Korrektur erneut hängen bleiben.
 
-Diese Wiederverankerung verwendet Haltpunkte, keine echte Schienen-Geometrie. Normale Tram-/Bahnprognosen bleiben bei geraden Haltverbindungen; die optionale SEV-Straßenprojektion wird dadurch nicht verändert. Geräteprüfungen und Regressionen stehen unter [Tests](../entwicklung/tests.md).
+Diese Wiederverankerung verwendet Haltpunkte. Der zusätzlich verfügbare native Linienzug kann andere gerichtete Fortschrittshilfen und Zeitprognosen stützen, ersetzt aber weder den frischen Kandidatenbeleg noch physische Zielankunft. Ohne geeigneten Linienzug bleiben gerade Haltverbindungen verfügbar; die getrennte SEV-Straßenprojektion wird dadurch nicht verändert. Geräteprüfungen und Regressionen stehen unter [Tests](../entwicklung/tests.md).
 
 ### Ansageradius
 
@@ -131,7 +143,7 @@ Standard ist `clamp(geglättete Geschwindigkeit in m/s * 45, 300, 2000)` Meter. 
 | 80 km/h | 1.000 m |
 | 160 km/h | 2.000 m |
 
-Gemessen wird Luftlinie; die Formel garantiert keine 45-Sekunden-Ankunftsprognose. Kurze Stationsabstände, Kurven und Schleifen müssen bei echten Fahrten geprüft werden.
+Der normale Ansageradius misst weiterhin Luftlinie zum physischen Halt, auch wenn die Zeitprojektion einen Linienzug nutzt. Die Formel garantiert keine 45-Sekunden-Ankunftsprognose. Kurze Stationsabstände, Kurven und Schleifen müssen bei echten Fahrten geprüft werden.
 
 ## Fahrplan-Rückfall
 
@@ -147,6 +159,8 @@ Der Fahrplan-Rückfall bestätigt niemals die Zielankunft und beendet die Fahrt 
 
 Nach der Engine-Auswertung verarbeitet `GpsJourneyTimeEstimator` den passenden Fix und die Plan-Ankunft/-Abfahrt der eingegrenzten Route. Geeignete Beobachtungen liefern lokale Istzeiten oder einen konservativen Versatz der kommenden Planzeiten. Eine gerichtete Fixfolge und die geplante Fahrzeit stützen die räumliche Interpolation; Luftlinie geteilt durch Momentangeschwindigkeit ist keine ETA-Methode.
 
+Bei gewöhnlichen Bahn-/Tramfahrten darf ein geeigneter visitgebundener nativer Abschnitt die Geradenprojektion ersetzen. `TrackingLiveState.gpsGeometrySource` verwendet zuerst die aktuelle Zeitauswertung, sonst die frische aktive Railprojektion der Stationsengine: `TRIP_POLYLINE` kennzeichnet einen tatsächlich passenden Träwelling-Linienzug, `ROAD_MODEL` ein SEV-Straßenmodell. `null` behauptet keine sicher verwendete Polyline. Eine aktive Railbasis kann auch bei fehlenden Planmarkern oder über 90 Minuten Fahrintervall sichtbar bleiben, während die Zeitprognose zurückfällt. Fixablauf oder laufende Wiederverankerung lassen den Enginehinweis entfallen. Ein nur geladenes Modell ist kein Beleg einer verwendeten Form oder einer GPS-Prognose; die [Detailansicht](./status-detail.md) erklärt die Quelle.
+
 Bei Bus-RE/RB-Ersatzverkehr benötigt die Abschnittsprognose eine validierte [Straßen-Geometrie](./gps-zeiten.md) zwischen zwei aktuell eindeutig zugeordneten öffentlichen SEV-Punkten. `RoadRouteSelection` wählt höchstens den aktuellen Ankunftsabschnitt und dessen Folgeabschnitt, am Einstieg die ersten zwei passenden Abschnitte; ein nicht bestätigter Ersatzhalt wird nicht überbrückt. `roadRouteJob` lädt dieses Fenster außerhalb der Tracking-Sperre. Vor Übernahme müssen Fahrtgeneration, geordnete Besuchsschlüssel, aktuelles Fenster und physische Endpunkte weiterhin passen. API-/Standortverarbeitung warten nicht auf den Abruf. Native API-Polylines ohne Herkunftsbeleg und gerade Stationsverbindungen dienen nicht als SEV-Rückfall.
 
 Der Schätzer nutzt den lokal passenden Linienzug nur zur Fortschrittsprojektion, nicht die OSRM-Fahrtdauer. Das Pkw-Profil ist kein offizieller Busweg. Fehlende, abgelaufene oder mehrdeutige Geometrie verhindert die bewegungsgestützte Abschnittsprognose. Bestätigte Ereignisse und der bestehende Planversatz aus Aufenthalt am passenden Zwischenhalt bleiben davon getrennt; ohne geeignete lokale Zeit gilt der normale Zeitquellenrückfall. Eine Formänderung desselben Besuchspaars entfernt Bewegung und Zukunftsprognose, erhält jedoch bestätigte tatsächliche Ereignisse derselben Haltbasis; ein zuvor verarbeiteter Fix wird dadurch nicht erneut als Beobachtung verwendet.
@@ -160,6 +174,8 @@ Die Prognosebasis berücksichtigt nur Endpunkte und Linienzüge des aktuell eing
 `trip_tracking_state` speichert ein versioniertes JSON mit Status-ID, Check-in, zuletzt gültiger eingegrenzter Haltfolge und `TrackingProgress` (Cursor, Besuchsschlüssel, innerer Ankunftsstatus, `gpsEstablished`, erfolgreich eingereihte Ansageschlüssel und Abschlussstatus). Standortfixes, Bewegungshistorie, GPS-Istzeiten und GPS-Prognosen bleiben ausschließlich im Speicher; es wird keine GPS-Historie an Träwelling gesendet und kein automatischer Status-PUT ausgelöst.
 
 Auch die zusätzlichen Straßen-Geometrien bleiben ausschließlich im RAM: höchstens acht besuchsbezogene Service-Abschnitte und ein davon getrennter begrenzter Repository-Cache. Es gibt dafür kein neues DataStore-Feld und keine Cache-Migration. Ein laufender Prozess kann noch gültige geladene Wege bei Netzausfall verwenden; nach einem Neustart müssen benötigte Abschnittswege erneut verfügbar werden. GPS aus, Fahrtwechsel, Zielabschluss und Service-Ende beenden die fahrtspezifische Straßen-Anreicherung und verhindern die Übernahme später Ergebnisse. Ein gemeinsam genutzter öffentlicher Repository-Job kann nach Abbruch eines wartenden Service-Jobs noch auf das Request-Limit warten und anschließend den RAM-Cache füllen. Der tatsächliche HTTP-Call hat einen 20-Sekunden-Timeout; die gemeinsame Aufgabe kann keine Fahrt fortsetzen.
+
+Native Bahn-/Tram-Geometrien bleiben ebenfalls unpersistiert: Der sessiongebundene Repository-Cache hält höchstens acht vollständige Request-Ergebnisse und vier laufende Abrufe. Der vorhandene Fahrtcache stellt nach Wiederanlauf lediglich Haltfolge und Besuchsidentität für einen neuen Abruf bereit. Ein noch gültiger bereits geladener Linienzug kann im laufenden Prozess einen Netzausfall überbrücken, aber nicht seinen ursprünglichen 15-Minuten-Ablauf verlängern. Ohne passende Geometrie und GPS-Belege gelten die vorhandenen Geraden-/API-/Planregeln.
 
 Nach mindestens einem erfolgreichen Laden kann diese Route bei API-Ausfällen und nach Service-Neustart wiederverwendet werden. Ohne gültigen Cache und ohne erfolgreiche API-Antwort existiert keine auswertbare Haltfolge. Fortschritt wird nur für die noch aktive Status-ID gespeichert; Fahrtwechsel, Logout und bestätigtes Beenden entfernen den zugehörigen Cache.
 
