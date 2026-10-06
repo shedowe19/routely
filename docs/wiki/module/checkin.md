@@ -87,6 +87,7 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 
 ## Offene Fragen
 
+- TODO: [Main-Review](../entwicklung/main-review-2026-10-06.md), U1/U3/D3: Manuelle Eingaben werden aktuell als Planbesuchsmarker an POST gesendet, Verfrühungen fehlen in der sichtbaren Abfahrtsauswahl, Nearby dedupliziert unterschiedliche Stations-IDs anhand gemeinsamer Namenstokens. Diese Pfade separat korrigieren.
 - TODO: Detailbetrachtung der Deduplizierungslogik bei Haltestellen, da APIs häufig Duplikate (teilweise mit fast identischen Koordinaten und Namen) liefern.
 
 ## Verwandte Seiten

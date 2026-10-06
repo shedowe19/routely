@@ -20,6 +20,7 @@ Der fehlgeschlagene Release-Lauf für `1.7.0` / Version-Code `12` führte zur ex
 
 ## Offene Punkte
 
+- TODO: Vor dem nächsten Release bestehende Tags/Releases ablehnen, höhere Versionscodes verbindlich prüfen, parallele Veröffentlichungen serialisieren und neue Tags mit `target_commitish: ${{ github.sha }}` an den gebauten Commit binden. Der [Main-Review](./main-review-2026-10-06.md), R1–R3, belegt die derzeit erlaubten fehlerhaften Auslöser; eine solche Veröffentlichung wurde nicht durchgeführt.
 - TODO: Play-Store-Release-Prozess dokumentieren, falls ein Store-Deployment vorgesehen ist.
 
 ## Verwandte Seiten

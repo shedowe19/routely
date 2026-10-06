@@ -138,6 +138,7 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 ## Offene Fragen
 
+- TODO: [Main-Review](../entwicklung/main-review-2026-10-06.md), D1/U2/U4: Ein Textedit nach Hintergrund-Zielwechsel kann das alte Ziel zurücksenden; die Timeline bevorzugt auch am Ausstieg das Abfahrtsgleis; erfolgreiche Löschung invalidiert den Feed nicht. Diese bestätigten Befunde sind noch nicht korrigiert.
 - TODO: EditStatusDialog Layout dokumentieren
 
 ## Verwandte Seiten

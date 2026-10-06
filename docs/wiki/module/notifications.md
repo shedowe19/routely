@@ -66,6 +66,7 @@ Unbekannte oder bereits gelesene IDs verringern den Badge nicht. Pro Meldung ist
 
 ## Offene Fragen
 
+- TODO: [Main-Review](../entwicklung/main-review-2026-10-06.md), D2: Nach Abschluss eines Read-POST kann ein schon vorher begonnener GET wieder ungelesene Daten anzeigen. Die bestehende Überlagerung schützt nur noch offene `pendingReads`; parallele normale Count-Anfragen brauchen zusätzlich eine eigene Antwortgeneration.
 - TODO: Meldungen mit auflösbaren Zielinformationen zum zugehörigen Profil oder Status navigieren lassen.
 
 ## Verwandte Seiten

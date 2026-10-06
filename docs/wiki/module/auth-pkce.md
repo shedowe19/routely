@@ -40,6 +40,7 @@ Diese Keys gehören zur revisionsgeschützten Session-Verwaltung unter [Auth](./
 
 ## Offene Fragen
 
+- TODO: Vor Anbindung des ruhenden OAuth-Refreshpfads dessen Token-Erhalt und Fehlercodeauswertung korrigieren. Eine erfolgreiche Antwort ohne neuen Refresh-Token löscht aktuell den bisherigen; jedes HTTP 400 wird als zu löschende Sitzung behandelt. [Main-Review](../entwicklung/main-review-2026-10-06.md), S2, trennt dies vom manuellen Login.
 - TODO: Vollständigen OAuth-UI-Ablauf mit Callback-Verarbeitung, State-Prüfung und Token-Erneuerung anbinden. Der bestehende manuelle Token-Login verwendet kein PKCE.
 
 ## Verwandte Seiten

@@ -34,6 +34,7 @@ Refresh und Feedwechsel ersetzen den bisherigen Ladeauftrag und erhöhen eine Ge
 
 ## Offene Fragen
 
+- TODO: Nach erfolgreichem Löschen im Fahrtdetail bleiben geladene Karte und Room-Feedcache bis zum Refresh erhalten. [Main-Review](../entwicklung/main-review-2026-10-06.md), U4, beschreibt den fehlenden Mutations-/Invalidierungspfad.
 - Keine spezifischen aktuell.
 
 ## Verwandte Seiten

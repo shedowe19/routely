@@ -25,6 +25,7 @@ Der Main-Audit vom 06.10.2026 ergänzt die bestehenden Verträge für [Sitzungen
 - [Setup](./entwicklung/setup.md)
 - [Lokale Entwicklung](./entwicklung/lokale-entwicklung.md)
 - [Tests](./entwicklung/tests.md)
+- [Erneuter Main-Review nach der Streckenmigration](./entwicklung/main-review-2026-10-06.md)
 - [Build](./entwicklung/build.md)
 - [Deployment](./entwicklung/deployment.md)
 

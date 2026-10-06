@@ -223,6 +223,14 @@ Alle vier Artefaktarchive sind dem genannten Code-SHA zugeordnet, ihre ZIP-Diges
 
 TODO: Auf dem Gerät Kurven, parallele Gleise, Rundfahrten, Umleitungen, Tunnel und GPS-Rückkehr, harte Form-/Fixabläufe, Kontowechsel und Netzverlust prüfen. Quellenhinweis und GPS-Zeit müssen unabhängig und fristgerecht zurückfallen. Laufzeit und Speicherverbrauch langer Formen sowie Coil-3-Bilder/HTTP-Cache, Material-3-Refresh und geänderte Compose-Layouts bleiben Geräteprüfungen; es liegt kein aufgezeichneter Nutzer-Fix-/Audioverlauf für diese Erweiterung vor.
 
+## Erneuter Main-Review nach der Streckenmigration
+
+Der eigene [CI-Lauf 37523081347](https://github.com/shedowe19/routely/actions/runs/37523081347) von Main `9415e290309bb3e3d2e108e6ba9ca42f4fe03243` ist ebenfalls erfolgreich: 571 Tests in 37 Klassen, 0 Fehlschläge/Fehler/Skipped, Debug-/unsignierter Release-Build sowie vollständiges Debug-Lint mit 0 Fehlern und 53 Warnungen. Dieser Commit unterscheidet sich vom oben geprüften produktiven `028ffe32…` ausschließlich durch die vorherige Testnachweisdokumentation.
+
+Der anschließende [Review mit sechs unabhängigen Perspektiven](./main-review-2026-10-06.md) fand 16 priorisierte offene Befunde. Zwei zusätzliche temporäre Testklassen gegen unveränderten Produktivcode bestätigten drei fehlende Schutzinvarianten: Zielansage und Fahrtabschluss nach einem unplausiblen kurzen GPS-Sprung sowie Rücksetzen eines inzwischen serverseitig geänderten Ziels bei reinem Textedit. Alle drei Assertions schlugen wie vorhergesagt fehl; es gab keine Compilefehler. Der gezielte Gradle-Lauf dauerte 17 Sekunden. Diese reproduzierten Lücken sind nicht von der grünen bestehenden Suite abgedeckt. Die temporären Quelltests wurden anschließend aus dem Repository entfernt; keine Korrektur und keine dauerhafte neue Regression wurden hier veröffentlicht.
+
+TODO: Die bestätigten Lücken mit ihren Fehlerkorrekturen dauerhaft absichern; insbesondere ViewModel-Request-Reihenfolgen, FLP-/TTS-Wiederanlauf und UI-Ereignisfelder benötigen Tests über die bisherigen reinen Helfer hinaus. Geräte-GPS, Samsung/Doze und tatsächliche Audiozustellung bleiben ungeprüft.
+
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
 Zusätzlich wurden 16 lesende Anfragen gegen `https://traewelling.de` durchgeführt. Alle lieferten HTTP 200; die geprüften Antwortstrukturen entsprachen dem erwarteten Vertrag. Die folgenden Pfade haben jeweils das Präfix `/api/v1/`:

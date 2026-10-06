@@ -17,6 +17,12 @@ Ein neuer manueller Login sendet den Token nur nach Prüfung einer gültigen HTT
 
 Der Room-Feedcache ist nach Feedart sowie einem SHA-256-Digest aus Server und Token partitioniert und verwendet keinen Klartexttoken als Cachekey. Der Digest ist keine Verschlüsselung der gespeicherten Statusdaten. Temporäre Fehler dürfen ausschließlich die weiterhin passende Seite-1-Partition verwenden; Authfehler, Abbruch und Sitzungswechsel erlauben keinen alten privaten Cache als Ersatz. Die Version-2-Schemaänderung verwirft den historischen unpartitionierten Feedcache. Allgemeine DataStore-/Room-Speicherung bleibt lokale App-Speicherung; diese Änderung ergänzt keine Verschlüsselungsbibliothek.
 
+## Systembackup
+
+Das Manifest aktiviert `allowBackup` ohne Ausschlussregeln. Auch die zusammengeführten Debug-/Release-Manifeste enthalten weder `fullBackupContent` noch `dataExtractionRules`. Normale DataStore-/Room-Dateien einschließlich gespeicherter Zugangsdaten und privater Caches nehmen bei aktivierter Systemsicherung grundsätzlich am Android-Backup teil. Das ist keine nachgewiesene unverschlüsselte Cloudablage.
+
+TODO: Die sensitive DataStore-Datei und Datenbankdateien für Cloud- sowie Geräteübertragung über beide Android-Regelwerke ausschließen; Einstellungen bei Bedarf getrennt behandeln. Beleg und genaue Grenzen: [Main-Review](../entwicklung/main-review-2026-10-06.md), S1.
+
 ## Netzwerk-Logging
 
 `RetrofitClient` nutzt `HttpLoggingInterceptor` nur im Debug-Build mit `BASIC`-Level. Release-Builds setzen das Netzwerk-Logging auf `NONE`.
