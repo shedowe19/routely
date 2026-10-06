@@ -93,6 +93,8 @@ Beim späten Trackingstart können frische Bewegungsfixes die Abfahrt vom Urspru
 
 ### Wiederverankerung nach Tunnel oder GPS-Ausfall
 
+Eine bereits mit Annäherung oder Ankunft belegte gewöhnliche Abfahrt/Vorbeifahrt hat Vorrang vor der neuen Kandidatenfolge. Eine reine Vorschau verwendet dieselbe physische Fortschrittsbedingung wie die normale Auswertung und benötigt ein frisches vorheriges Fixpaar. Dadurch wird ein korrekt erreichter naher Folgehalt weiterhin sofort übernommen und angesagt; die neue Wiederverankerung darf diesen bestehenden Fortschritt nicht verzögern.
+
 Der Nutzerbericht Essen Hbf → Bismarckplatz → Savignystraße beschreibt mehrere Halte ohne GPS und ein wiederkehrendes Signal am späteren Halt. Im alten Code blieb ein bereits etablierter Besuch geschützt, während die Initialisierung ihn nicht erneut zuordnete. Die bisherige Lückenerkennung konnte nur einen geordneten Folgehalt mit vor der Lücke bestätigter Annäherung übernehmen. Diese Kombination erklärt eine logische Mehrhalt-Wiederverankerungslücke; der tatsächliche Nutzer-Fix-/Audioverlauf ist damit nicht nachgewiesen.
 
 Die zusätzliche Wiederverankerung ist bei initialer noch nicht physisch bestätigter Zuordnung, restauriertem GPS-Cursor, ausdrücklicher Standortinvalidierung oder mehr als 30 Sekunden Signallücke verfügbar. Bestehender Abfahrts-Bootstrap und die geordnete Einhalt-Lückenerkennung werden zuerst geprüft. Ein solcher Übergang belegt das Verlassen des alten Halts, noch nicht den neuen Besuch; die Mehrhalt-Wiederverankerung bleibt bis zu dessen eigener physischer Bestätigung verfügbar. Ein belegter aktueller Abschnitt darf weiterhin normal fortgesetzt werden; die Erweiterung ist kein regelmäßiges Springen zum nächsten beliebigen Bahnhof.

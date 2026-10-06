@@ -250,6 +250,12 @@ class StationTrackingEngine(
         }
         if (!advanced && oldFix != null) advanced = recoverPassedStopAfterGap(oldFix, fix)
         if (advanced) clearPendingRecovery()
+        // Supported ordinary movement wins over a nearby recovery candidate.
+        // Preview only the existing physical advance rules: observing first
+        // could otherwise reserve speech for a stale visit before re-anchoring.
+        if (!advanced && canAdvanceObservedVisit(fix, oldFix)) {
+            return observeCurrentStop(fix, oldFix, nowMillis, canAdvance = true)
+        }
         if (!advanced && recoverLaterVisit(fix, oldFix, nowMillis)) {
             // Selection is not an arrival. In particular, none of the missed
             // visits can contribute dwell, speech or destination completion.
@@ -334,18 +340,7 @@ class StationTrackingEngine(
                 announcementCandidate?.let(::announce), destinationReached = true)
         }
 
-        val rising = previous != null && distance > previous + approachChange
-        val riseFromMinimum = distance - (minimumDistance ?: distance)
-        val towardSuccessor = previousFix != null &&
-            movingTowardSuccessor(stop, previousFix, fix, distance, riseFromMinimum)
-        val leftArrival = !stop.isDestination && state.arrivedAtCurrent && rising &&
-            (distance > DEPARTURE_RADIUS_METERS || towardSuccessor) &&
-            riseFromMinimum >= DEPARTURE_INCREASE_METERS
-        val fastPass = !stop.isOrigin && !stop.isDestination && approachConfirmed && rising &&
-            (minimumDistance ?: Double.MAX_VALUE) <= FAST_PASS_RADIUS_METERS &&
-            (towardSuccessor ||
-                (distance > DEPARTURE_RADIUS_METERS && riseFromMinimum >= FAST_PASS_INCREASE_METERS))
-        if (canAdvance && (leftArrival || fastPass)) {
+        if (canAdvance && shouldAdvanceCurrentStop(stop, fix, previousFix, distance)) {
             establishGpsCursor()
             advance()
             // Departure/pass establishes the old visit, not the successor.
@@ -622,6 +617,38 @@ class StationTrackingEngine(
             return true
         }
         return false
+    }
+
+    /** Pure preview: no observation, arrival or speech state is consumed here. */
+    private fun canAdvanceObservedVisit(fix: LocationFix, previous: LocationFix?): Boolean {
+        val stop = currentStop() ?: return false
+        if (observedKey != stop.key || !hasCoordinates(stop) || previous == null ||
+            fix.timeMillis - previous.timeMillis !in 1..MAX_FIX_AGE_MILLIS
+        ) return false
+        val distance = distanceMeters(fix.latitude, fix.longitude, stop.latitude!!, stop.longitude!!)
+        return shouldAdvanceCurrentStop(stop, fix, previous, distance)
+    }
+
+    /** Shared by the priority preview and the actual current-visit observation. */
+    private fun shouldAdvanceCurrentStop(
+        stop: TrackingStop,
+        fix: LocationFix,
+        previousFix: LocationFix?,
+        distance: Double
+    ): Boolean {
+        val previous = previousDistance ?: return false
+        val rising = distance > previous + max(5.0, fix.accuracyMeters * 0.1)
+        val riseFromMinimum = distance - minOf(minimumDistance ?: distance, distance)
+        val towardSuccessor = previousFix != null &&
+            movingTowardSuccessor(stop, previousFix, fix, distance, riseFromMinimum)
+        val leftArrival = !stop.isDestination && state.arrivedAtCurrent && rising &&
+            (distance > DEPARTURE_RADIUS_METERS || towardSuccessor) &&
+            riseFromMinimum >= DEPARTURE_INCREASE_METERS
+        val fastPass = !stop.isOrigin && !stop.isDestination && approachConfirmed && rising &&
+            (minimumDistance ?: Double.MAX_VALUE) <= FAST_PASS_RADIUS_METERS &&
+            (towardSuccessor ||
+                (distance > DEPARTURE_RADIUS_METERS && riseFromMinimum >= FAST_PASS_INCREASE_METERS))
+        return leftArrival || fastPass
     }
 
     /** Ordered-neighbour evidence handles overlapping bus-stop departure zones. */
