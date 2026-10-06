@@ -14,7 +14,7 @@ Die primäre externe Schnittstelle ist die Träwelling RESTful API.
 
 Besonderheiten beim Umgang mit den von Träwelling gelieferten Transit-Daten:
 
-- **Duplikate**: Die APIs (via Transitous) liefern häufig doppelte Bahnhöfe oder Stationen bei Suchen. Hier muss per Koordinaten-Nähe (< 150m) und Namen dedupliziert werden. Auch bei Paginierung können doppelte Einträge auftreten (z.B. gleiche `tripId` bei Departures).
+- **Duplikate**: `NearbyStationIdentity` fasst nur dieselbe positive interne Stations-ID zusammen; fehlt eine solche ID, kann eine nicht leere UUID dieselbe Identität belegen. Verschiedene interne IDs bleiben trotz Nähe oder gemeinsamen Namens erhalten. Namen, Koordinaten und IBNR allein sind kein austauschbarer Haltbeleg. Auch bei Paginierung können doppelte Einträge auftreten, deren jeweilige Objektidentität gesondert zu prüfen ist.
 - **HafasTripId**: Wird für `getTrip` benötigt.
 - **Identitäten**: Eine Station und ein Halt innerhalb einer Fahrt sind verschiedene Objekte. `StopStation.stationId` wird für Stationsanfragen und den Check-in verwendet; `StopStation.uuid` identifiziert den konkreten Halt. Das alte Stopover-Feld `id` darf nach dem 30.11.2026 nicht mehr als Station-ID interpretiert werden.
 - **Stationskennungen**: IBNR und RIL100 werden aus `station.identifiers` gelesen (`de_db_ibnr`, `de_db_ril100`). Die Kennungen sind optional und können fehlen, wenn der Endpunkt die Relation nicht geladen hat.

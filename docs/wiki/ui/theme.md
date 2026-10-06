@@ -15,8 +15,8 @@ Dokumentation des Farbschemas und der Typografie.
 
 ### Primär (Deep Indigo)
 
-- DeepIndigo: #1A237E (TopAppBar, aktive Akzente)
-- IndigoLight: #534BAE (Primary Container)
+- DeepIndigo: #1A237E (helle Primaryfarbe; Dark-/AMOLED-Primarycontainer)
+- IndigoLight: #534BAE (heller Primarycontainer; Dark-/AMOLED-Primaryfarbe)
 
 ### Sekundär (Teal)
 
@@ -51,17 +51,21 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = DeepIndigo,
+    primary = IndigoLight,
     background = Color(0xFF121212),
     surface = Color(0xFF1E1E1E)
 )
 
 private val AmoledColorScheme = darkColorScheme(
-    primary = DeepIndigo,
+    primary = IndigoLight,
     background = Color(0xFF000000), // Tiefes Schwarz für OLED
     surface = Color(0xFF000000)
 )
 ```
+
+## Prüfgrenze für Textakzente
+
+TODO: Kleine Primaryfarbtexte auf dunklen Grundflächen visuell und mit zugänglicher Schrift prüfen. IndigoLight auf Surface `#1E1E1E` ergibt rechnerisch 2,370:1, auf AMOLED-Schwarz 2,985:1. Das ist eine Palettenberechnung, keine Gerätebildschirmmessung. Die beschrifteten Semantiklücken U7 stehen im [Nachreview](../entwicklung/main-review-2026-10-06.md).
 
 ## Typografie
 

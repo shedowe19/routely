@@ -272,6 +272,18 @@ Die Produktion lieferte weiterhin einige deprecated Felder wie `train`, `userDet
 
 Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konfliktantworten (201/409) und Statusänderungen per PUT wurden über Vertrag und Unit-Test-Fixtures geprüft, nicht durch schreibende Live-Aufrufe. Es wurden keine Daten erstellt, geändert oder gelöscht, keine Benachrichtigungen als gelesen markiert und kein Logout ausgelöst. Der Token blieb im Prozessspeicher; Zugangsdaten und persönliche Antwortdaten wurden nicht ins Repository oder Wiki übernommen.
 
+## Nachreview von Main f406bad
+
+Der [CI-Lauf 37529409222](https://github.com/shedowe19/routely/actions/runs/37529409222) bestätigt exakt `f406bad3ba44bf2f008eb09f1856590c7183770d`: 658 Unit-Tests in 47 Klassen ohne Fehlschläge/Fehler/übersprungene Tests, 41 Releaseguardtests, beide APK-Builds und Debug-Lint mit 0 Fehlern und 53 Warnungen. JUnit-/Lint-Artefakte wurden heruntergeladen und unabhängig gezählt. Die Differenz zu 40 lokalen Warnungen besteht aus 13 zusätzlichen Versionshinweisen.
+
+Gegen unveränderten Produktivcode wurden anschließend sieben temporäre JUnit-Klassen mit neun Prüffällen ausgeführt. Sieben Schutzassertions schlugen gezielt fehl: häufige Fixe ohne beobachtete Abfahrt (G5), native Polyline-Endprojektion (G7), zwei GET/Like-Reihenfolgen (D5), neue Meldung während verzögerter MarkAll-Antwort (D6), verborgen mitgesendete Sichtbarkeit (D4) und zwei erfolgreiche PUT-Antworten in umgekehrter Auslieferungsreihenfolge (D8). Zwei erfolgreiche Clock-/Engine-/Adapterkontrollen zeigen das unterschiedliche Wiederverankerungsverhalten für 150- gegenüber 80-Meter-Fixes (G6). Keine Probe führte einen Android-Service aus. Die Gradle-Läufe kompilierten und endeten nach 20 beziehungsweise 19 Sekunden ausschließlich an den erwarteten Assertions.
+
+Drei weitere Offline-Python-Prüfungen gegen den echten Releaseguard bestätigen R4: Code 18 bleibt veröffentlicht → nächster Code 19; derselbe Release wird zum Draft beziehungsweise gelöscht, sein Tag bleibt → nächster Code 14. Zwei Schutzassertions `>18` schlagen fehl, die erhaltene Verlaufskontrolle besteht. Keine Probe verwendet Netzwerkzugriff, Zugangsdaten, Signing oder tatsächliche Releasewrites.
+
+Alle sieben temporären Kotlin-Klassen wurden danach entfernt. Ein erneuter lokaler Lauf `:app:testDebugUnitTest` bestand in 17 Sekunden mit allen ursprünglichen 658 Tests/47 Klassen und null Fehlschlägen/Fehlern/übersprungenen Tests. Produktivcode und dauerhafte Tests blieben unverändert. Die zusätzliche Prüfmatrix ist getrennt von der grünen vorhandenen CI-Suite; dauerhafte Regressionen werden bei den späteren Korrekturen ergänzt. Die zwölf neuen Befunde samt statischen Lifecycle-/UI-Belegen stehen im [Main-Nachreview](./main-review-2026-10-06.md).
+
+TODO: Rotation/Editorerhalt, Notification-Navigation während POST, Settings-TTS-Initialfehler und TalkBack-/Semantiklabels zusätzlich instrumentiert prüfen. Die Codeverträge beweisen die jeweiligen Pfade, keine tatsächlich ausgeführte Geräteprüfung.
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.

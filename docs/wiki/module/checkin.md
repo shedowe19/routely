@@ -91,6 +91,8 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 
 ## Offene Fragen
 
+- TODO: U5 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: Erkennungsnavigation ruft `reset()` auf und kann CONFIRM+Loading abbrechen; der Guard schützt bisher nur SUCCESS+Loading. Ein schon angenommener POST kann ohne lokale Ergebnisübernahme verbleiben. `goBack()` schützt diesen offenen Erstellungszustand bereits.
+
 - U1/U3/D3 des [Main-Reviews](../entwicklung/main-review-2026-10-06.md) sind durch getrennte Plan-/Istzeitaufträge, Verfrühungsanzeige und Identitätsdeduplizierung korrigiert. Regressionen verwenden kontrollierte Antworten; es gab keine schreibenden Live-API-Tests.
 - TODO: Zeitkorrektur-Teilerfolg, Erfolgskarte und nahe verschiedene Halte auf dem Gerät prüfen.
 

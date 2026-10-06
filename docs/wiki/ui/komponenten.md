@@ -8,7 +8,7 @@ Dokumentation wiederverwendbarer UI-Komponenten.
 
 ### TraewellingTopAppBar
 
-Gradient-TopAppBar mit DeepIndigo Theme.
+Gradient-TopAppBar mit der aktuellen Material-Primaryfarbe.
 
 ```kotlin
 @Composable
@@ -19,7 +19,7 @@ fun TraewellingTopAppBar(
 )
 ```
 
-Hintergrund: Horizontaler Gradient von DeepIndigo (#1A237E) zu #283593
+Hintergrund: Horizontaler Gradient von `MaterialTheme.colorScheme.primary` zu derselben Farbe mit Alpha 0,8. Das helle Theme verwendet DeepIndigo; Dark/AMOLED verwenden IndigoLight. Der Verlauf passt sich daher dem eingestellten Theme an.
 
 ### StatusCard
 

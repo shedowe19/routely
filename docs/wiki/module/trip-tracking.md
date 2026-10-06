@@ -247,6 +247,10 @@ Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS
 - [Location-Zeitbasis](https://developer.android.com/reference/android/location/Location#getTime())
 - [TTS-Initialisierung und Enginewahl](https://developer.android.com/reference/android/speech/tts/TextToSpeech)
 
+## Nachreview von Main f406bad
+
+- TODO: G6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: der Service filtert frische Fixes mit Genauigkeit über 100 Metern vor der Engine-Auswertung heraus. Ein transienter Wiederverankerungsbeleg kann dadurch zwei präzise Fixes vor und einen nach einem 150-Meter-Fix verbinden. Reine Adapter-/Enginekontrollen bestätigen diesen Pfad; Android-Service-/FLP-Verhalten wurde nicht ausgeführt.
+
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)

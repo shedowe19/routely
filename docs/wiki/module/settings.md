@@ -71,6 +71,8 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 
 ## Offene Fragen
 
+- TODO: U6/U7 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: nach initialem TTS-Initfehler bleibt die Engineliste leer, sodass keine funktionierende Alternative wählbar ist; Schaltern fehlt die verbundene Einstellungsbeschriftung. Settings-Initialisierung und Service-Retry sind getrennte Besitzer.
+
 - Fehlerbehandlung in PreferencesManager — offen — @dev
 - TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.
 - TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.

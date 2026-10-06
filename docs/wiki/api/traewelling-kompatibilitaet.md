@@ -18,6 +18,8 @@ Am 06.10.2026 wurden Changelog, Routen, Stopover-Modell/-Resource sowie Status-,
 
 Bei der anschließenden Streckenverlauf-Recherche am 06.10. bestätigte ein GitHub-Commitvergleich `develop` als identisch mit `4d602796da8409017314cc771b1127d169155f02`. Zusätzlich wurden `polyline/{parameters}`, der Status-/Location-Controller und die GeoJSON-DTOs gegen diesen gepinnten Stand geprüft. Dieser spätere Nachweis ergänzt den vorherigen Abruf ohne SHA. Der native [Polyline-Vertrag](./externe-schnittstellen.md) enthält mögliche Stationssehnen und darf deshalb keine ungeprüfte amtliche Gleisführung versprechen.
 
+Beim Nachreview von Routely-Main `f406bad` am 06.10.2026 wurde der aktuelle Upstream-Branch erneut ausdrücklich als `4d602796da8409017314cc771b1127d169155f02` gelesen. Der vollständig geprüfte Changelog hat Blob-SHA `151ba6f1c9e012f9a665eef2f733ee1114d73015`; verwendete Retrofitpfade und Antwortressourcen wurden mit diesem aktuellen Stand verglichen. Kein neuer inkompatibler Consumervertrag wurde gefunden. Der optionale Visibility-PUT-Vertrag und der vollständige Status-Antwortsnapshot belegen jedoch zwei Client-Reihenfolgefehler D4/D8 im [Nachreview](../entwicklung/main-review-2026-10-06.md), keine neue Upstream-Endpunktänderung.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`

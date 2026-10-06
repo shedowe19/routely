@@ -12,7 +12,7 @@ Erklärung, wie Daten durch die App fließen.
 4. Bei Netzwerkanfragen führt das `TraewellingApiService` den HTTP-Request aus und liefert Response-Modelle (Gson serialisiert).
 5. Das `Repository` reicht die Daten an das `ViewModel` zurück, ggf. nach einer Zwischenspeicherung in der Datenbank (z.B. `StatusDao`).
 6. Das `ViewModel` aktualisiert den `StateFlow` mit den neuen Daten.
-7. Der Compose-Screen (View) beobachtet den `StateFlow` (`collectAsStateWithLifecycle()`) und recomposed sich mit den neuen Daten.
+7. Der Compose-Screen (View) beobachtet den `StateFlow` (`collectAsState()`) und recomposed sich mit den neuen Daten.
 
 ## Sitzungs- und Anforderungsgrenzen
 

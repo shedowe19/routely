@@ -20,6 +20,12 @@ Nach Build und Signierung prüft `aapt` Paket-ID, Versionsname und Code der tats
 
 Die Publikation nutzt ausschließlich die reservierte Release-ID. Zwei Create-only Asset-POSTs laden APK und Metadaten hoch; ein schon vorhandenes Asset führt zum Abbruch. Der Helfer prüft Draftidentität, aufgelöste Tag-SHA, vollständigen Metadateninhalt und den von GitHub gelieferten APK-Digest. Fehlender oder falscher Digest blockiert die Veröffentlichung. Der Versionscode wird vor den Uploads und vor dem abschließenden `draft:false` erneut geprüft. Danach werden Release, Tag und Assets nochmals gelesen und verglichen.
 
+## Grenze nach administrativer Rücknahme
+
+R4 des [Nachreviews](./main-review-2026-10-06.md) bestätigt eine zusätzliche Betriebsgrenze: Nur der Legacy-Höchstcode 13 ist unabhängig von der Releasehistorie dauerhaft gespeichert. Künftige Codes stammen aus derzeit veröffentlichten Release-Metadaten; Drafts werden übersprungen. Wird ein schon veröffentlichter neuer Release mit Code 18 gelöscht oder wieder zum Draft, kann ein neuer Versionsname automatisch Code 14 statt mindestens 19 erhalten, selbst wenn der alte Tag bleibt und die APK bereits installiert ist. Drei Offlineproben bestätigen zwei solche Regressionen und den normalen erhaltenen Verlauf 18→19.
+
+TODO: Künftig ausgegebene Höchstcodes dauerhaft bewahren oder unvollständige zurückgezogene Historie blockieren. Bis zur Korrektur veröffentlichte Metadaten erhalten; bei erforderlicher Rücknahme vor weiterer Veröffentlichung den dauerhaften Floor ausdrücklich auf den bereits ausgegebenen Höchstcode erhöhen. Die automatische Pipeline entfernt keine veröffentlichten Releases. Dieser Randfall benötigt eine administrative Historienänderung und ist kein belegtes Rennen innerhalb der serialisierten regulären Veröffentlichung.
+
 ## Fehler nach der Reservierung
 
 Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen unveröffentlichten Draft mit Teilassets zurücklassen. Der Workflow überschreibt oder entfernt sie nicht automatisch; ein Rerun mit derselben Version wird abgewiesen. Den fehlgeschlagenen Lauf und den Draft zuerst prüfen. Danach entweder eine neue Version wählen oder ausschließlich die nachweislich unveröffentlichte Fehlreservierung manuell bereinigen. Bereits veröffentlichte Tags, Releases und Assets werden durch diesen Ablauf nicht repariert oder ersetzt. Ein Fehler bei der Abschlusskontrolle kann auch nach erfolgreichem `draft:false` auftreten; zuerst den tatsächlichen veröffentlichten Zustand prüfen.

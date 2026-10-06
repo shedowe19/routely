@@ -151,6 +151,8 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 ## Offene Fragen
 
+- TODO: D4/D7 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: reine Textänderung sendet derzeit eine unveränderte alte Sichtbarkeit mit; jeder Composition-Dispose verwirft Editorzustand und beendet eine Mutation, auch bei Activity-Neuanlage. Die korrigierte Anfangsbindung von Ziel und manueller Zeit deckt diese beiden Pfade nicht ab.
+
 - TODO: EditStatusDialog Layout dokumentieren
 
 ## Verwandte Seiten

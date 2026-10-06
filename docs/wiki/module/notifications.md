@@ -75,6 +75,8 @@ Ein erfolgreiches `markAllAsRead` setzt eine gemeinsame Revisionsgrenze. Noch au
 
 ## Offene Fragen
 
+- TODO: D6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: neue Meldungen nach serverseitigem MarkAll-Commit können während der verzögerten PUT-Antwort geladen und anschließend unbeabsichtigt dauerhaft gelesen bestätigt werden. Ein weiterer frischer GET reproduziert den Widerspruch zwischen Liste und serverseitigem Ungelesenzähler.
+
 - TODO: Meldungen mit auflösbaren Zielinformationen zum zugehörigen Profil oder Status navigieren lassen.
 
 ## Verwandte Seiten

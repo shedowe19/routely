@@ -48,7 +48,8 @@ Ein HTTP-2xx-PUT ohne vertrauenswürdigen Status derselben ID invalidiert den Ca
 
 ## Offene Fragen
 
-- Keine spezifischen aktuell.
+- TODO: D5/D8 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: ein alter GET kann einen erfolgreichen Like überlagern; eine alte erfolgreiche PUT-Antwort kann nach einem neueren PUT den RAM-Text zurücksetzen. GET-/Statusmutationsschutz und korrekte Room-Invalidation decken diese beiden zusätzlich reproduzierten Reihenfolgen nicht ab.
+
 
 ## Verwandte Seiten
 

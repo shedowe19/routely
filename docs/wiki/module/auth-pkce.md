@@ -45,6 +45,8 @@ Diese Keys gehören zur revisionsgeschützten Session-Verwaltung unter [Auth](./
 
 ## Offene Fragen
 
+- TODO: Vor produktiver OAuth-Anbindung parallele Refreshversuche zusammenführen. Bei Rotation kann die zweite `invalid_grant`-Antwort vor der ersten erfolgreichen Tokenantwort die noch passende Sitzung löschen. Der Helfer ist derzeit nicht produktiv aufgerufen; dies bleibt ein Integrationsrisiko und ist kein neuer Fehler des erreichbaren manuellen Logins. Siehe [Nachreview](../entwicklung/main-review-2026-10-06.md).
+
 - TODO: Vollständigen OAuth-UI-Ablauf mit Callback-Verarbeitung, State-Prüfung und Token-Erneuerung anbinden. Der bestehende manuelle Token-Login verwendet kein PKCE.
 
 ## Verwandte Seiten
