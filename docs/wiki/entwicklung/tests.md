@@ -137,6 +137,8 @@ Die [SEV-Erweiterung](../module/sev-haltestellen.md) ergänzt 14 Parser- und 22 
 
 Die Tracking-Regressionen verlangen bei einer veränderten physischen Position einen neuen Ankunftsbeleg, erhalten aber den konkreten Besuch und bereits gesprochene Ansagen. Ein reiner API-Zeitwechsel am selben Punkt erhält dagegen die bestätigte Ankunft. Die HTTP-, Cache-, Android-Service- und Compose-Lebenszyklen werden von diesen reinen Unit-Tests nicht auf einem Gerät ausgeführt.
 
+Der Main-Stand `5333921b078ae79fe0cc99add80a435daab15f48` bestand am 06.10.2026 alle **321 Unit-Tests** ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen 15 Testklassen, darunter 14 Parser-, 22 SEV-Zuordnungs- und 64 Stationsengine-Fälle. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37450392024](https://github.com/shedowe19/routely/actions/runs/37450392024). Damit sind Kotlin-/Compose-Kompilierung und die Logikregressionen belegt; tatsächliche HTTP-Lebenszyklen, GPS-/Audiozustellung und die Zuverlässigkeit auf dem Gerät bleiben gesonderte Prüfungen.
+
 TODO: Mit einer aktuellen Bus-RE/RB-Fahrt Essen → Mülheim → Duisburg den Abruf, den tatsächlichen Einstiegspunkt, richtungsabhängige Ansagen und die Netzunterbrechung prüfen. Die öffentliche Duisburger Abfahrtsbeschriftung belegt keinen eindeutigen Ankunftspunkt eines dort endenden Busses; dieser Fall behält API-Koordinaten. Straßenumwege können weiterhin außerhalb des geraden GPS-Zeitkorridors liegen.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
