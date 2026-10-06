@@ -8,6 +8,12 @@ import kotlin.math.hypot
 import kotlin.math.max
 import kotlin.math.roundToLong
 
+/** Why fresh GPS progress cannot currently support a forecast of future times. */
+enum class GpsTimeUnavailableReason {
+    NO_FRESH_LOCATION, INACCURATE_LOCATION, VISIT_UNCONFIRMED, ROUTE_UNSUPPORTED,
+    WAITING_AT_ORIGIN, OUTSIDE_CORRIDOR, INSUFFICIENT_MOVEMENT, UNPLAUSIBLE_MOVEMENT
+}
+
 /** Local observations and forecasts for a specific ordered station visit. */
 data class GpsStopTime(
     val stopKey: String,
@@ -61,7 +67,8 @@ data class GpsJourneyTimes(
  * Between stations it uses supported progress along a plausible stop-to-stop
  * corridor and the scheduled travel interval, never instantaneous distance/speed.
  * Straight corridors are deliberately conservative: bends and parallel routes may
- * return null and let the caller use the original API/plan times instead.
+ * leave future events to the original API/plan times. Confirmed actual events can
+ * still be published independently while the location and ordered visit stay valid.
  * All fixes, observations and offsets live only in this process.
  */
 class GpsJourneyTimeEstimator {
@@ -80,6 +87,8 @@ class GpsJourneyTimeEstimator {
     private var lastFix: LocationFix? = null
     private var lastVisitKey: String? = null
     private var cached: GpsJourneyTimes? = null
+    private var cachedHasForecast = false
+    private var forecastUnavailableReason: GpsTimeUnavailableReason? = GpsTimeUnavailableReason.NO_FRESH_LOCATION
     private val arrivals = mutableMapOf<String, ArrivalCandidate>()
     private val observed = mutableMapOf<String, ObservedVisit>()
     private val segmentSamples = ArrayDeque<SegmentSample>()
@@ -89,13 +98,19 @@ class GpsJourneyTimeEstimator {
         baseline = null
         highestFixTime = null
         clearLocationState()
+        forecastUnavailableReason = GpsTimeUnavailableReason.NO_FRESH_LOCATION
     }
 
     /** Retain the consumed-fix watermark so an old cached fix cannot revive an offset. */
     @Synchronized
     fun invalidateLocation() {
         clearLocationState()
+        forecastUnavailableReason = GpsTimeUnavailableReason.NO_FRESH_LOCATION
     }
+
+    /** Observed event times may still be available while this forecast reason is non-null. */
+    @Synchronized
+    fun unavailableReason(): GpsTimeUnavailableReason? = forecastUnavailableReason
 
     @Synchronized
     fun update(
@@ -112,43 +127,67 @@ class GpsJourneyTimeEstimator {
         if (baseline != currentBaseline) {
             clearLocationState()
             baseline = currentBaseline
+            forecastUnavailableReason = GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
         }
         val index = progress.nextStopKey?.let { key ->
             route.indices.filter { route[it].key == key }.singleOrNull()
         }
-        if (source != TrackingSource.GPS || !progress.gpsEstablished || fix == null ||
-            !reliable(fix, nowMillis) || index == null || index != progress.nextIndex ||
-            route[index].cancelled || !coordinates(route[index]) || !uniqueVisits(route)
-        ) {
+        val rejectedReason = when {
+            fix == null || fix.timeMillis <= 0 || nowMillis < fix.timeMillis ||
+                nowMillis - fix.timeMillis > MAX_FIX_AGE_MILLIS -> GpsTimeUnavailableReason.NO_FRESH_LOCATION
+            !fix.accuracyMeters.isFinite() || fix.accuracyMeters !in 0.0..MAX_ACCURACY_METERS ->
+                GpsTimeUnavailableReason.INACCURATE_LOCATION
+            !reliable(fix, nowMillis) -> GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT
+            source != TrackingSource.GPS || !progress.gpsEstablished || index == null || index != progress.nextIndex ->
+                GpsTimeUnavailableReason.VISIT_UNCONFIRMED
+            route[index].cancelled || !coordinates(route[index]) || !uniqueVisits(route) ->
+                GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
+            else -> null
+        }
+        if (rejectedReason != null) {
             invalidateLocation()
+            forecastUnavailableReason = rejectedReason
             return null
         }
+        // The rejection checks establish both values before any observation is accepted.
+        val currentFix = fix ?: return null
+        val currentIndex = index ?: return null
         val highWatermark = highestFixTime
-        if (highWatermark != null && fix.timeMillis < highWatermark) {
+        if (highWatermark != null && currentFix.timeMillis < highWatermark) {
             invalidateLocation()
+            forecastUnavailableReason = GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT
             return null
         }
-        if (highWatermark == fix.timeMillis) {
+        if (highWatermark == currentFix.timeMillis) {
             // Clock ticks/API refreshes do not count as new GPS movement or dwell.
-            return cached?.takeIf { lastFix == fix && lastVisitKey == route[index].key &&
-                nowMillis <= it.validUntilMillis }
+            val sameFixAndVisit = lastFix == currentFix && lastVisitKey == route[currentIndex].key
+            val retained = cached?.takeIf { sameFixAndVisit && nowMillis <= it.validUntilMillis }
+            if (retained != null) return retained
+            if (forecastUnavailableReason == null) {
+                forecastUnavailableReason = GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
+            }
+            // Fresh actual events may outlive older prediction support; their
+            // expiry is tied to this same fix, never to the advancing clock.
+            return if (sameFixAndVisit) publishObservedOnly(route, currentIndex, currentFix) else null
         }
-        highestFixTime = fix.timeMillis
-        val previousFix = lastFix?.takeIf { fix.timeMillis - it.timeMillis in 1..MAX_FIX_AGE_MILLIS }
+        highestFixTime = currentFix.timeMillis
+        val previousFix = lastFix?.takeIf { currentFix.timeMillis - it.timeMillis in 1..MAX_FIX_AGE_MILLIS }
         if (lastFix != null && previousFix == null) clearLocationState()
         if (previousFix != null && distance(previousFix.latitude, previousFix.longitude,
-                fix.latitude, fix.longitude) / ((fix.timeMillis - previousFix.timeMillis) / 1000.0) > MAX_TRAVEL_SPEED) {
+                currentFix.latitude, currentFix.longitude) / ((currentFix.timeMillis - previousFix.timeMillis) / 1000.0) > MAX_TRAVEL_SPEED) {
             invalidateLocation()
+            forecastUnavailableReason = GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT
             return null
         }
-        val stop = route[index]
-        val previousIndex = (index - 1 downTo 0).firstOrNull { !route[it].cancelled }
+        val stop = route[currentIndex]
+        val previousIndex = (currentIndex - 1 downTo 0).firstOrNull { !route[it].cancelled }
         val previousStop = previousIndex?.let(route::get)
-        val insideStation = distance(fix.latitude, fix.longitude, stop.latitude!!, stop.longitude!!) +
-            fix.accuracyMeters <= ARRIVAL_RADIUS_METERS
-        val observedArrival = observeArrival(stop, progress.arrivedAtCurrent, fix, insideStation)
+        val insideStation = distance(currentFix.latitude, currentFix.longitude, stop.latitude!!, stop.longitude!!) +
+            currentFix.accuracyMeters <= ARRIVAL_RADIUS_METERS
+        val observedArrival = observeArrival(stop, progress.arrivedAtCurrent, currentFix, insideStation)
         var offset: Long? = null
         var compatiblePosition = false
+        var unavailable = GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
         if (observedArrival != null && insideStation && progress.arrivedAtCurrent && !stop.isOrigin) {
             // A departure-only visit establishes no measured arrival offset.
             // Origin waiting is excluded above: its departure needs movement.
@@ -160,29 +199,38 @@ class GpsJourneyTimeEstimator {
                 // The first arrival is frozen, while a train still dwelling beyond
                 // its expected departure must push the forecast for later stops.
                 stop.plannedDepartureMillis?.let { departure ->
-                    offset = max(offset!!, fix.timeMillis - departure)
+                    offset = max(offset!!, currentFix.timeMillis - departure)
                 }
-            }
+            } else unavailable = GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
             segmentSamples.clear()
         } else if (previousStop != null) {
             // An arriving train can stop just beyond the stop centroid. Only an
             // established approach to this same visit may use the inner arrival
             // zone while its slow-fix/dwell observation is being confirmed.
             val arrivalEndpoint = progress.arrivedAtCurrent && insideStation && lastVisitKey == stop.key
-            val projection = project(previousStop, stop, fix, arrivalEndpoint)
+            val projection = project(previousStop, stop, currentFix, arrivalEndpoint)
             val departure = previousStop.plannedDepartureMillis
             val arrival = stop.plannedArrivalMillis
-            if (projection != null && departure != null && arrival != null &&
+            val supportedRoute = coordinates(previousStop) && departure != null && arrival != null &&
                 arrival - departure in MIN_TRAVEL_MILLIS..MAX_TRAVEL_MILLIS &&
-                compatibleProgress(previousStop, stop, previousFix, fix, projection, arrivalEndpoint)
-            ) {
+                distance(previousStop.latitude!!, previousStop.longitude!!, stop.latitude!!, stop.longitude!!) in
+                    MIN_SEGMENT_METERS..MAX_SEGMENT_METERS
+            val compatible = projection != null &&
+                compatibleProgress(previousStop, stop, previousFix, currentFix, projection, arrivalEndpoint)
+            unavailable = when {
+                !supportedRoute -> GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
+                projection == null -> GpsTimeUnavailableReason.OUTSIDE_CORRIDOR
+                !compatible -> GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT
+                else -> GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
+            }
+            if (supportedRoute && projection != null && departure != null && arrival != null && compatible) {
                 compatiblePosition = true
                 // A station exit can precede the forecast window on a long
                 // segment; capture that event at the engine's visit transition.
-                observeDeparture(previousStop, stop, previousFix, fix, projection)
+                observeDeparture(previousStop, stop, previousFix, currentFix, projection)
                 if (!progress.arrivedAtCurrent && projection.fraction in MIN_SEGMENT_FRACTION..MAX_SEGMENT_FRACTION) {
-                    offset = observeSegment(stop.key, fix, projection)?.let { supported ->
-                        fix.timeMillis - (departure + ((arrival - departure) * supported.fraction).roundToLong())
+                    offset = observeSegment(stop.key, currentFix, projection)?.let { supported ->
+                        currentFix.timeMillis - (departure + ((arrival - departure) * supported.fraction).roundToLong())
                     }
                 } else segmentSamples.clear()
             } else {
@@ -190,8 +238,10 @@ class GpsJourneyTimeEstimator {
             }
         } else {
             segmentSamples.clear()
+            unavailable = if (stop.isOrigin && progress.arrivedAtCurrent && insideStation)
+                GpsTimeUnavailableReason.WAITING_AT_ORIGIN else GpsTimeUnavailableReason.VISIT_UNCONFIRMED
         }
-        lastFix = fix
+        lastFix = currentFix
         lastVisitKey = stop.key
         val supportedOffset = offset
         if (supportedOffset == null) {
@@ -199,17 +249,25 @@ class GpsJourneyTimeEstimator {
             // established forecast does not re-run that requirement for every
             // braking fix or station handover. Only a compatible fresh position
             // may retain it, and its original support/expiry is never extended.
-            return cached?.takeIf { compatiblePosition && nowMillis <= it.validUntilMillis }
-                .also { cached = it }
+            val retained = cached?.takeIf {
+                cachedHasForecast && compatiblePosition && nowMillis <= it.validUntilMillis
+            }
+            if (retained != null) {
+                // Merge new actual events without refreshing the old forecast's support or expiry.
+                forecastUnavailableReason = null
+                return mergeObserved(retained, observedTimes(route, currentIndex)).also { cached = it }
+            }
+            forecastUnavailableReason = unavailable
+            return publishObservedOnly(route, currentIndex, currentFix)
         }
         if (abs(supportedOffset) > MAX_OFFSET_MILLIS) {
-            cached = null
-            return null
+            forecastUnavailableReason = GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT
+            return publishObservedOnly(route, currentIndex, currentFix)
         }
         val times = route.mapIndexedNotNull { visitIndex, visit ->
             if (visit.cancelled) return@mapIndexedNotNull null
             val actual = observed[visit.key]
-            val forecast = visitIndex >= index
+            val forecast = visitIndex >= currentIndex
             val arrival = actual?.arrival?.takeIf { visit.plannedArrivalMillis != null }
                 ?: visit.plannedArrivalMillis?.takeIf { forecast }?.let { shifted(it, supportedOffset) }
             val departure = actual?.departure
@@ -222,9 +280,49 @@ class GpsJourneyTimeEstimator {
         }
         if (times.isEmpty()) {
             cached = null
+            cachedHasForecast = false
+            forecastUnavailableReason = GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
             return null
         }
-        return GpsJourneyTimes(fix.timeMillis, fix.timeMillis + MAX_FIX_AGE_MILLIS, times).also { cached = it }
+        cachedHasForecast = times.any { (it.arrivalMillis != null && !it.arrivalObserved) ||
+            (it.departureMillis != null && !it.departureObserved) }
+        forecastUnavailableReason = if (cachedHasForecast) null else unavailable
+        return GpsJourneyTimes(currentFix.timeMillis, currentFix.timeMillis + MAX_FIX_AGE_MILLIS, times).also { cached = it }
+    }
+
+    /** Actual events do not need a straight road/rail segment or a future-time offset. */
+    private fun observedTimes(route: List<TrackingStop>, currentIndex: Int): List<GpsStopTime> =
+        route.mapIndexedNotNull { index, stop ->
+            if (stop.cancelled || index > currentIndex) return@mapIndexedNotNull null
+            val actual = observed[stop.key] ?: return@mapIndexedNotNull null
+            val arrival = actual.arrival.takeIf { stop.plannedArrivalMillis != null }
+            val departure = actual.departure
+            if (arrival == null && departure == null) null else GpsStopTime(
+                stop.key, stop.stationId, stop.plannedArrivalMillis, stop.plannedDepartureMillis,
+                arrival, departure, arrivalObserved = arrival != null, departureObserved = departure != null
+            )
+        }
+
+    private fun publishObservedOnly(route: List<TrackingStop>, currentIndex: Int, fix: LocationFix): GpsJourneyTimes? {
+        cachedHasForecast = false
+        val times = observedTimes(route, currentIndex)
+        return times.takeIf { it.isNotEmpty() }?.let {
+            GpsJourneyTimes(fix.timeMillis, fix.timeMillis + MAX_FIX_AGE_MILLIS, it)
+        }.also { cached = it }
+    }
+
+    private fun mergeObserved(snapshot: GpsJourneyTimes, actualTimes: List<GpsStopTime>): GpsJourneyTimes {
+        val merged = snapshot.stopTimes.associateBy { it.stopKey }.toMutableMap()
+        actualTimes.forEach { actual ->
+            val existing = merged[actual.stopKey]
+            merged[actual.stopKey] = if (existing == null) actual else existing.copy(
+                arrivalMillis = actual.arrivalMillis ?: existing.arrivalMillis,
+                departureMillis = actual.departureMillis ?: existing.departureMillis,
+                arrivalObserved = actual.arrivalObserved || existing.arrivalObserved,
+                departureObserved = actual.departureObserved || existing.departureObserved
+            )
+        }
+        return snapshot.copy(stopTimes = merged.values.toList())
     }
 
     private fun observeArrival(stop: TrackingStop, arrived: Boolean, fix: LocationFix, inside: Boolean): ObservedVisit? {
@@ -322,6 +420,7 @@ class GpsJourneyTimeEstimator {
 
     private fun clearLocationState() {
         cached = null
+        cachedHasForecast = false
         lastFix = null
         lastVisitKey = null
         arrivals.clear()

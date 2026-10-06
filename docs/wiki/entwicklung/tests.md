@@ -141,6 +141,16 @@ Der Main-Stand `5333921b078ae79fe0cc99add80a435daab15f48` bestand am 06.10.2026 
 
 TODO: Mit einer aktuellen Bus-RE/RB-Fahrt Essen → Mülheim → Duisburg den Abruf, den tatsächlichen Einstiegspunkt, richtungsabhängige Ansagen und die Netzunterbrechung prüfen. Die öffentliche Duisburger Abfahrtsbeschriftung belegt keinen eindeutigen Ankunftspunkt eines dort endenden Busses; dieser Fall behält API-Koordinaten. Straßenumwege können weiterhin außerhalb des geraden GPS-Zeitkorridors liegen.
 
+## Fehlende GPS-Zeitprognose und beobachtete Ereignisse vom 06.10.2026
+
+Eine weitere Aufnahme der RE1-Busfahrt Duisburg → Mülheim → Essen zeigt um 13:03 Uhr einen GPS-Besuchscursor bei weiterhin ausschließlich angezeigten Fahrplanzeiten. Sie enthält weder Positionsmessungen noch deren Genauigkeit und beweist deshalb keinen bestimmten Ablehnungsgrund. Die [GPS-Zeitprüfung](../module/gps-zeiten.md) unterscheidet den Besuchscursor von der strengeren Zeitprognose; Straßenumwege können den geraden Verbindungskorridor verlassen.
+
+Die Regressionen prüfen, dass tatsächlich bestätigte Ankünfte und Abfahrten auch ohne Prognoseversatz als `GPS beobachtet` veröffentlicht werden. Ein solcher Datensatz enthält ausschließlich beobachtete Ereignisse, keine ersatzweise erfundenen Zukunftszeiten. Frische Beobachtungen dürfen eine abgelaufene Prognose nicht wiederbeleben. Beim Zusammenführen mit einer weiterhin gültigen Prognose bleiben deren ursprünglicher Unterstützungszeitpunkt und Ablauf erhalten; doppelte Positionszeitstempel beziehungsweise Uhr-/API-Ticks zählen nicht als Bewegung oder Aufenthaltsbestätigung. Auch Beobachtungen bleiben an zuverlässiges GPS, Route, Besuchsidentität und eine begrenzte Snapshot-Gültigkeit gebunden.
+
+`GpsTimeUnavailableReason` beschreibt den fehlenden Prognosebeleg und wird im Fahrtdetail angezeigt. Die Gründe umfassen unter anderem ungenaue oder fehlende aktuelle Position, noch unbestätigten Besuch, unbrauchbaren Abschnitt, Warten am Einstieg, Lage außerhalb des Korridors sowie fehlende oder unplausible Fahrbewegung. Sie werden aus dem tatsächlichen Auswertungspfad abgeleitet; die Aufnahme allein wird keinem dieser Gründe zugeordnet.
+
+TODO: Auf einer echten RE1-SEV-Rückfahrt die ausgegebenen Gründe, gemessene Abfahrt und Ankunft, Zeitquellen sowie Signalverlust und Kurvenfahrt gegen einen zeitlich zugeordneten Fix-/Audioverlauf prüfen. Die Erweiterung liefert weiterhin keine Straßenroute und keine garantierte Bus-ETA.
+
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
 Zusätzlich wurden 16 lesende Anfragen gegen `https://traewelling.de` durchgeführt. Alle lieferten HTTP 200; die geprüften Antwortstrukturen entsprachen dem erwarteten Vertrag. Die folgenden Pfade haben jeweils das Präfix `/api/v1/`:

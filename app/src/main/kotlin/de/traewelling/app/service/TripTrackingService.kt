@@ -769,7 +769,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             completed = progress.completed,
             source = update.source,
             gpsTimes = gpsTimes,
-            sevStops = cachedSevStops
+            sevStops = cachedSevStops,
+            gpsTimeUnavailableReason = gpsJourneyTimes.unavailableReason()
         )
         mutableTrackingLiveState.value = liveState
         lastProgressModel = TripProgressModel.from(cachedStops, liveState, destinationName,

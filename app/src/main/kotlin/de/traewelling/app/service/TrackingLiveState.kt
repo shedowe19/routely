@@ -13,5 +13,6 @@ data class TrackingLiveState(
     val completed: Boolean,
     val source: TrackingSource,
     val gpsTimes: GpsJourneyTimes? = null,
-    val sevStops: Map<String, SevStopInfo> = emptyMap()
+    val sevStops: Map<String, SevStopInfo> = emptyMap(),
+    val gpsTimeUnavailableReason: GpsTimeUnavailableReason? = null
 )

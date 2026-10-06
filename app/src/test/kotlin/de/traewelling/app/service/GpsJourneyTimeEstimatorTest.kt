@@ -302,8 +302,12 @@ class GpsJourneyTimeEstimatorTest {
         }
         val first = stationFix(0, base - 60_000)
         assertNull(update(estimator, first, progress(0, arrived = true), route = boardingRoute))
-        assertNull(update(estimator, first.copy(timeMillis = first.timeMillis + 5_000),
-            progress(0, arrived = true), route = boardingRoute))
+        val observedOnly = update(estimator, first.copy(timeMillis = first.timeMillis + 5_000),
+            progress(0, arrived = true), route = boardingRoute)!!
+        assertEquals(base - 60_000, observedOnly.stopTimes.single().arrivalMillis)
+        assertTrue(observedOnly.stopTimes.single().arrivalObserved)
+        assertNull(observedOnly.stopTimes.single().departureMillis)
+        assertEquals(GpsTimeUnavailableReason.WAITING_AT_ORIGIN, estimator.unavailableReason())
         assertEquals(base + 300_000, boardingRoute[0].effectiveDepartureMillis)
     }
 
@@ -331,8 +335,13 @@ class GpsJourneyTimeEstimatorTest {
         val estimator = GpsJourneyTimeEstimator()
         update(estimator, stationFix(0, base), progress(0, arrived = true))
         assertNull(update(estimator, stationFix(0, base + 5_000), progress(0, arrived = true)))
-        assertNull(update(estimator, fractionFix(.20).copy(timeMillis = base + 20_000), progress()))
-        assertNull(update(estimator, fractionFix(.25).copy(timeMillis = base + 26_000), progress()))
+        val observedDeparture = update(estimator, fractionFix(.20).copy(timeMillis = base + 20_000), progress())!!
+        assertEquals("origin", observedDeparture.stopTimes.single().stopKey)
+        assertEquals(base + 20_000, observedDeparture.stopTimes.single().departureMillis)
+        assertTrue(observedDeparture.stopTimes.single().departureObserved)
+        assertEquals(GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT, estimator.unavailableReason())
+        val stillObservedOnly = update(estimator, fractionFix(.25).copy(timeMillis = base + 26_000), progress())!!
+        assertEquals("origin", stillObservedOnly.stopTimes.single().stopKey)
         val estimate = update(estimator, fractionFix(.30).copy(timeMillis = base + 32_000), progress())!!
         val origin = estimate.stopTimes.first { it.stopKey == "origin" }
         assertEquals(base + 20_000, origin.departureMillis)
@@ -351,7 +360,11 @@ class GpsJourneyTimeEstimatorTest {
         val estimator = GpsJourneyTimeEstimator()
         update(estimator, stationFix(0, base), progress(0, arrived = true), route = longRoute)
         update(estimator, stationFix(0, base + 5_000), progress(0, arrived = true), route = longRoute)
-        assertNull(update(estimator, fractionFix(.02, route = longRoute).copy(timeMillis = base + 20_000), progress(), route = longRoute))
+        val observedOnly = update(estimator, fractionFix(.02, route = longRoute).copy(timeMillis = base + 20_000),
+            progress(), route = longRoute)!!
+        assertEquals("origin", observedOnly.stopTimes.single().stopKey)
+        assertEquals(base + 20_000, observedOnly.stopTimes.single().departureMillis)
+        assertTrue(observedOnly.stopTimes.single().departureObserved)
         var estimate: GpsJourneyTimes? = null
         for (fraction in listOf(.05, .06, .07)) {
             estimate = update(estimator, fractionFix(fraction, route = longRoute), progress(), route = longRoute)
@@ -359,6 +372,146 @@ class GpsJourneyTimeEstimatorTest {
         val origin = estimate!!.stopTimes.first { it.stopKey == "origin" }
         assertEquals(base + 20_000, origin.departureMillis)
         assertTrue(origin.departureObserved)
+    }
+
+    @Test
+    fun observedDepartureRemainsAvailableOnCurvedRoadWithoutAFutureForecast() {
+        val longRoute = longRoute()
+        val estimator = GpsJourneyTimeEstimator()
+        observeDepartureBeforeForecast(estimator, longRoute)
+        val offCorridor = fractionFix(.03, route = longRoute).copy(latitude = 50.002, timeMillis = base + 25_000)
+        val actualOnly = update(estimator, offCorridor, progress(route = longRoute), route = longRoute)!!
+        val origin = actualOnly.stopTimes.single()
+        assertEquals("origin", origin.stopKey)
+        assertEquals(base + 20_000, origin.departureMillis)
+        assertTrue(origin.departureObserved)
+        assertNull(origin.arrivalMillis)
+        assertEquals(GpsTimeUnavailableReason.OUTSIDE_CORRIDOR, estimator.unavailableReason())
+        assertEquals(actualOnly, update(estimator, offCorridor, progress(route = longRoute),
+            now = offCorridor.timeMillis + 1_000, route = longRoute))
+    }
+
+    @Test
+    fun observedArrivalSurvivesOffCorridorWithoutKeepingGuessedDeparture() {
+        val estimator = GpsJourneyTimeEstimator()
+        update(estimator, stationFix(1, base + 120_000), progress(arrived = true))
+        assertNotNull(update(estimator, stationFix(1, base + 123_000), progress(arrived = true)))
+        val offCorridor = fractionFix(.10, index = 2).copy(latitude = 50.002, timeMillis = base + 130_000)
+        val actualOnly = update(estimator, offCorridor, progress(2))!!
+        val middle = actualOnly.stopTimes.single()
+        assertEquals("middle", middle.stopKey)
+        assertEquals(base + 120_000, middle.arrivalMillis)
+        assertTrue(middle.arrivalObserved)
+        assertNull(middle.departureMillis)
+        assertFalse(middle.departureObserved)
+        assertEquals(GpsTimeUnavailableReason.OUTSIDE_CORRIDOR, estimator.unavailableReason())
+    }
+
+    @Test
+    fun observedOnlySnapshotExpiresAndClockTicksDoNotRenewIt() {
+        val longRoute = longRoute()
+        val estimator = GpsJourneyTimeEstimator()
+        val actualOnly = observeDepartureBeforeForecast(estimator, longRoute)
+        val fix = fractionFix(.02, route = longRoute).copy(timeMillis = base + 20_000)
+        assertEquals(base + 50_000, actualOnly.validUntilMillis)
+        assertEquals(actualOnly, update(estimator, fix, progress(route = longRoute),
+            now = actualOnly.validUntilMillis, route = longRoute))
+        assertNull(update(estimator, fix, progress(route = longRoute),
+            now = actualOnly.validUntilMillis + 1, route = longRoute))
+        assertEquals(GpsTimeUnavailableReason.NO_FRESH_LOCATION, estimator.unavailableReason())
+    }
+
+    @Test
+    fun expiredRetainedForecastDropsGuessesButKeepsFreshActualEventsOnClockTick() {
+        val estimator = GpsJourneyTimeEstimator()
+        update(estimator, stationFix(1, base + 120_000), progress(arrived = true))
+        val forecast = update(estimator, stationFix(1, base + 123_000), progress(arrived = true))!!
+        val departing = fractionFix(.10, index = 2).copy(timeMillis = base + 135_000)
+        val merged = update(estimator, departing, progress(2))!!
+        assertTrue(merged.stopTimes.first { it.stopKey == "middle" }.departureObserved)
+        assertEquals(forecast.validUntilMillis, merged.validUntilMillis)
+        val braking = fractionFix(.1001, index = 2).copy(timeMillis = base + 150_000, speedMetersPerSecond = 0.0)
+        assertEquals(merged, update(estimator, braking, progress(2)))
+        val actualOnly = update(estimator, braking, progress(2), now = base + 154_000)!!
+        assertEquals(base + 150_000, actualOnly.updatedAtMillis)
+        assertEquals(base + 180_000, actualOnly.validUntilMillis)
+        assertEquals("middle", actualOnly.stopTimes.single().stopKey)
+        assertTrue(actualOnly.stopTimes.single().arrivalObserved)
+        assertTrue(actualOnly.stopTimes.single().departureObserved)
+        assertEquals(GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT, estimator.unavailableReason())
+        assertEquals(actualOnly, update(estimator, braking, progress(2), now = base + 175_000))
+        assertNull(update(estimator, braking, progress(2), now = base + 180_001))
+    }
+
+    @Test
+    fun observedEventsDisappearWhenGpsBecomesUnreliable() {
+        val longRoute = longRoute()
+        val fresh = fractionFix(.03, route = longRoute).copy(timeMillis = base + 25_000)
+        val rejected = listOf(
+            fresh.copy(accuracyMeters = 76.0) to fresh.timeMillis,
+            fresh to fresh.timeMillis - 1,
+            fresh to fresh.timeMillis + 30_001,
+            fresh.copy(speedMetersPerSecond = 101.0) to fresh.timeMillis,
+            fractionFix(.50, route = longRoute).copy(timeMillis = base + 21_000) to base + 21_000
+        )
+        for ((fix, now) in rejected) {
+            val estimator = GpsJourneyTimeEstimator()
+            observeDepartureBeforeForecast(estimator, longRoute)
+            assertNull(update(estimator, fix, progress(route = longRoute), now, longRoute))
+            assertNotNull(estimator.unavailableReason())
+            val recovered = fresh.copy(timeMillis = base + 30_000)
+            assertNull(update(estimator, recovered, progress(route = longRoute), route = longRoute))
+        }
+    }
+
+    @Test
+    fun physicalStopOrPlannedVisitEditDiscardsObservedEvents() {
+        val longRoute = longRoute()
+        val changedRoutes = listOf(
+            longRoute.mapIndexed { index, stop -> if (index == 0) stop.copy(latitude = 50.001) else stop } to
+                GpsTimeUnavailableReason.OUTSIDE_CORRIDOR,
+            longRoute.mapIndexed { index, stop -> if (index == 0) stop.copy(plannedArrivalMillis = base - 60_000) else stop } to
+                GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT
+        )
+        for ((changedRoute, expectedReason) in changedRoutes) {
+            val estimator = GpsJourneyTimeEstimator()
+            observeDepartureBeforeForecast(estimator, longRoute)
+            val fresh = fractionFix(.03, route = longRoute).copy(timeMillis = base + 25_000)
+            assertNull(update(estimator, fresh, progress(route = changedRoute), route = changedRoute))
+            assertEquals(expectedReason, estimator.unavailableReason())
+        }
+    }
+
+    @Test
+    fun unavailableReasonDistinguishesMissingAccuracyVisitAndRoute() {
+        val estimator = GpsJourneyTimeEstimator()
+        val fix = fractionFix(.25)
+        assertNull(estimator.update(route, progress(), TrackingSource.GPS, null, fix.timeMillis))
+        assertEquals(GpsTimeUnavailableReason.NO_FRESH_LOCATION, estimator.unavailableReason())
+        assertNull(update(estimator, fix.copy(accuracyMeters = 76.0), progress()))
+        assertEquals(GpsTimeUnavailableReason.INACCURATE_LOCATION, estimator.unavailableReason())
+        assertNull(update(estimator, fix, progress().copy(gpsEstablished = false)))
+        assertEquals(GpsTimeUnavailableReason.VISIT_UNCONFIRMED, estimator.unavailableReason())
+        val noCoordinates = route.map { it.copy(latitude = null) }
+        assertNull(update(estimator, fix, progress(route = noCoordinates), route = noCoordinates))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_UNSUPPORTED, estimator.unavailableReason())
+        assertNull(update(estimator, fix.copy(speedMetersPerSecond = 101.0), progress()))
+        assertEquals(GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT, estimator.unavailableReason())
+    }
+
+    @Test
+    fun forecastReasonTracksInsufficientEvidenceCorridorAndRecovery() {
+        val estimator = GpsJourneyTimeEstimator()
+        assertNull(update(estimator, fractionFix(.25), progress()))
+        assertEquals(GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT, estimator.unavailableReason())
+        assertNotNull(travel(estimator))
+        assertNull(estimator.unavailableReason())
+        val offCorridor = fractionFix(.36).copy(latitude = 50.002, timeMillis = base + 45_000)
+        assertNull(update(estimator, offCorridor, progress()))
+        assertEquals(GpsTimeUnavailableReason.OUTSIDE_CORRIDOR, estimator.unavailableReason())
+        for (fraction in listOf(.40, .45, .50)) assertNull(update(estimator, fractionFix(fraction), progress()))
+        assertNotNull(update(estimator, fractionFix(.55), progress()))
+        assertNull(estimator.unavailableReason())
     }
 
     @Test
@@ -640,6 +793,21 @@ class GpsJourneyTimeEstimatorTest {
             result = update(estimator, fractionFix(fraction, offset, index, route), progress(index, route = route), route = route)
         }
         return result
+    }
+
+    private fun longRoute() = route.toMutableList().apply {
+        this[1] = this[1].copy(longitude = .2, plannedArrivalMillis = base + 600_000,
+            plannedDepartureMillis = base + 630_000)
+        this[2] = this[2].copy(longitude = .4, plannedArrivalMillis = base + 1_230_000,
+            plannedDepartureMillis = base + 1_260_000)
+    }
+
+    private fun observeDepartureBeforeForecast(estimator: GpsJourneyTimeEstimator, longRoute: List<TrackingStop>): GpsJourneyTimes {
+        update(estimator, stationFix(0, base), progress(0, arrived = true, route = longRoute), route = longRoute)
+        assertNull(update(estimator, stationFix(0, base + 5_000),
+            progress(0, arrived = true, route = longRoute), route = longRoute))
+        return update(estimator, fractionFix(.02, route = longRoute).copy(timeMillis = base + 20_000),
+            progress(route = longRoute), route = longRoute)!!
     }
 
     private fun update(

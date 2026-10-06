@@ -62,6 +62,8 @@ Das ViewModel veröffentlicht die API-Antwort vor seiner separaten Anreicherung 
 
 Die SEV-Punkte verbessern den Bezugspunkt der Halterkennung. Sie liefern keine Straßenroute und garantieren keine Bus-ETA: Der bestehende GPS-Zeitkorridor verbindet Halte gerade und kann kurvige Straßenfahrten weiterhin ablehnen. Ungeeignete GPS-Zeitdaten fallen auf API-/Planzeit zurück; SEV-Zuordnung ist kein Anlass, Genauigkeits- oder Bewegungsgrenzen zu lockern.
 
+Beim Nutzerbericht zur Gegenrichtung Duisburg → Mülheim → Essen kann daher die GPS-Haltmarkierung bereits aktiv sein, während Ankunftszeiten aus dem Fahrplan stammen. Der Besuchscursor benötigt andere Belege als die Zeitprognose. Ein Screenshot ohne Fixverlauf weist weder eine bestimmte Korridorverletzung noch eine bereits beobachtete Abfahrt nach. Bestätigte lokale Ereignisse und künftige ETA werden getrennt veröffentlicht; Gründe für einen Prognoserückfall stehen unter [GPS-Zeiten](./gps-zeiten.md).
+
 ## Abhängigkeiten
 
 Vorhandenes Gson, OkHttp und Coroutines sowie die Träwelling-Haltfolge. Keine neue Android-Bibliothek, Preference, Room-Tabelle, Retrofit-Route oder RIS::Stations-Freischaltung. Der öffentliche Abruf übermittelt Bahnhofslugs und übliche Verbindungsdaten, aber keine Gerätepositionen und keinen Träwelling-Token. Die HTML-Struktur ist eine Website-Ausgabe ohne zugesicherten API-Vertrag.
@@ -71,6 +73,7 @@ Vorhandenes Gson, OkHttp und Coroutines sowie die Träwelling-Haltfolge. Keine n
 Der Abruf vom 06.10.2026 belegte fünf öffentliche Punkte für Essen, Mülheim und Duisburg; der [Quellenabgleich](./gps-zeiten.md) enthält Koordinaten und Lagepläne. Der aktuelle automatisierte Prüflauf und dessen Grenzen stehen unter [Tests](../entwicklung/tests.md); ein Live-Quellenabruf allein belegt keine reale Busansage oder GPS-Prognosegüte.
 
 - TODO: Die automatische Ergänzung mit realem RE1-Busersatzverkehr testen, insbesondere Einstieg an der Kruppstraße, Mülheimer Richtungswechsel, kurz hintereinander liegende Halte, Signalverlust und Wiederanlauf mit Cache.
+- TODO: Die Rückfahrt Duisburg → Mülheim → Essen mit beobachteten Ereigniszeiten und erklärtem Prognoserückfall prüfen. Die tatsächliche Straßenführung bleibt außerhalb der Ersatzhaltpunktdaten; genaue Bus-ETA benötigt eine gesonderte Routenbasis.
 - TODO: Duisburgs tatsächlichen Ankunftspunkt anhand der konkreten vollständigen API-Fahrt und vor Ort verifizieren. Bei fehlender Richtung muss die Anzeige die unbestätigte Position beibehalten.
 - TODO: Weitere Bahnhofs-Slugs, Richtungsformulierungen, ungewöhnliche Maßnahmenzeiträume und andere SEV-Linien prüfen. Die Bus-RE/RB-Regel ist bewusst begrenzt.
 - TODO: Änderungen der Website-Struktur, dauerhafte Nutzungsbedingungen, regelmäßige Abrufe und Akku-/Netzwerkverbrauch bewerten. Nach Ende einer Maßnahme dürfen alte öffentliche Punkte keine GPS-Korrektur mehr liefern.

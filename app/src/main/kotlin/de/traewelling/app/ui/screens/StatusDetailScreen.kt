@@ -39,6 +39,7 @@ import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.TravelReason
 import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.service.GpsJourneyTimes
+import de.traewelling.app.service.GpsTimeUnavailableReason
 import de.traewelling.app.service.JourneyTime
 import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.JourneyTimeSource
@@ -252,6 +253,11 @@ private fun StatusDetailContent(
     // the current clock, not the previous tick that may predate the new fix.
     val nowMillis = System.currentTimeMillis()
     val gpsTimes = uiState.trackingState?.takeIf { it.source == TrackingSource.GPS }?.gpsTimes
+    val gpsTimeReasonMessage = uiState.trackingState?.let { tracking ->
+        if (tracking.gpsTimes?.let { nowMillis > it.validUntilMillis } == true)
+            "Die GPS-Zeitdaten sind abgelaufen."
+        else tracking.gpsTimeUnavailableReason?.let(::gpsTimeUnavailableMessage)
+    }
     val isReplacementBus = checkin?.let(SevStopResolver::isReplacementBus) == true
     // The active service owns the coordinates used for navigation. Its assignment
     // takes precedence; the detail lookup also supplies guidance before tracking starts.
@@ -381,6 +387,13 @@ private fun StatusDetailContent(
                                         style = MaterialTheme.typography.labelSmall,
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                                     )
+                                    gpsTimeReasonMessage?.let { reason ->
+                                        Text(
+                                            reason,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f)
+                                        )
+                                    }
                                 }
                                 Surface(
                                     color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
@@ -1159,6 +1172,26 @@ private fun SevStopGuidance(info: SevStopInfo) {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+private fun gpsTimeUnavailableMessage(reason: GpsTimeUnavailableReason): String =
+    when (reason) {
+        GpsTimeUnavailableReason.NO_FRESH_LOCATION ->
+            "Zeitprognose wartet auf frisches GPS."
+        GpsTimeUnavailableReason.INACCURATE_LOCATION ->
+            "GPS ist für eine Zeitprognose zu ungenau."
+        GpsTimeUnavailableReason.VISIT_UNCONFIRMED ->
+            "Der GPS-Halt ist noch nicht sicher zugeordnet."
+        GpsTimeUnavailableReason.ROUTE_UNSUPPORTED ->
+            "Für die Zeitprognose fehlen passende Streckendaten."
+        GpsTimeUnavailableReason.WAITING_AT_ORIGIN ->
+            "Die Zeitprognose wartet auf bestätigte Fahrbewegung nach dem Einstieg."
+        GpsTimeUnavailableReason.OUTSIDE_CORRIDOR ->
+            "Der Fahrtweg weicht von der berechneten Verbindung zwischen den Halten ab."
+        GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT ->
+            "Für die Zeitprognose wird weitere Fahrbewegung benötigt."
+        GpsTimeUnavailableReason.UNPLAUSIBLE_MOVEMENT ->
+            "Die GPS-Bewegung ist für eine Zeitprognose noch nicht eindeutig."
+    }
 
 private fun formatTimeFromIso(isoTimestamp: String?): String {
     if (isoTimestamp.isNullOrBlank()) return "–"
