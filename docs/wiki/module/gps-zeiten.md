@@ -62,8 +62,23 @@ Die Erweiterung sendet weder Standortverläufe noch Prognosen an Träwelling und
 
 `StationTrackingEngine`, `TrackingStop.plannedArrivalMillis` und `plannedDepartureMillis`, die bestehende Standortfreigabe sowie parsebare ISO-Zeitfelder der API. Es wird keine zusätzliche API, Preference oder Datenbank eingeführt.
 
+## SEV: fehlender Ersatzhaltestellenabgleich
+
+Die Codeprüfung vom 06.10.2026 bestätigt: `TripTrackingService.toTrackingStops()` übernimmt `stop.station.latitude/longitude` aus der Träwelling-API. Eine SEV-Datenbank, eine alternative Einstiegsadresse und eine Zuordnung physischer Ersatzhalte existieren bisher nicht. `category = bus`, Linienname und Betreiber sind allgemeine Verkehrsmitteldaten, kein eindeutiger Beleg für einen bestimmten SEV-Halt. Die nachgereichte Aufnahme einer Busfahrt RE1 Essen Hbf → Mülheim (Ruhr) Hbf → Duisburg Hbf zeigt Namen und Fahrplanzeiten, jedoch keine tatsächlich gelieferten Koordinaten oder Location-Callbacks.
+
+Der offizielle Abgleich liefert folgende Ortsinformationen; sie sind Rechercheergebnisse, keine eingebauten Koordinatenkorrekturen:
+
+- [DB-SEV-Lageplan Essen Hbf, Stand 22.04.2026](https://www.bahnhof.de/downloads/replacement-service-maps/1690.pdf): Ausgang Freiheit, rechts zur Kruppstraße vor DSV. Der Bahnsteig beziehungsweise die allgemeine Bahnhofkoordinate ist nicht automatisch der physische Ersatzhalt.
+- [Zuginfo NRW, Meldung 137487](https://www.zuginfo.nrw/index.html?msg=137487), Verlegung 04.09.–30.10.2026: Mülheim (Ruhr) Hbf Richtung Duisburg in der Parallelstraße oberhalb des Tourainer Rings; Richtung Essen in der Parallelstraße vor der Brücke. Der aktuelle Meldungstext wurde im Suchindex gelesen; die Live-Webansicht lieferte im Recherchewerkzeug keinen auswertbaren Text.
+- [Offizieller Verlegungsplan Duisburg Hbf](https://www.zuginfo.nrw/download/1787148404746_Duisburg_Hbf_ge_nderte_SEV_Haltestelle_Neudorfer_Str_04_09_30_10_26.pdf), 04.09.–30.10.2026: Richtung Essen/Oberhausen Neudorfer Straße auf Höhe Hausnummer 62; Richtung Düsseldorf weiterhin Kammerstraße am Osteingang. Die Ankunftsposition einer in Duisburg endenden Busfahrt ist aus der Abfahrtsrichtungsregel allein nicht bewiesen.
+
+[DB RIS::Stations](https://developers.deutschebahn.com/db-api-marketplace/apis/product/ris-stations) dokumentiert `GET /replacement-transport/stops/by-bounding-box`. Der Dienst benötigt einen genehmigten Zugang und einen abonnierten Nutzungsplan; ein maximal zweimonatiger Testzugang ist angeboten. Hier wurde die öffentliche Dokumentation geprüft, keine authentifizierte Datenbankabfrage durchgeführt. Nutzungsbedingungen, Datenlizenz und dauerhafter Zugang müssen vor einer Integration geklärt werden.
+
+Eine spätere Zuordnung muss Stationskennung, konkreten Fahrtbesuch, Datum, Richtung und gegebenenfalls mehrere Kandidaten berücksichtigen. Nur eindeutig belegte physische Punkte dürfen die interne Tracking-Projektion ergänzen; API-Stations-ID, Stopover-UUID und Zeiten bleiben erhalten. Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträchtigen. Zusätzlich können Straßenumwege den bestehenden geraden Prognosekorridor verlassen; Ersatzhaltkoordinaten allein gewährleisten deshalb keine Bus-ETA. Eine Bus-Routenprojektion ist ein eigenständiger Ausbau und kein Anlass, die GPS-Gültigkeitsgrenzen pauschal zu lockern.
+
 ## Offene Fragen
 
+- TODO: Einen verfügbaren, dauerhaft nutzbaren SEV-Datenzugang und dessen Antwortschema einschließlich Kennungen, Koordinaten, Richtungs-/Gültigkeitsinformationen prüfen. Für den gemeldeten RE1 die tatsächlich von der API gelieferten Stopover-Koordinaten und die Ankunftshaltestelle in Duisburg verifizieren; keine Koordinaten aus Namen oder Hausnummern erfinden.
 - TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand und der aktuellen UI-Vergleichszeit erneut prüfen. Die nachgereichte Bildschirmaufnahme bei eingeschaltetem Display zeigt wechselnde GPS-/API-Quellen für denselben Besuch und Folgehalte, enthält aber keinen Standort- oder Audioverlauf. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
 - TODO: Einheitliche Quellen-/Zeitdarstellung in Fahrtdetail, Widget und Samsung-Sperrbildschirm bei Display-aus-Betrieb und wiederkehrendem Signal prüfen. Reine Kotlin-Tests belegen keine reale ETA-Güte.
 
