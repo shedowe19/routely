@@ -50,12 +50,12 @@ data class GpsJourneyTimes(
                 stop.uuid == time.stopKey && arrival == time.plannedArrivalMillis &&
                     departure == time.plannedDepartureMillis
             } else {
-                val commonArrival = arrival != null && time.plannedArrivalMillis != null
-                val commonDeparture = departure != null && time.plannedDepartureMillis != null
+                // A UI refresh can precede the service's baseline update. A
+                // marker being added or removed is also a changed visit basis,
+                // even while the other marker and station still agree.
                 stop.stationId != null && stop.stationId == time.stationId &&
-                    (commonArrival || commonDeparture) &&
-                    (!commonArrival || arrival == time.plannedArrivalMillis) &&
-                    (!commonDeparture || departure == time.plannedDepartureMillis)
+                    (arrival != null || departure != null) &&
+                    arrival == time.plannedArrivalMillis && departure == time.plannedDepartureMillis
             }
         }
         return matches.singleOrNull()?.takeIf {

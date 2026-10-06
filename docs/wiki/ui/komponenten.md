@@ -35,6 +35,8 @@ Zeigt:
 - Like-Button mit Zähler
 - Details-Hinweis als visuelle Affordance für den Status-Detail-Screen
 
+`onLike` ist nullable: ohne Handler oder bei `status.isLikable = false` ist die Herz-Aktion deaktiviert. Feedkarten besitzen einen Handler; eigene und fremde Profilkarten übergeben ausdrücklich `null`.
+
 ### StateMessage
 
 Einheitliche Darstellung für Lade-, Fehler- und Empty-States in Screens.

@@ -71,6 +71,16 @@ class JourneyTimeResolverTest {
             JourneyTimeResolver.arrival(withoutUuid, times, now)!!.source)
     }
 
+    @Test fun refreshedFallbackVisitWithARemovedPlanUsesNewApiTimeInsteadOfTheOldGpsSnapshot() {
+        val times = gps().copy(stopTimes = gps().stopTimes.map { it.copy(stopKey = "7:visit:0") })
+        val refreshed = stop.copy(uuid = null, departurePlanned = null,
+            departureReal = iso(plannedDeparture + 9 * MINUTE))
+        val departure = JourneyTimeResolver.departure(refreshed, times, now)!!
+        assertEquals(JourneyTimeSource.API_REALTIME, departure.source)
+        assertEquals(plannedDeparture + 9 * MINUTE, departure.millis)
+        assertNull(departure.plannedMillis)
+    }
+
     @Test fun ambiguousGpsVisitTimesUseApiInsteadOfPickingTheFirst() {
         val times = gps().let { it.copy(stopTimes = it.stopTimes + it.stopTimes) }
         assertEquals(JourneyTimeSource.API_REALTIME, JourneyTimeResolver.arrival(stop, times, now)!!.source)

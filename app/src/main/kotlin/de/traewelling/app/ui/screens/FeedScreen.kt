@@ -34,7 +34,7 @@ fun FeedScreen(
 
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
-            viewModel.refresh()
+            if (!uiState.isRefreshing) viewModel.refresh()
         }
     }
     LaunchedEffect(uiState.isRefreshing) {
@@ -55,7 +55,8 @@ fun FeedScreen(
     val shouldLoadMore = remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= uiState.statuses.size - 3 && uiState.hasMore && !uiState.isLoading
+            lastVisible >= uiState.statuses.size - 3 && uiState.hasMore && !uiState.isLoading &&
+                !uiState.isRefreshing && uiState.error == null
         }
     }
     LaunchedEffect(shouldLoadMore.value) {
@@ -96,9 +97,15 @@ fun FeedScreen(
             )
         }
 
+        if (uiState.statuses.isNotEmpty()) {
+            uiState.error?.let { error ->
+                Text(error, color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
         Box(modifier = Modifier.nestedScroll(pullRefreshState.nestedScrollConnection).fillMaxSize()) {
             when {
-                uiState.isLoading && uiState.statuses.isEmpty() && !uiState.isRefreshing ->
+                (uiState.isLoading || uiState.isRefreshing) && uiState.statuses.isEmpty() ->
                     StateMessage(
                         icon = Icons.Default.Train,
                         title = "Feed wird geladen",

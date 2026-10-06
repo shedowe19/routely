@@ -69,8 +69,8 @@ fun StatusDetailScreen(
         viewModel.loadStatusDetail(statusId)
     }
 
-    DisposableEffect(Unit) {
-        onDispose { viewModel.reset() }
+    DisposableEffect(statusId) {
+        onDispose { viewModel.reset(statusId) }
     }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -302,6 +302,14 @@ private fun StatusDetailContent(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = 80.dp)
     ) {
+        if (!uiState.isEditing) {
+            uiState.error?.let { error ->
+                item {
+                    Text(error, color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+                }
+            }
+        }
         // Status header card
         item {
             AnimatedVisibility(
@@ -975,12 +983,9 @@ private fun StopoverItem(
                         }
                     }
                 }
-                val rawPlat = stop.platform ?: stop.departurePlatformReal ?: stop.arrivalPlatformReal
-                // Strip HAFAS sector prefix "9": "91"→"1", "911"→"11", "99"→"9"
-                // Some DB stations encode tracks as sector(9) + number internally
-                val plat = rawPlat?.let { p ->
-                    if (p.length > 1 && p.startsWith("9") && p.drop(1).all { it.isDigit() }) p.drop(1) else p
-                }
+                val plat = stop.departurePlatformReal?.takeIf { it.isNotBlank() }
+                    ?: stop.arrivalPlatformReal?.takeIf { it.isNotBlank() }
+                    ?: stop.platform?.takeIf { it.isNotBlank() }
                 if (plat != null && !isReplacementBus) {
                     val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
                     Surface(
@@ -1303,6 +1308,9 @@ private fun EditStatusDialog(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                uiState.error?.let { error ->
+                    Text(error, color = MaterialTheme.colorScheme.error)
+                }
                 // Destination selection
                 var expanded by remember { mutableStateOf(false) }
                 val selectedStop = uiState.editDestinationStop
@@ -1310,7 +1318,7 @@ private fun EditStatusDialog(
                 Text("Ausstieg", style = MaterialTheme.typography.labelMedium)
                 ExposedDropdownMenuBox(
                     expanded = expanded,
-                    onExpandedChange = { exp -> expanded = exp }
+                    onExpandedChange = { exp -> if (!uiState.isUpdating) expanded = exp }
                 ) {
                     OutlinedTextField(
                         value = selectedStop?.let {
@@ -1318,6 +1326,7 @@ private fun EditStatusDialog(
                         } ?: "Ziel auswählen",
                         onValueChange = {},
                         readOnly = true,
+                        enabled = !uiState.isUpdating,
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth()
                     )
@@ -1325,12 +1334,16 @@ private fun EditStatusDialog(
                         expanded = expanded,
                         onDismissRequest = { expanded = false }
                     ) {
-                        for (stop in uiState.stopovers) {
+                        val originIndex = uiState.stopovers.indices.filter {
+                            uiState.stopovers[it].matchesStopover(uiState.status?.checkin?.origin)
+                        }.singleOrNull() ?: -1
+                        for (stop in uiState.stopovers.drop((originIndex + 1).coerceAtLeast(0))) {
                             DropdownMenuItem(
                                 text = {
                                     Text("${stop.stationName ?: "–"} · ${formatTimeFromIso(stop.arrivalPlanned)}")
                                 },
-                                enabled = stop.stationId != null && !stop.arrivalPlanned.isNullOrBlank(),
+                                enabled = !uiState.isUpdating && originIndex >= 0 && stop.cancelled != true &&
+                                    stop.stationId != null && !stop.arrivalPlanned.isNullOrBlank(),
                                 onClick = {
                                     onUpdateDestination(stop)
                                     expanded = false
@@ -1344,6 +1357,7 @@ private fun EditStatusDialog(
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = uiState.editDeparture,
+                        enabled = !uiState.isUpdating,
                         onValueChange = onUpdateDeparture,
                         label = { Text("Abfahrt real") },
                         modifier = Modifier.weight(1f),
@@ -1351,6 +1365,7 @@ private fun EditStatusDialog(
                     )
                     OutlinedTextField(
                         value = uiState.editArrival,
+                        enabled = !uiState.isUpdating,
                         onValueChange = onUpdateArrival,
                         label = { Text("Ankunft real") },
                         modifier = Modifier.weight(1f),
@@ -1361,6 +1376,7 @@ private fun EditStatusDialog(
                 // Status text
                 OutlinedTextField(
                     value = uiState.editBody,
+                    enabled = !uiState.isUpdating,
                     onValueChange = onUpdateBody,
                     label = { Text("Status-Text") },
                     modifier = Modifier.fillMaxWidth(),

@@ -1,6 +1,6 @@
 # 🚅 Routely (Optimierte Version)
 
-[![Kotlin](https://img.shields.io/badge/kotlin-1.9.0-blue.svg)](https://kotlinlang.org)
+[![Kotlin](https://img.shields.io/badge/kotlin-1.9.23-blue.svg)](https://kotlinlang.org)
 [![Jetpack Compose](https://img.shields.io/badge/UI-Jetpack%20Compose-orange.svg)](https://developer.android.com/jetpack/compose)
 
 Diese Version von **Routely** wurde speziell optimiert, um eine perfekte Brücke zwischen der Träwelling-Webplattform und dem mobilen Erlebnis zu schlagen. Der Fokus lag dabei auf der präzisen Darstellung von manuell korrigierten Reisedaten und einem erstklassigen User Interface.
@@ -8,7 +8,7 @@ Diese Version von **Routely** wurde speziell optimiert, um eine perfekte Brücke
 ## ✨ Highlights der Optimierung
 
 ### 🔄 Perfekte Synchronisation manueller Edits
-Im Gegensatz zur Standardversion priorisiert diese App die im Träwelling-Backend vorgenommenen manuellen Zeitkorrekturen (`manualDeparture` / `manualArrival`). 
+Die App berücksichtigt im Träwelling-Backend vorgenommene manuelle Zeitkorrekturen (`manualDeparture` / `manualArrival`). Frische, eindeutig zugeordnete GPS-Zeiten haben Vorrang; ohne nutzbare GPS-Zeit folgen manuelle Korrektur, API-Echtzeit und Fahrplan.
 -   **Konsistente Daten:** Zeitkorrekturen werden global synchronisiert – von der Übersichtskarte bis hin zum tiefsten Haltestellenverlauf.
 -   **Visuelles Feedback:** Geplante Zeiten werden bei Abweichungen durchgestrichen, während die manuellen/realen Zeiten farblich hervorgehoben werden (Rot für Verspätung, Grün für Pünktlichkeit/Verfrühung).
 
@@ -21,6 +21,13 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 ### ⚡ Live-Status & Performance
 -   Ein dezenter **Live-Indikator** in der TopAppBar zeigt dir bei Fahrten am aktuellen Tag sofort an, dass du dich gerade im "Live-Modus" befindest.
 -   Optimierte Ladezeiten für umfangreiche Haltestellenlisten durch effizientes Daten-Merging im ViewModel.
+
+### 🧭 Reisebegleitung
+-   GPS-Fortschritt und lokale Zeitprognosen mit API-/Fahrplan-Rückfall bei fehlendem Empfang.
+-   Haltestellenansagen, aktive Hinweise auf Fahrtänderungen und Reisefortschritt in Notification und Widget.
+-   Optionale Fahrterkennung und SEV-Ersatzhaltestellen aus öffentlichen Bahnhofskarten.
+
+Funktionsgrenzen und Voraussetzungen stehen bei der [Reisebegleitung](docs/wiki/module/trip-tracking.md) und den [GPS-Zeiten](docs/wiki/module/gps-zeiten.md).
 
 ## 🛠 Tech Stack
 

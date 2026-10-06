@@ -14,6 +14,8 @@ Dokumentiert die Prüfung der von Routely verwendeten Träwelling-Endpunkte und 
 
 Die vorhandenen Endpunktpfade sind gültig. Die gefundenen Inkompatibilitäten betreffen vor allem Antwortfelder und die Unterscheidung zwischen Station und konkretem Halt innerhalb einer Fahrt.
 
+Am 06.10.2026 wurden Changelog, Routen, Stopover-Modell/-Resource sowie Status-, Statistik- und Dashboard-Controller auf `develop` erneut als Primärquellen gelesen. Dieser Abruf lieferte keinen sicheren neuen Commit-SHA; er wird deshalb nicht mit dem gepinnten Prüfstand vom 05.10. gleichgesetzt. Die erneute Prüfung bestätigt weiterhin die verwendeten Routen. Das Dashboard nutzt numerische Pagination mit 15 Einträgen, `statuses` ist unpaginiert, und Gleisstrings werden ohne unbelegte Präfixkürzung übernommen. Die späteren [Auth-/Cache-Korrekturen](../module/auth.md) ändern keine Träwelling-Endpunkte.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`
@@ -34,7 +36,7 @@ Alle folgenden Pfade haben das Präfix `/api/v1/`; OAuth verwendet `/oauth/token
 
 | Gruppe | Verwendete Pfade | Ergebnis |
 | --- | --- | --- |
-| Authentifizierung | `GET auth/user`, `POST auth/logout` | Weiterhin gültig; Login und Refresh über OAuth |
+| Authentifizierung | `GET auth/user`, `POST auth/logout` | Weiterhin gültig; erreichbarer Login per validiertem manuellem Token, OAuth-Helfer noch nicht angebunden |
 | Feeds | `GET dashboard`, `GET statuses` | Weiterhin gültig; Status enthält `user` und `checkin` |
 | Einzelstatus | `GET/PUT/DELETE status/{id}`, `POST/DELETE status/{id}/like` | Weiterhin gültig; Status-ID bleibt numerisch |
 | Stationssuche | `GET trains/station/autocomplete/{query}`, `GET stations`; zusätzlich deklarierter `GET trains/station/nearby` | Weiterhin gültig; Standortsuche im Check-in und in der Fahrterkennung verwendet `stations` mit Bounding-Box; Stationskennungen in `identifiers` |
@@ -77,7 +79,7 @@ Für am 30.09.2026 ausgelaufene Felder gibt es keine weitere Kompatibilitätsgar
 
 UI und Hintergrunddienst verwenden dieselben Stations- und Identitätshelfer aus `Models.kt`. Der Tracking-Service berücksichtigt manuelle Zeiten in seiner internen Route. Die aktuelle aktive Reiseanzeige löst Zeiten zusätzlich über `JourneyTimeResolver` auf: lokale GPS-Zeit, manuelle Zeit, parsebare API-Echtzeit, Plan. Das Fahrtdetail hält Providerwerte und manuelle Zeiten getrennt; GPS-Prognosen ersetzen keine API-Felder und erfordern keine neue API. Details: [GPS-Zeiten](../module/gps-zeiten.md).
 
-Eine Room-Schemamigration ist nicht erforderlich. Alte `statusJson`-Cache-Einträge dürfen ihren früheren Namen noch anzeigen (`legacyName` als privater Rückfall), liefern aber keine Station-ID aus dem alten Stopover-`id`. Neue Netzwerkantworten aktualisieren den Cache mit der verschachtelten Stationsstruktur.
+Die API-Modellmigration vom 05.10. erforderte keine Room-Schemaänderung. Alte `statusJson`-Cache-Einträge dürfen ihren früheren Namen noch anzeigen (`legacyName` als privater Rückfall), liefern aber keine Station-ID aus dem alten Stopover-`id`. Die getrennte Feedcache-Korrektur vom 06.10. hebt Room dagegen auf Version 2 und baut dessen Cache neu auf; sie ist unter [Migrationen](../daten/migrationen.md) dokumentiert. Neue Netzwerkantworten verwenden die verschachtelte Stationsstruktur.
 
 ## Neue APIs ohne bisherige App-Nutzung
 

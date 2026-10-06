@@ -23,6 +23,8 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 | -------------------- | ----------------------------------------------------------------- |
 | `OAuthTokenResponse` | Token-Antwort mit accessToken, refreshToken, tokenType, expiresIn |
 
+`AuthSession` in `util/AuthSession.kt` ist dagegen ein lokaler atomarer Snapshot aus Server-URL, optionalem nicht leerem Access-Token und Revisionskennung. Er ist kein Retrofit-/OAuth-Antwortmodell. Die Revision trennt auch Abmeldung und erneute Anmeldung mit denselben Zugangsdaten; vergleichende Persistenzoperationen und der Feature-ViewModel-Store verwenden diesen Zustand. [Auth](../module/auth.md) beschreibt seinen Lebenszyklus.
+
 ### User-Modelle
 
 | Modell         | Beschreibung                                                                                                                       |
@@ -119,11 +121,13 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 | --- | --- |
 | `TrackingStop.plannedDepartureMillis` | Geplante Abfahrt des konkreten Besuchs, getrennt von `effectiveDepartureMillis`; optional für alte Cache-Routen. |
 | `TrackingLiveState.gpsTimes` | Optionales prozesslokales Ergebnis der GPS-Zeitauswertung; nur passende eigene aktive Fahrt, nicht serialisiert. |
+| `TrackingLiveState.sessionRevision` | Bindet den RAM-Livezustand an die Zugangsgeneration; gleicher numerischer Status eines anderen Kontos darf ihn nicht übernehmen. Kein Fahrtcache-Feld und keine Zugangsdaten. |
+| `RideRecognitionState.authSessionRevision` | Bindet prozesslokale Fahrtvorschläge an dieselbe aktuelle Zugangsgeneration; das Check-in-ViewModel verwirft fremde oder frühere Revisionen. Nicht persistiert. |
 | `GpsStopTime` | Besuchsschlüssel, Station-ID, Plan-Ankunft/-Abfahrt und optionale lokale Ankunft/-Abfahrt; Flags unterscheiden beobachtet und geschätzt. |
 | `GpsJourneyTimes` | Liste besuchsbezogener GPS-Zeiten, Unterstützungs-Fixzeitpunkt und Gültigkeitsende; spätestens nach 30 Sekunden unbrauchbar. Geeignete Folgefixes ohne neue Prognose dürfen das Ende nicht verlängern. |
 | `JourneyTime` | Aufgelöster Anzeigezeitpunkt mit `JourneyTimeSource`, Planzeit, Quellenlabel und optionaler positiver/negativer Abweichung in Minuten. |
 
-`JourneyTimeResolver` prüft je Ereignis gültige GPS-Zeit, manuelle Zeit, parsebare API-Echtzeit und Planzeit in dieser Reihenfolge. GPS-Matching bevorzugt UUID, sonst Station-ID und vorhandene Planzeiten mit eindeutigem Treffer. Es werden keine neuen Retrofit-, Room- oder Status-PUT-Felder eingeführt. Die Prognosen und Standortbeobachtungen bleiben RAM-Zustand; Details stehen unter [GPS-Zeiten](../module/gps-zeiten.md).
+`JourneyTimeResolver` prüft je Ereignis gültige GPS-Zeit, manuelle Zeit, parsebare API-Echtzeit und Planzeit in dieser Reihenfolge. GPS-Matching bevorzugt UUID und verlangt in beiden Zuordnungswegen das exakt gleiche nullable Planpaar einschließlich Markeranwesenheit. Ohne UUID sind zusätzlich gleiche vorhandene Station-ID, mindestens ein parsebarer Planmarker und ein eindeutiger Treffer erforderlich. Diese strengere GPS-Zuordnung ersetzt nicht den allgemeinen API-Helfer `matchesStopover`. Die GPS-Erweiterung führt keine neuen Retrofit-, Room- oder Status-PUT-Felder ein. Prognosen und Standortbeobachtungen bleiben RAM-Zustand; Details stehen unter [GPS-Zeiten](../module/gps-zeiten.md).
 
 ### Lokale SEV-Quellen und Besuchshinweise
 

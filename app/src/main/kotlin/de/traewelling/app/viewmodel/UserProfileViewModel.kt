@@ -7,6 +7,9 @@ import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.User
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -29,16 +32,25 @@ class UserProfileViewModel(application: Application) : AndroidViewModel(applicat
     val uiState: StateFlow<UserProfileUiState> = _uiState.asStateFlow()
 
     private var currentUsername: String? = null
+    private var loadJob: Job? = null
+    private var followJob: Job? = null
+    private var generation = 0L
 
-    fun loadUserProfile(username: String) {
+    fun loadUserProfile(username: String, refresh: Boolean = false) {
         // If already loading the same user, skip
-        if (currentUsername == username && _uiState.value.user != null) return
+        if (!refresh && currentUsername == username &&
+            (_uiState.value.isLoading || (_uiState.value.user != null && _uiState.value.error == null))) return
+        val request = ++generation
+        loadJob?.cancel()
+        followJob?.cancel()
         currentUsername = username
+        _uiState.value = UserProfileUiState(isLoading = true)
 
-        viewModelScope.launch {
-            _uiState.update { UserProfileUiState(isLoading = true) }
-
-            repo.getUserProfile(username)
+        loadJob = viewModelScope.launch {
+            val profile = repo.getUserProfile(username)
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
+            profile
                 .onSuccess { user ->
                     _uiState.update { it.copy(user = user) }
                 }
@@ -49,15 +61,18 @@ class UserProfileViewModel(application: Application) : AndroidViewModel(applicat
                     return@launch
                 }
 
-            repo.getUserStatuses(username, 1)
+            val statuses = repo.getUserStatuses(username, 1)
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
+            statuses
                 .onSuccess { response ->
                     val hasMore = response.links?.next != null
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
-                            statuses    = response.data ?: emptyList(),
+                            statuses    = response.data.orEmpty().distinctBy { status -> status.id },
                             hasMore     = hasMore,
-                            currentPage = 2,
+                            currentPage = (response.meta?.currentPage ?: 1) + 1,
                             error       = null
                         )
                     }
@@ -73,42 +88,50 @@ class UserProfileViewModel(application: Application) : AndroidViewModel(applicat
     fun loadMoreStatuses() {
         val username = currentUsername ?: return
         if (_uiState.value.isLoading || !_uiState.value.hasMore) return
+        val request = generation
+        val page = _uiState.value.currentPage
+        _uiState.update { it.copy(isLoading = true, error = null) }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true) }
-            val page = _uiState.value.currentPage
-
-            repo.getUserStatuses(username, page)
+        loadJob = viewModelScope.launch {
+            val result = repo.getUserStatuses(username, page)
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
+            result
                 .onSuccess { response ->
                     val hasMore = response.links?.next != null
                     _uiState.update {
                         it.copy(
                             isLoading   = false,
-                            statuses    = it.statuses + (response.data ?: emptyList()),
+                            statuses    = (it.statuses + response.data.orEmpty()).distinctBy { status -> status.id },
                             hasMore     = hasMore,
-                            currentPage = page + 1
+                            currentPage = (response.meta?.currentPage ?: page) + 1
                         )
                     }
                 }
-                .onFailure {
-                    _uiState.update { it.copy(isLoading = false) }
+                .onFailure { e ->
+                    _uiState.update { it.copy(isLoading = false, error = "Weitere Fahrten konnten nicht geladen werden: ${e.message}") }
                 }
         }
     }
 
     fun toggleFollow() {
+        if (_uiState.value.isFollowLoading) return
         val user = _uiState.value.user ?: return
+        // The API has no cancellation endpoint for a pending private-profile request.
+        if (user.followPending == true && user.following != true) return
         val userId = user.id ?: return
+        val request = generation
+        _uiState.update { it.copy(isFollowLoading = true, error = null) }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isFollowLoading = true) }
-
+        followJob = viewModelScope.launch {
             val isCurrentlyFollowing = user.following == true
             val result = if (isCurrentlyFollowing) {
                 repo.unfollowUser(userId)
             } else {
                 repo.followUser(userId)
             }
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
 
             result.onSuccess {
                 // If user has private profile and we just followed, set followPending
@@ -128,20 +151,21 @@ class UserProfileViewModel(application: Application) : AndroidViewModel(applicat
                         user = user.copy(following = newFollowing, followPending = newPending)
                     )
                 }
-            }.onFailure {
-                _uiState.update { it.copy(isFollowLoading = false) }
+            }.onFailure { e ->
+                _uiState.update { it.copy(isFollowLoading = false, error = "Folgen konnte nicht geändert werden: ${e.message}") }
             }
         }
     }
 
     fun refresh() {
-        currentUsername?.let {
-            currentUsername = null
-            loadUserProfile(it)
-        }
+        currentUsername?.let { loadUserProfile(it, refresh = true) }
     }
 
-    fun reset() {
+    fun reset(username: String? = null) {
+        if (username != null && currentUsername != username) return
+        ++generation
+        loadJob?.cancel()
+        followJob?.cancel()
         currentUsername = null
         _uiState.value = UserProfileUiState()
     }

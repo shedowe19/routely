@@ -137,6 +137,7 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
 
         val previousByKey = previous.stops.associateBy { it.key }
         val remaining = snapshot.stops.drop(snapshot.nextIndex.coerceIn(0, snapshot.stops.size))
+        val nextServedStopKey = remaining.firstOrNull { it.cancelled != true }?.key
         val events = mutableListOf<TripChangeEvent>()
         for ((index, stop) in remaining.withIndex()) {
             val old = previousByKey[stop.key] ?: continue
@@ -155,7 +156,7 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
                     else "$subject ist laut aktueller Meldung wieder vorgesehen.")
             }
             // Future intermediate platforms are noisy; the next stop and exit need action now.
-            if (stop.cancelled != true && (index == 0 || stop.isDestination)) {
+            if (stop.cancelled != true && (stop.key == nextServedStopKey || stop.isDestination)) {
                 val oldPlatform = platform(old)
                 val newPlatform = platform(stop)
                 val oldIsLive = platformIsLive(old)

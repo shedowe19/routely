@@ -110,6 +110,22 @@ class RideRecognitionEngineTest {
         assertEquals(1, engine.onLocation(fix(400.0, now + 20_000), now + 20_000).size)
     }
 
+    @Test fun latePreciseFixCannotRestoreConfidenceAfterANewerInaccurateFix() {
+        val engine = prepared()
+        assertEquals(1, movement(engine).size)
+        assertTrue(engine.onLocation(fix(360.0, now + 10_000, accuracy = 100.0), now + 10_000).isEmpty())
+        assertTrue(engine.onLocation(fix(300.0, now + 5_000), now + 10_000).isEmpty())
+        assertTrue(engine.matches(now + 10_000).isEmpty())
+        assertEquals(1, engine.onLocation(fix(480.0, now + 20_000), now + 20_000).size)
+    }
+
+    @Test fun futureInvalidFixDoesNotBlockTheNextFreshObservation() {
+        val engine = prepared()
+        movement(engine)
+        assertTrue(engine.onLocation(fix(300.0, now + 60_000), now + 1_000).isEmpty())
+        assertEquals(1, engine.onLocation(fix(360.0, now + 10_000), now + 10_000).size)
+    }
+
     @Test fun staleAndFutureLocationsCannotProduceMatches() {
         val engine = prepared()
         movement(engine)
@@ -186,6 +202,29 @@ class RideRecognitionEngineTest {
         engine.onLocation(fix(0.0, now - 10_000), now - 10_000)
         engine.onLocation(fix(800.0, now - 5_000), now - 5_000)
         assertTrue(engine.onLocation(fix(1_600.0, now), now).isEmpty())
+    }
+
+    @Test fun plausibleOverallAverageCannotHideAnInstantaneousJump() {
+        val engine = prepared()
+        engine.onLocation(fix(0.0, now - 20_000), now - 20_000)
+        engine.onLocation(fix(0.0, now - 1), now - 1)
+        assertTrue(engine.onLocation(fix(300.0, now), now).isEmpty())
+    }
+
+    @Test fun stationarySamplesAfterTeleportCannotReuseTheOldBoardingAnchor() {
+        val engine = prepared()
+        engine.onLocation(fix(0.0, now - 20_000), now - 20_000)
+        engine.onLocation(fix(0.0, now - 1), now - 1)
+        engine.onLocation(fix(400.0, now), now)
+        assertTrue(engine.onLocation(fix(400.0, now + 10_000), now + 10_000).isEmpty())
+        assertTrue(engine.onLocation(fix(400.0, now + 20_000), now + 20_000).isEmpty())
+    }
+
+    @Test fun fastButPhysicallyPlausibleVehicleMovementStillMatches() {
+        val engine = prepared()
+        engine.onLocation(fix(0.0, now - 20_000), now - 20_000)
+        engine.onLocation(fix(900.0, now - 10_000), now - 10_000)
+        assertEquals(1, engine.onLocation(fix(1_800.0, now), now).size)
     }
 
     @Test fun onlyTwoFixesNeverProduceSuggestion() {

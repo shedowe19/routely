@@ -36,13 +36,17 @@ Zusätzliche Screens werden als Stack navigiert:
 - `statusDetail/{statusId}`
 - `settings` (Einstieg über das eigene Profil)
 
+Der Feature-ViewModel-Store und diese Navigation sind an `AuthSession.revision` gebunden. Rotation erhält den Store derselben Sitzung; Logout oder neue Zugangsgeneration beendet alte Aufträge und baut den Featurezustand sowie die Navigationsfolge neu auf. Auth- und Settings-ViewModel bleiben Activity-bezogen. Details: [Auth](../module/auth.md).
+
 ## Benachrichtigungsnavigation
 
-`MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
+`MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Ein Request mit optionaler `authSessionRevision` wird nur in derselben aktuellen Zugangsgeneration geöffnet; ein alter Hinweis darf nach Kontowechsel nicht dieselbe numerische Status-ID des neuen Kontos öffnen. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
 
 ## Zustandsdarstellung
 
 Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications nutzen `StateMessage` für Lade-, Fehler- und Empty-States. Dadurch sind die visuellen Zustände über die wichtigsten Screens konsistent.
+
+Fehler beim Refresh, Follow, Speichern oder Löschen werden auch bei bereits vorhandenen Inhalten angezeigt. Automatisches Nachladen weiterer Feed-/Meldungs-/Profilseiten pausiert bei einem Fehler; es wiederholt einen gescheiterten Auftrag nicht allein wegen unveränderter Scrollposition. Reine Profilkarten besitzen ausdrücklich deaktivierte Herz-Aktionen, offene private Folgeanfragen keinen unbelegten Abbruchbutton.
 
 Die Status-Detail-Timeline nutzt für die eigene aktive Fahrt einen gemeinsamen Besuchscursor des Tracking-Service. GPS-Ankunft, Annäherung und ungefähre Fahrplanposition erhalten unterschiedliche Markierungen; die durchgehende Verbindungslinie verwendet denselben Fortschritt wie die Haltepunkte. Einzelheiten stehen unter [StatusDetail](../module/status-detail.md).
 

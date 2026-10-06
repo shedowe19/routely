@@ -37,7 +37,7 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
 
     if (pullRefreshState.isRefreshing) {
         LaunchedEffect(true) {
-            viewModel.refresh()
+            if (!uiState.isRefreshing) viewModel.refresh()
         }
     }
     LaunchedEffect(uiState.isRefreshing) {
@@ -59,7 +59,8 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
     val shouldLoadMore = remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= uiState.notifications.size - 3 && uiState.hasMore && !uiState.isLoading
+            lastVisible >= uiState.notifications.size - 3 && uiState.hasMore && !uiState.isLoading &&
+                !uiState.isRefreshing && uiState.error == null
         }
     }
     LaunchedEffect(shouldLoadMore.value) {
@@ -86,9 +87,15 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
         }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
+        if (uiState.notifications.isNotEmpty()) {
+            uiState.error?.let { error ->
+                Text(error, color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp))
+            }
+        }
         Box(modifier = Modifier.nestedScroll(pullRefreshState.nestedScrollConnection).fillMaxSize()) {
             when {
-                uiState.isLoading && uiState.notifications.isEmpty() ->
+                (uiState.isLoading || uiState.isRefreshing) && uiState.notifications.isEmpty() ->
                     StateMessage(
                         icon = Icons.Default.Notifications,
                         title = "Meldungen werden geladen",

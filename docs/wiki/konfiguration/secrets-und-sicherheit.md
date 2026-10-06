@@ -11,6 +11,12 @@ Sicherheitsrelevante Vorgaben für die Entwicklung.
 - Lokale `.env`-Dateien sowie lokale Signing-Dateien (`*.jks`, `*.keystore`) sind über `.gitignore` ausgeschlossen.
 - API-Token für manuelle Tests dürfen nur lokal und nicht versioniert verwendet werden. Werte nie in Gradle-Befehle, CI-Logs, Markdown-Dateien oder Screenshots übernehmen.
 
+## Sitzung und lokaler Feedcache
+
+Ein neuer manueller Login sendet den Token nur nach Prüfung einer gültigen HTTPS-Server-URL ohne URL-Zugangsdaten, Query oder Fragment. Er wird erst nach vollständiger erfolgreicher Profilantwort gespeichert. Atomare Revisions-/Snapshot-Vergleiche schützen spätere Auth- und Check-in-Schreiboperationen; Logout entfernt die lokale Sitzung vor der optionalen API-Abmeldung. Der Featurezustand wird bei Zugangsgenerationswechsel beendet und neu aufgebaut. Einzelheiten stehen unter [Auth](../module/auth.md).
+
+Der Room-Feedcache ist nach Feedart sowie einem SHA-256-Digest aus Server und Token partitioniert und verwendet keinen Klartexttoken als Cachekey. Der Digest ist keine Verschlüsselung der gespeicherten Statusdaten. Temporäre Fehler dürfen ausschließlich die weiterhin passende Seite-1-Partition verwenden; Authfehler, Abbruch und Sitzungswechsel erlauben keinen alten privaten Cache als Ersatz. Die Version-2-Schemaänderung verwirft den historischen unpartitionierten Feedcache. Allgemeine DataStore-/Room-Speicherung bleibt lokale App-Speicherung; diese Änderung ergänzt keine Verschlüsselungsbibliothek.
+
 ## Netzwerk-Logging
 
 `RetrofitClient` nutzt `HttpLoggingInterceptor` nur im Debug-Build mit `BASIC`-Level. Release-Builds setzen das Netzwerk-Logging auf `NONE`.

@@ -23,6 +23,7 @@ object RetrofitClient {
 
     fun createOAuthService(baseUrl: String): OAuthApiService {
         val client = OkHttpClient.Builder()
+            .callTimeout(60, TimeUnit.SECONDS)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -45,6 +46,7 @@ object RetrofitClient {
 
     private fun buildOkHttpClient(accessToken: String): OkHttpClient {
         return OkHttpClient.Builder()
+            .callTimeout(60, TimeUnit.SECONDS)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
@@ -75,6 +77,6 @@ object RetrofitClient {
     }
 
     private fun ensureTrailingSlash(url: String): String {
-        return if (url.endsWith("/")) url else "$url/"
+        return ApiServerUrl.normalize(url) + "/"
     }
 }

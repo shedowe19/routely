@@ -27,6 +27,8 @@ Der erste frische Snapshot bildet still die Vergleichsbasis. Ein restaurierter C
 
 Kleine Verspätungsänderungen können sich zur Schwelle summieren. Fehlende Echtzeit beendet die Vergleichskontinuität. Geänderte Planzeiten oder manuelle Check-in-Zeitänderungen setzen die Referenz zurück, statt einen Providerhinweis vorzutäuschen. Meldungen nennen den Halt und die tatsächliche Änderung, zum Beispiel „Gleis 4 statt Gleis 2“.
 
+Für die Relevanz eines Gleiswechsels zählt der erste nicht gestrichene verbleibende Besuch im neuen Snapshot. Fällt der bisher nächste Halt aus und wechselt zugleich der folgende bediente Halt sein Gleis, kann dasselbe Polling beide Hinweise erklären. Ein gestrichener Halt blockiert die Auswahl des nächsten bedienten Halts nicht.
+
 `lastEvents` dedupliziert je Besuch und Feld den zuletzt gemeldeten Wert. Diese Metadaten sind für dieselbe Status-ID Teil des bestehenden Trackingcache; die vollständige Vergleichsbasis und Verspätungsreferenzen bleiben im RAM. Nach Neustart entsteht wieder eine stille frische Basis. Deduplizierungswerte werden an diese Basis und nach fehlenden Feldern an die neu hergestellte Kontinuität angeglichen: Eine später erneut geänderte Ankunft oder ein wieder gewechseltes Gleis darf nach bekannter Rückkehr zum früheren Wert erneut gemeldet werden. Fahrtwechsel setzt den Monitor zurück.
 
 ## Zustellung und Einstellungen

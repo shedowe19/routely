@@ -18,9 +18,13 @@ Das Widget wird von `TripTrackingService` mit Daten versorgt:
 
 Das Widget empfängt Broadcasts mit `ACTION_UPDATE_WIDGET` und aktualisiert seine Daten. Die Darstellung erfolgt als AppWidgetProvider mit einem RemoteView-Layout.
 
+Der Manifest-Receiver ist `exported=false`. App-interne Updates und vom System zugestellte Widget-Broadcasts bleiben möglich; andere Apps dürfen die Fahrtanzeige nicht durch frei gesendete benutzerdefinierte Updates überschreiben. Diese Deklaration folgt dem [Android-Widget-Beispiel](https://developer.android.com/develop/ui/compose/glance/create-app-widget#declare_a_widget_in_the_manifest).
+
 Der nächste Halt stammt aus der gemeinsamen Tracking-Engine des Service. Bei nutzbarem GPS bleibt der konkrete Besuch auch nach einer vergangenen Planzeit aktiv. Die Uhrzeit erhält der Service aus `JourneyTimeResolver`: frische zugeordnete GPS-Zeit, sonst manuelle Zeit, parsebare API-Echtzeit oder Fahrplan. `timeSource` wird separat als `GPS beobachtet`, `GPS-Schätzung`, `Manuell`, `API-Echtzeit` oder `Fahrplan` angezeigt. Ohne auflösbare Zeit kann stattdessen der Fortschritts-/Beendenhinweis erscheinen. Die begrenzte Stabilisierung eines bereits belegten GPS-Werts kommt aus demselben Service-Ergebnis wie im Fahrtdetail; sie verlängert dessen Gültigkeit nicht. Ein GPS-Cursor setzt daher nicht automatisch eine GPS-Uhrzeit voraus. Das Widget führt selbst keine Ortsabfragen oder Prognoseberechnungen durch.
 
 Bei Fahrtwechsel zeigt das Widget einen Ladezustand ohne frühere Zeit-/Quellenwerte. Beim Service-Ende oder Zerstören des Services werden Zeit, Zeitquelle, Abweichung und Gleis entfernt; der Hinweis wartet wieder auf einen Check-in. Eine alte Fahrtprognose bleibt dadurch nicht als laufende GPS-Zeit stehen.
+
+Das Gleis kommt aus dem gemeinsamen Service-Helfer: am Einstieg Abfahrtsgleis, an späteren Besuchen Ankunftsgleis, jeweils Echtzeit vor Plan und Legacy-Feld. Leerraumwerte werden ausgelassen; Bus-RE/RB-Ersatzverkehr zeigt keine Bahnsteigangabe. Ein systemseitiger Service-Timeout setzt die Anzeige ebenfalls zurück, ohne die gespeicherte aktive Fahrt als angekommen zu löschen.
 
 ## Widget-Layout (XML)
 

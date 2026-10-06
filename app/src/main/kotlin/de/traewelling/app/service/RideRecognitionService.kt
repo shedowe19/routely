@@ -12,6 +12,7 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
@@ -27,6 +28,8 @@ import de.traewelling.app.MainActivity
 import de.traewelling.app.data.model.TripDetails
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
+import de.traewelling.app.util.AuthSession
+import de.traewelling.app.util.TrackingConfiguration
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -61,8 +64,10 @@ class RideRecognitionService : Service() {
     private var tickJob: Job? = null
     private var sessionId = 0L
     private var stopped = false
-    private var sessionToken: String? = null
-    private var sessionServer: String? = null
+    private var ownedAuthSession: AuthSession? = null
+    private var observedAuthSession: AuthSession? = null
+    private var pendingRequestedRevision: String? = null
+    private val startRequests = SessionStartRequests()
     private var hasSearched = false
     private var searchError: String? = null
     private var searching = false
@@ -77,21 +82,38 @@ class RideRecognitionService : Service() {
             CHANNEL_ID, "Fahrterkennung", NotificationManager.IMPORTANCE_LOW
         ).apply { description = "Sichtbare GPS-Suche nach möglichen Fahrten" })
         scope.launch {
-            combine(prefs.rideRecognitionEnabled, prefs.accessToken, prefs.activeStatusId, prefs.serverUrl) {
-                    enabled, token, active, server ->
-                enabled && token != null && active == null &&
-                    (sessionToken == null || sessionToken == token) &&
-                    (sessionServer == null || sessionServer == server)
-            }.collect { allowed -> if (!allowed) finish() }
+            prefs.trackingConfiguration.collect { emitted ->
+                val config = prefs.trackingConfiguration.first()
+                if (config != emitted) return@collect
+                observedAuthSession = config.session
+                if (!recognitionAllowed(config)) finish()
+                else if (ownedAuthSession?.let { it != config.session } == true) {
+                    finish(preserveForegroundForPendingStart = startRequests.hasPending(config.session.revision))
+                }
+            }
         }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        val requestedRevision = intent?.getStringExtra(EXTRA_AUTH_SESSION_REVISION)
         if (intent?.action == ACTION_STOP) {
-            scope.launch { prefs.setRideRecognitionEnabled(false); finish() }
+            val expectedSession = ownedAuthSession
+            val expectedRecognitionSession = sessionId
+            scope.launch {
+                val config = prefs.trackingConfiguration.first()
+                if ((sessionId != expectedRecognitionSession && (expectedSession != null || requestedRevision == null)) ||
+                    (requestedRevision != null && config.session.revision != requestedRevision) ||
+                    (expectedSession != null && expectedSession != config.session)) return@launch
+                startRequests.clear()
+                val stoppingSession = sessionId
+                try { prefs.setRideRecognitionEnabled(false, expectedSession ?: config.session) }
+                finally { if (sessionId == stoppingSession) finish() }
+            }
             return START_NOT_STICKY
         }
-        if (stopped) return START_NOT_STICKY
+        if (!scope.isActive) return START_NOT_STICKY
+        val startRequest = startRequests.begin(requestedRevision)
+        pendingRequestedRevision = requestedRevision
         // Enter foreground immediately; actual scanning starts only after all guards passed.
         try {
             val notification = notification("Warte auf präzisen Standort …")
@@ -99,44 +121,77 @@ class RideRecognitionService : Service() {
                 startForeground(NOTIFICATION_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION)
             } else startForeground(NOTIFICATION_ID, notification)
         } catch (_: RuntimeException) { finish(); return START_NOT_STICKY }
-        if (pollingJob != null) return START_NOT_STICKY
         scope.launch {
-            if (!isAllowed() || !locationServicesEnabled()) { finish(); return@launch }
-            // An Activity may issue two starts before the initial preference read finishes.
-            if (pollingJob != null || stopped) return@launch
-            sessionToken = prefs.getAccessToken()
-            sessionServer = prefs.getServerUrl()
-            sessionId = sequence.incrementAndGet()
-            publish(RideRecognitionPhase.WAITING_FOR_LOCATION, "Warte auf einen frischen, präzisen Standort.")
-            if (!requestLocations()) { finish(); return@launch }
-            val currentSession = sessionId
-            pollingJob = scope.launch {
-                while (isActive && current(currentSession)) {
-                    if (!isAllowed() || !hasPreciseLocation() || !locationServicesEnabled()) { finish(); break }
-                    val fix = engine.reliableLatestFix(System.currentTimeMillis())
-                    if (fix != null) {
-                        discover(fix, currentSession)
-                        delay(POLL_INTERVAL_MILLIS)
-                    } else delay(5_000L)
+            try {
+                val config = prefs.trackingConfiguration.first()
+                if (!recognitionAllowed(config) || !locationServicesEnabled()) { finish(); return@launch }
+                if (!startRequests.accept(startRequest, config.session.revision)) {
+                    startRequests.finish(startRequest)
+                    if (ownedAuthSession == config.session && !stopped) updateMatches()
+                    else if (!startRequests.hasPending(config.session.revision)) finish()
+                    return@launch
                 }
-            }
-            tickJob = scope.launch {
-                while (isActive && current(currentSession)) {
-                    delay(10_000)
-                    if (!hasPreciseLocation() || !locationServicesEnabled() || !isAllowed()) { finish(); break }
+                // An Activity may issue two starts before the initial preference read finishes.
+                if (pollingJob != null && ownedAuthSession == config.session) {
+                    pendingRequestedRevision = null
                     updateMatches()
+                    return@launch
                 }
-            }
+                // A visible restart can replace an older credential generation in the
+                // same instance without allowing its callbacks/cache to cross over.
+                finish(preserveForegroundForPendingStart = true)
+                stopped = false
+                ownedAuthSession = config.session
+                observedAuthSession = config.session
+                pendingRequestedRevision = null
+                hasSearched = false
+                searchError = null
+                searching = false
+                sessionId = sequence.incrementAndGet()
+                publish(RideRecognitionPhase.WAITING_FOR_LOCATION, "Warte auf einen frischen, präzisen Standort.")
+                if (!requestLocations()) { finish(); return@launch }
+                val currentSession = sessionId
+                pollingJob = scope.launch {
+                    while (isActive && current(currentSession)) {
+                        if (!isAllowed() || !hasPreciseLocation() || !locationServicesEnabled()) {
+                            if (current(currentSession)) finish()
+                            break
+                        }
+                        val fix = engine.reliableLatestFix(System.currentTimeMillis())
+                        if (fix != null) {
+                            discover(fix, currentSession)
+                            delay(POLL_INTERVAL_MILLIS)
+                        } else delay(5_000L)
+                    }
+                }
+                tickJob = scope.launch {
+                    while (isActive && current(currentSession)) {
+                        delay(10_000)
+                        if (!hasPreciseLocation() || !locationServicesEnabled() || !isAllowed()) {
+                            if (current(currentSession)) finish()
+                            break
+                        }
+                        updateMatches()
+                    }
+                }
+            } finally { startRequests.finish(startRequest) }
         }
         return START_NOT_STICKY
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    private suspend fun isAllowed(): Boolean = !stopped && prefs.getRideRecognitionEnabled() &&
-        prefs.getAccessToken() != null && prefs.activeStatusId.first() == null
+    private fun recognitionAllowed(config: TrackingConfiguration): Boolean = config.recognitionEnabled &&
+        config.session.accessToken != null && config.activeStatusId == null
 
-    private fun current(expected: Long): Boolean = !stopped && sessionId == expected
+    private suspend fun isAllowed(): Boolean {
+        val config = prefs.trackingConfiguration.first()
+        observedAuthSession = config.session
+        return !stopped && recognitionAllowed(config) && ownedAuthSession == config.session
+    }
+
+    private fun current(expected: Long): Boolean = !stopped && sessionId == expected &&
+        ownedAuthSession != null && ownedAuthSession == observedAuthSession
     private fun hasPreciseLocation(): Boolean = ContextCompat.checkSelfPermission(
         this, Manifest.permission.ACCESS_FINE_LOCATION
     ) == PackageManager.PERMISSION_GRANTED
@@ -154,7 +209,7 @@ class RideRecognitionService : Service() {
         val listener = object : LocationCallback() {
             override fun onLocationResult(result: LocationResult) {
                 scope.launch {
-                    if (!current(callbackSession)) return@launch
+                    if (!current(callbackSession) || !isAllowed() || !current(callbackSession)) return@launch
                     val now = System.currentTimeMillis()
                     result.locations.sortedBy { it.elapsedRealtimeNanos }.forEach { location ->
                         engine.onLocation(location.toFix(now), now)
@@ -178,8 +233,8 @@ class RideRecognitionService : Service() {
     private fun Location.toFix(now: Long): LocationFix {
         val ageNanos = SystemClock.elapsedRealtimeNanos() - elapsedRealtimeNanos
         val timestamp = if (elapsedRealtimeNanos > 0 && ageNanos >= 0) now - ageNanos / 1_000_000 else 0L
-        return LocationFix(latitude, longitude, if (hasAccuracy()) accuracy.toDouble() else Double.POSITIVE_INFINITY,
-            timestamp, if (hasSpeed()) speed.toDouble() else null)
+        return trackingLocationFix(latitude, longitude, if (hasAccuracy()) accuracy.toDouble() else Double.POSITIVE_INFINITY,
+            timestamp, hasSpeed(), speed.toDouble())
     }
 
     private suspend fun discover(fix: LocationFix, expected: Long) {
@@ -208,9 +263,7 @@ class RideRecognitionService : Service() {
                     .sortedBy { (_, dep) -> kotlin.math.abs(now - (RideRecognitionEngine.parseTime(dep.realWhen ?: dep.plannedWhen) ?: now)) }
                     .take(MAX_DEPARTURES)
                 currentCoroutineContext().ensureActive()
-                if (!current(expected) || !isAllowed() || sessionToken != prefs.getAccessToken() ||
-                    sessionServer != prefs.getServerUrl()
-                ) return@withTimeout emptyList<RecognizableRide>()
+                if (!current(expected) || !isAllowed() || !current(expected)) return@withTimeout emptyList<RecognizableRide>()
                 // Successful departure responses remain authoritative even when
                 // subsequent trip-detail lookups fail or time out.
                 engine.removeTrips(cancelledTrips)
@@ -224,6 +277,7 @@ class RideRecognitionService : Service() {
                     val cached = tripCache[key]
                     val details = detailRequests.valueOrNull(cached?.let { Result.success(it.second) }
                         ?: repo.getTrip(departure.tripId, departure.line?.name.orEmpty())) ?: continue
+                    if (!current(expected) || !isAllowed() || !current(expected)) return@withTimeout emptyList<RecognizableRide>()
                     if (cached == null) {
                         tripCache[key] = System.currentTimeMillis() to details
                         while (tripCache.size > RideRecognitionEngine.MAX_ROUTES) tripCache.remove(tripCache.keys.first())
@@ -235,7 +289,7 @@ class RideRecognitionService : Service() {
                 rides
             }
             // A new login, route, disabled setting or destroyed service invalidates in-flight reads.
-            if (!current(expected) || !isAllowed() || sessionToken != prefs.getAccessToken() || sessionServer != prefs.getServerUrl()) return
+            if (!current(expected) || !isAllowed() || !current(expected)) return
             hasSearched = true
             searching = false
             searchError = null
@@ -243,7 +297,7 @@ class RideRecognitionService : Service() {
             updateMatches()
         } catch (_: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
-            if (current(expected)) {
+            if (current(expected) && isAllowed() && current(expected)) {
                 searching = false
                 searchError = "Die Fahrtsuche dauerte zu lange. Neuer Versuch in 90 Sekunden."
                 publish(RideRecognitionPhase.ERROR, searchError!!)
@@ -251,7 +305,7 @@ class RideRecognitionService : Service() {
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            if (current(expected)) {
+            if (current(expected) && isAllowed() && current(expected)) {
                 searching = false
                 searchError = "Keine Stations- oder Fahrtdaten erhalten. Neuer Versuch in 90 Sekunden."
                 publish(RideRecognitionPhase.ERROR, searchError!!)
@@ -260,7 +314,7 @@ class RideRecognitionService : Service() {
     }
 
     private fun updateMatches() {
-        if (stopped) return
+        if (!current(sessionId)) return
         val now = System.currentTimeMillis()
         val candidates = engine.matches(now).map { it.copy(sessionId = sessionId) }
         when {
@@ -278,8 +332,8 @@ class RideRecognitionService : Service() {
     }
 
     private fun publish(phase: RideRecognitionPhase, message: String, candidates: List<RecognizedRide> = emptyList()) {
-        if (stopped) return
-        _state.value = RideRecognitionState(phase, message, candidates, sessionId)
+        if (!current(sessionId)) return
+        _state.value = RideRecognitionState(phase, message, candidates, sessionId, ownedAuthSession?.revision)
         val text = if (candidates.isNotEmpty()) {
             if (candidates.size == 1) "Mögliche Fahrt: ${candidates.first().ride.departure.line?.name ?: "Linie unbekannt"}. Zum Prüfen öffnen."
             else "${candidates.size} mögliche Fahrten. Zum Auswählen öffnen."
@@ -290,11 +344,16 @@ class RideRecognitionService : Service() {
     }
 
     private fun notification(message: String): android.app.Notification {
-        val open = Intent(this, MainActivity::class.java).putExtra(EXTRA_OPEN_RECOGNITION, true)
+        val revision = ownedAuthSession?.revision ?: pendingRequestedRevision
+        val open = Intent(this, MainActivity::class.java).putExtra(EXTRA_OPEN_RECOGNITION, revision != null)
+            .putExtra(EXTRA_AUTH_SESSION_REVISION, revision)
+            .setData(Uri.parse("routely://recognition/$revision/open"))
             .setAction("de.traewelling.app.OPEN_RIDE_RECOGNITION")
             .addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP)
         val content = PendingIntent.getActivity(this, 711, open, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-        val stop = PendingIntent.getService(this, 712, stopIntent(this), PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+        val stopIntent = stopIntent(this).putExtra(EXTRA_AUTH_SESSION_REVISION, revision)
+            .setData(Uri.parse("routely://recognition/$revision/stop"))
+        val stop = PendingIntent.getService(this, 712, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setSmallIcon(de.traewelling.app.R.drawable.traewelling_logo)
             .setContentTitle("Routely · Fahrterkennung")
@@ -304,9 +363,9 @@ class RideRecognitionService : Service() {
             .setVisibility(NotificationCompat.VISIBILITY_PRIVATE).build()
     }
 
-    private fun finish() {
-        if (stopped) return
-        stopped = true
+    private fun finish(preserveForegroundForPendingStart: Boolean = false) {
+        val endingSessionId = sessionId
+        stopped = !preserveForegroundForPendingStart
         sessionId = sequence.incrementAndGet()
         engine.clear()
         tripCache.clear()
@@ -314,12 +373,19 @@ class RideRecognitionService : Service() {
         callback = null
         pollingJob?.cancel()
         tickJob?.cancel()
-        _state.value = RideRecognitionState()
-        stopForeground(STOP_FOREGROUND_REMOVE)
-        stopSelf()
+        pollingJob = null
+        tickJob = null
+        ownedAuthSession = null
+        if (_state.value.sessionId == endingSessionId) _state.value = RideRecognitionState()
+        if (!preserveForegroundForPendingStart) {
+            pendingRequestedRevision = null
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf()
+        }
     }
 
     override fun onDestroy() {
+        startRequests.clear()
         finish()
         scope.cancel()
         super.onDestroy()
@@ -330,6 +396,7 @@ class RideRecognitionService : Service() {
         private const val NOTIFICATION_ID = 710
         private const val ACTION_STOP = "de.traewelling.app.STOP_RIDE_RECOGNITION"
         const val EXTRA_OPEN_RECOGNITION = "open_ride_recognition"
+        const val EXTRA_AUTH_SESSION_REVISION = "extra_auth_session_revision"
         const val POLL_INTERVAL_MILLIS = 90_000L
         const val MAX_NEARBY_STATIONS = 2
         const val MAX_DEPARTURES = 6

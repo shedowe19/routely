@@ -15,6 +15,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_VERSION_NAME: ${{ inputs.version_name }}
+      RELEASE_VERSION_CODE: ${{ inputs.version_code }}
     permissions:
       contents: write
 
@@ -22,6 +25,18 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Validate release version
+        shell: bash
+        run: |
+          if [[ ! "$RELEASE_VERSION_NAME" =~ ^[0-9A-Za-z][0-9A-Za-z._-]{0,63}$ ]]; then
+            echo "Version name must contain only letters, digits, dots, underscores or hyphens."
+            exit 1
+          fi
+          if [[ ! "$RELEASE_VERSION_CODE" =~ ^[1-9][0-9]{0,9}$ ]] || (( RELEASE_VERSION_CODE > 2100000000 )); then
+            echo "Version code must be an integer between 1 and 2100000000."
+            exit 1
+          fi
 
       - name: set up JDK 17
         uses: actions/setup-java@v4
@@ -42,8 +57,8 @@ jobs:
       - name: Install Android 36 build dependencies
         run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
 
-      - name: Build with Gradle
-        run: ./gradlew assembleRelease -PversionName=${{ github.event.inputs.version_name }} -PversionCode=${{ github.event.inputs.version_code }}
+      - name: Test and build release
+        run: ./gradlew :app:testDebugUnitTest :app:assembleRelease "-PversionName=$RELEASE_VERSION_NAME" "-PversionCode=$RELEASE_VERSION_CODE"
 
       - name: Sign APK
         uses: r0adkll/sign-android-release@v1
@@ -59,8 +74,10 @@ jobs:
 
       - name: Prepare APK for Release
         run: |
-          mv ${{ steps.sign_app.outputs.signedReleaseFile }} app/build/outputs/apk/release/routely-v${{ github.event.inputs.version_name }}.apk
-          echo "RELEASE_APK_PATH=app/build/outputs/apk/release/routely-v${{ github.event.inputs.version_name }}.apk" >> $GITHUB_ENV
+          mv "$SIGNED_RELEASE_FILE" "app/build/outputs/apk/release/routely-v$RELEASE_VERSION_NAME.apk"
+          echo "RELEASE_APK_PATH=app/build/outputs/apk/release/routely-v$RELEASE_VERSION_NAME.apk" >> "$GITHUB_ENV"
+        env:
+          SIGNED_RELEASE_FILE: ${{ steps.sign_app.outputs.signedReleaseFile }}
 
       - name: Generate Changelog
         id: changelog

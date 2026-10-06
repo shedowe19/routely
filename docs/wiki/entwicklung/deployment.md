@@ -8,13 +8,13 @@ Dokumentiert den Deployment-Prozess.
 
 - `.github/workflows/android.yml` baut Releases manuell per `workflow_dispatch`.
 - Eingaben sind `version_name` und `version_code`.
-- Der Workflow installiert Android-SDK 36 und Build Tools 35.0.0, führt `./gradlew assembleRelease` mit den Versionseingaben aus, signiert die APK mit GitHub Secrets und erstellt anschließend ein GitHub Release. Der Signierschritt verlangt ebenfalls Build Tools 35.0.0.
+- Der Workflow validiert beide Versionseingaben, installiert Android-SDK 36 und Build Tools 35.0.0, führt `:app:testDebugUnitTest` vor `:app:assembleRelease` mit gequoteten Versionsargumenten aus, signiert erst danach die APK mit GitHub Secrets und erstellt anschließend ein GitHub Release. Der Signierschritt verlangt ebenfalls Build Tools 35.0.0. Zulässige Eingaben stehen unter [Build](./build.md).
 - Das veröffentlichte APK-Artefakt heißt `routely-v<version_name>.apk`.
 - Zusätzlich wird das APK als Workflow-Artifact `release-apk` hochgeladen.
 
 ## Prüfung vor einem Release
 
-`.github/workflows/api-compatibility.yml` prüft bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests, Debug-Build und Release-Build einschließlich Release-Lint. Nach erfolgreichem Build stellt er eine unsignierte Release-APK als `routely-release-unsigned-apk` bereit; Signierung und Veröffentlichung erfolgen weiterhin über den manuellen Workflow `android.yml`.
+`.github/workflows/api-compatibility.yml` prüft bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests, vollständiges `lintDebug`, Debug-Build und Release-Build einschließlich Release-Lint. Nach erfolgreichem Build stellt er eine unsignierte Release-APK als `routely-release-unsigned-apk` bereit; Signierung und Veröffentlichung erfolgen weiterhin über den manuellen Workflow `android.yml`.
 
 Der fehlgeschlagene Release-Lauf für `1.7.0` / Version-Code `12` führte zur expliziten Fragment-Abhängigkeit und zur zusätzlichen Release-Prüfung. Hintergrund und aktueller Nachweis stehen unter [Build](./build.md) und [Tests](./tests.md).
 

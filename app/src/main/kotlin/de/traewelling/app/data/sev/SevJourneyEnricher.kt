@@ -18,14 +18,8 @@ object SevJourneyEnricher {
     private val requestSlots = Semaphore(3)
 
     suspend fun loadMaps(checkin: CheckinInfo, fullRoute: List<StopStation>): Map<String, SevMap> {
-        if (!SevStopResolver.isReplacementBus(checkin)) return emptyMap()
-        val origin = fullRoute.indexOfFirst { it.matchesStopover(checkin.origin) }
-        val destination = fullRoute.indexOfFirst { it.matchesStopover(checkin.destination) }
-        if (origin < 0 || destination < origin) return emptyMap()
-        val slugs = fullRoute.subList(origin, destination + 1)
-            .filter { it.cancelled != true }
-            .mapNotNull { it.station?.let(SevStopResolver::stationSlug) }
-            .distinct().take(64)
+        val slugs = stationSlugs(checkin, fullRoute)
+        if (slugs.isEmpty()) return emptyMap()
         val maps = linkedMapOf<String, SevMap>()
         val resultMutex = Mutex()
         // The normal API/position pipeline does not wait for this optional enrichment.
@@ -44,6 +38,20 @@ object SevJourneyEnricher {
             }
         }
         return maps.toMap()
+    }
+
+    /** Public requests must stay within one uniquely identified check-in window. */
+    internal fun stationSlugs(checkin: CheckinInfo, fullRoute: List<StopStation>): List<String> {
+        if (!SevStopResolver.isReplacementBus(checkin)) return emptyList()
+        val origin = fullRoute.indices.filter { fullRoute[it].matchesStopover(checkin.origin) }
+            .singleOrNull() ?: return emptyList()
+        val destination = fullRoute.indices.filter { fullRoute[it].matchesStopover(checkin.destination) }
+            .singleOrNull() ?: return emptyList()
+        if (destination < origin) return emptyList()
+        return fullRoute.subList(origin, destination + 1)
+            .filter { it.cancelled != true }
+            .mapNotNull { it.station?.let(SevStopResolver::stationSlug) }
+            .distinct().take(64)
     }
 
     suspend fun enrich(

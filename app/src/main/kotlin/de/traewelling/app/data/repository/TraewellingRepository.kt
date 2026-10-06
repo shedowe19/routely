@@ -1,121 +1,128 @@
 package de.traewelling.app.data.repository
 
-import de.traewelling.app.data.api.RetrofitClient
 import android.content.Context
 import com.google.gson.Gson
+import de.traewelling.app.data.api.RetrofitClient
 import de.traewelling.app.data.api.TraewellingApiService
 import de.traewelling.app.data.local.AppDatabase
+import de.traewelling.app.data.local.StatusDao
 import de.traewelling.app.data.local.StatusEntity
 import de.traewelling.app.data.model.*
+import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.PreferencesManager
+import kotlinx.coroutines.CancellationException
+import retrofit2.HttpException
+import retrofit2.Response
+import java.io.IOException
+import java.security.MessageDigest
 
-class TraewellingRepository(private val context: Context, private val prefs: PreferencesManager) {
-    private val database = AppDatabase.getDatabase(context)
-    private val statusDao = database.statusDao()
+class TraewellingRepository internal constructor(
+    private val statusDao: StatusDao,
+    private val sessionProvider: suspend () -> AuthSession,
+    private val apiFactory: (AuthSession) -> TraewellingApiService
+) {
+    constructor(context: Context, prefs: PreferencesManager) : this(
+        AppDatabase.getDatabase(context).statusDao(),
+        prefs::getAuthSession,
+        { session -> RetrofitClient.createApiService(session.serverUrl,
+            session.accessToken?.takeIf { it.isNotBlank() } ?: error("Not authenticated")) }
+    )
+
     private val gson = Gson()
 
-    private suspend fun api(): TraewellingApiService {
-        val serverUrl   = prefs.getServerUrl()
-        val accessToken = prefs.getAccessToken() ?: error("Not authenticated")
-        return RetrofitClient.createApiService(serverUrl, accessToken)
+    private suspend fun api(): TraewellingApiService = apiFactory(authenticatedSession())
+
+    private suspend fun authenticatedSession(): AuthSession = sessionProvider().also {
+        if (it.accessToken.isNullOrBlank()) error("Not authenticated")
     }
 
     // ─── Feed ─────────────────────────────────────────────────────────────────
 
-    suspend fun getDashboard(page: Int = 1): Result<StatusListResponse> = runCatching {
-        try {
-            val r = api().getDashboard(page)
-            val body = r.body() ?: error("Leere Antwort (${r.code()})")
+    suspend fun getDashboard(page: Int = 1): Result<StatusListResponse> =
+        getFeed(page, "dashboard") { it.getDashboard(page) }
 
-            // Cache first page
+    suspend fun getGlobalFeed(page: Int = 1): Result<StatusListResponse> =
+        getFeed(page, "global") { it.getGlobalFeed(page) }
+
+    private suspend fun getFeed(
+        page: Int,
+        kind: String,
+        fetch: suspend (TraewellingApiService) -> Response<StatusListResponse>
+    ): Result<StatusListResponse> = apiResult {
+        val session = authenticatedSession()
+        val type = cacheType(kind, session)
+        try {
+            val response = fetch(apiFactory(session))
+            if (!response.isSuccessful) throw HttpException(response)
+            val body = response.body() ?: error("Leere Antwort (" + response.code() + ")")
+            val statuses = body.data ?: error("Fehlende Statusliste")
+            requireCurrentSession(session)
             if (page == 1) {
-                val entities = body.data?.map { status ->
-                    StatusEntity(id = status.id, statusJson = gson.toJson(status), type = "dashboard")
-                }
-                if (!entities.isNullOrEmpty()) {
-                    statusDao.clearStatuses("dashboard")
-                    statusDao.insertStatuses(entities)
-                }
+                statusDao.replaceStatuses(type, statuses.mapIndexed { position, status ->
+                    StatusEntity(status.id, gson.toJson(status), type, position)
+                })
+                requireCurrentSession(session)
             }
             body
-        } catch (e: Exception) {
-            // Read from cache if offline
-            if (page == 1) {
-                val cached = statusDao.getStatuses("dashboard")
-                if (cached.isNotEmpty()) {
-                    val statuses = cached.map { gson.fromJson(it.statusJson, Status::class.java) }
-                    StatusListResponse(data = statuses, links = null, meta = null)
-                } else {
-                    throw e
-                }
-            } else {
-                throw e
-            }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (failure: Exception) {
+            // Auth/validation failures must never resurrect a previous private feed.
+            val temporaryFailure = failure is IOException || failure is HttpException &&
+                (failure.code() == 408 || failure.code() == 429 || failure.code() >= 500)
+            if (page != 1 || !temporaryFailure) throw failure
+            requireCurrentSession(session)
+            val cached = statusDao.getStatuses(type)
+            requireCurrentSession(session)
+            if (cached.isEmpty()) throw failure
+            val statuses = cached.map { gson.fromJson(it.statusJson, Status::class.java) }
+            StatusListResponse(statuses, links = null, meta = null)
         }
     }
 
-    suspend fun getGlobalFeed(page: Int = 1): Result<StatusListResponse> = runCatching {
-        try {
-            val r = api().getGlobalFeed(page)
-            val body = r.body() ?: error("Leere Antwort (${r.code()})")
+    private suspend fun requireCurrentSession(expected: AuthSession) {
+        if (sessionProvider() != expected) throw CancellationException("Session changed during feed request")
+    }
 
-            // Cache first page
-            if (page == 1) {
-                val entities = body.data?.map { status ->
-                    StatusEntity(id = status.id, statusJson = gson.toJson(status), type = "global")
-                }
-                if (!entities.isNullOrEmpty()) {
-                    statusDao.clearStatuses("global")
-                    statusDao.insertStatuses(entities)
-                }
-            }
-            body
-        } catch (e: Exception) {
-            // Read from cache if offline
-            if (page == 1) {
-                val cached = statusDao.getStatuses("global")
-                if (cached.isNotEmpty()) {
-                    val statuses = cached.map { gson.fromJson(it.statusJson, Status::class.java) }
-                    StatusListResponse(data = statuses, links = null, meta = null)
-                } else {
-                    throw e
-                }
-            } else {
-                throw e
-            }
-        }
+    /** Credential digest keeps private snapshots separate without persisting the bearer token. */
+    private fun cacheType(kind: String, session: AuthSession): String {
+        val digest = MessageDigest.getInstance("SHA-256")
+        digest.update(session.serverUrl.trimEnd('/').toByteArray(Charsets.UTF_8))
+        digest.update(0.toByte())
+        digest.update(requireNotNull(session.accessToken).toByteArray(Charsets.UTF_8))
+        return kind + ":" + digest.digest().joinToString("") { "%02x".format(it.toInt() and 0xff) }
     }
 
     // ─── Status Actions ───────────────────────────────────────────────────────
 
-    suspend fun likeStatus(id: Int): Result<Unit> = runCatching {
+    suspend fun likeStatus(id: Int): Result<Unit> = apiResult {
         val r = api().likeStatus(id)
         if (!r.isSuccessful) error("Like fehlgeschlagen (${r.code()})")
     }
 
-    suspend fun unlikeStatus(id: Int): Result<Unit> = runCatching {
+    suspend fun unlikeStatus(id: Int): Result<Unit> = apiResult {
         val r = api().unlikeStatus(id)
         if (!r.isSuccessful) error("Unlike fehlgeschlagen (${r.code()})")
     }
 
-    suspend fun deleteStatus(id: Int): Result<Unit> = runCatching {
+    suspend fun deleteStatus(id: Int): Result<Unit> = apiResult {
         val r = api().deleteStatus(id)
         if (!r.isSuccessful) error("Löschen fehlgeschlagen (${r.code()})")
     }
     
-    suspend fun updateStatus(id: Int, request: UpdateStatusRequest): Result<Status> = runCatching {
+    suspend fun updateStatus(id: Int, request: UpdateStatusRequest): Result<Status> = apiResult {
         val r = api().updateStatus(id, request)
         r.body()?.data ?: error("Änderung fehlgeschlagen (${r.code()})")
     }
 
     // ─── Station Search ───────────────────────────────────────────────────────
 
-    suspend fun searchStations(query: String): Result<List<TrainStation>> = runCatching {
+    suspend fun searchStations(query: String): Result<List<TrainStation>> = apiResult {
         val r = api().searchStations(query)
         r.body()?.data ?: error("Keine Bahnhöfe gefunden (${r.code()})")
     }
 
-    suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<TrainStation>> = runCatching {
+    suspend fun getNearbyStations(lat: Double, lon: Double): Result<List<TrainStation>> = apiResult {
         // Compute bounding box for 1 KM radius
         // 1 degree latitude = ~111.32 km. 1 km ≈ 0.008983 degrees.
         val latOffset = 0.008983
@@ -187,24 +194,24 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
     suspend fun getStationDepartures(
         stationId: Int,
         whenTime: String? = null
-    ): Result<List<DepartureTrip>> = runCatching {
+    ): Result<List<DepartureTrip>> = apiResult {
         val r = api().getStationDepartures(stationId, whenTime)
         r.body()?.data ?: error("Keine Abfahrten (${r.code()})")
     }
 
     /** Full trip with stopovers — needed to let the user pick their destination. */
-    suspend fun getTrip(hafasTripId: String, lineName: String): Result<TripDetails> = runCatching {
+    suspend fun getTrip(hafasTripId: String, lineName: String): Result<TripDetails> = apiResult {
         val r = api().getTrip(hafasTripId, lineName)
         val data = r.body()?.data ?: error("Trip nicht gefunden (${r.code()})")
         data.copy(stopovers = data.stopovers?.deduplicate())
     }
 
-    suspend fun checkIn(request: CheckInRequest): Result<CheckInResult?> = runCatching {
+    suspend fun checkIn(request: CheckInRequest): Result<CheckInResult?> = apiResult {
         val r = api().checkIn(request)
         if (r.isSuccessful) {
             r.body()?.data ?: error("Leere Check-in-Antwort (${r.code()})")
         } else if (r.code() == 409) {
-            val conflicts = runCatching {
+            val conflicts = apiResult {
                 gson.fromJson(r.errorBody()?.string(), CheckInConflictResponse::class.java)
                     ?.data?.conflicts
             }.getOrNull().orEmpty()
@@ -216,75 +223,76 @@ class TraewellingRepository(private val context: Context, private val prefs: Pre
 
     // ─── Statistics ───────────────────────────────────────────────────────────
 
-    suspend fun getStatistics(): Result<StatisticsData> = runCatching {
+    suspend fun getStatistics(): Result<StatisticsData> = apiResult {
         val r = api().getStatistics()
         r.body()?.data ?: error("Keine Statistiken (${r.code()})")
     }
 
     // ─── Profile ──────────────────────────────────────────────────────────────
 
-    suspend fun getCurrentUser(): Result<User> = runCatching {
+    suspend fun getCurrentUser(): Result<User> = apiResult {
         val r = api().getAuthUser()
         r.body()?.data ?: error("Keine Nutzerdaten (${r.code()})")
     }
 
-    suspend fun getUserProfile(username: String): Result<User> = runCatching {
+    suspend fun getUserProfile(username: String): Result<User> = apiResult {
         val r = api().getUserProfile(username)
         r.body()?.data ?: error("Kein Profil (${r.code()})")
     }
 
-    suspend fun getUserStatuses(username: String, page: Int = 1): Result<StatusListResponse> = runCatching {
+    suspend fun getUserStatuses(username: String, page: Int = 1): Result<StatusListResponse> = apiResult {
         val r = api().getUserStatuses(username, page)
         r.body() ?: error("Keine Fahrten (${r.code()})")
     }
 
-    suspend fun searchUsers(query: String): Result<List<User>> = runCatching {
+    suspend fun searchUsers(query: String): Result<List<User>> = apiResult {
         val r = api().searchUsers(query)
         r.body()?.data ?: error("Benutzersuche fehlgeschlagen (${r.code()})")
     }
 
     // ─── Status Detail ────────────────────────────────────────────────────────
 
-    suspend fun getStatusDetail(statusId: Int): Result<Status> = runCatching {
+    suspend fun getStatusDetail(statusId: Int): Result<Status> = apiResult {
         val r = api().getStatus(statusId)
         r.body()?.data ?: error("Status nicht gefunden (${r.code()})")
     }
 
-    suspend fun getStopovers(tripId: Int): Result<List<StopStation>> = runCatching {
+    suspend fun getStopovers(tripId: Int): Result<List<StopStation>> = apiResult {
         val r = api().getStopovers(tripId)
         r.body()?.allStopovers()?.deduplicate() ?: error("Keine Halte gefunden (${r.code()})")
     }
 
     // ─── Follow / Unfollow ────────────────────────────────────────────────────
 
-    suspend fun followUser(userId: Int): Result<Unit> = runCatching {
+    suspend fun followUser(userId: Int): Result<Unit> = apiResult {
         val r = api().followUser(userId)
         if (!r.isSuccessful) error("Folgen fehlgeschlagen (${r.code()})")
     }
 
-    suspend fun unfollowUser(userId: Int): Result<Unit> = runCatching {
+    suspend fun unfollowUser(userId: Int): Result<Unit> = apiResult {
         val r = api().unfollowUser(userId)
         if (!r.isSuccessful) error("Entfolgen fehlgeschlagen (${r.code()})")
     }
 
     // ─── Notifications ────────────────────────────────────────────────────────
 
-    suspend fun getNotifications(page: Int = 1): Result<NotificationListResponse> = runCatching {
+    suspend fun getNotifications(page: Int = 1): Result<NotificationListResponse> = apiResult {
         val r = api().getNotifications(page)
         r.body() ?: error("Keine Benachrichtigungen (${r.code()})")
     }
 
-    suspend fun getUnreadNotificationCount(): Result<Int> = runCatching {
+    suspend fun getUnreadNotificationCount(): Result<Int> = apiResult {
         val r = api().getUnreadNotificationCount()
-        r.body()?.data ?: 0
+        if (!r.isSuccessful) throw HttpException(r)
+        r.body()?.data ?: error("Leere Benachrichtigungsanzahl (${r.code()})")
     }
 
-    suspend fun markNotificationRead(id: String): Result<Unit> = runCatching {
+    suspend fun markNotificationRead(id: String): Result<Unit> = apiResult {
         val r = api().markNotificationRead(id)
         if (!r.isSuccessful) error("Markierung fehlgeschlagen (${r.code()})")
     }
 
-    suspend fun markAllNotificationsRead(): Result<Unit> = runCatching {
+    suspend fun markAllNotificationsRead(): Result<Unit> = apiResult {
         val r = api().markAllNotificationsRead()
         if (!r.isSuccessful) error("Markierung fehlgeschlagen (${r.code()})")
     }

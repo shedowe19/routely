@@ -84,6 +84,14 @@ fun ProfileScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = 80.dp)
             ) {
+                uiState.error?.let { error ->
+                    item {
+                        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                            Text(error, color = MaterialTheme.colorScheme.error)
+                            TextButton(onClick = profileViewModel::refresh) { Text("Erneut versuchen") }
+                        }
+                    }
+                }
                 item {
                     uiState.user?.let { user -> ProfileHeader(user = user) }
                 }
@@ -98,7 +106,7 @@ fun ProfileScreen(
                     items(uiState.recentStatuses, key = { it.id }) { status ->
                         StatusCard(
                             status = status,
-                            onLike = {},
+                            onLike = null,
                             onStatusClick = { onStatusClick(status.id) }
                         )
                     }

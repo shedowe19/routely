@@ -7,6 +7,7 @@ Zentraler Manager für alle App-Einstellungen und persistierte Daten. Nutzt Andr
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
+- `app/src/main/kotlin/de/traewelling/app/util/AuthSession.kt`
 
 ## Gespeicherte Werte
 
@@ -15,12 +16,19 @@ Zentraler Manager für alle App-Einstellungen und persistierte Daten. Nutzt Andr
 | Key             | Flow-Typ        | Beschreibung                          |
 | --------------- | --------------- | ------------------------------------- |
 | `server_url`    | `Flow<String>`  | Server-URL (Standard: traewelling.de) |
-| `access_token`  | `Flow<String?>` | OAuth Access Token                    |
+| `access_token`  | `Flow<String?>` | Manuell validierter oder über OAuth-Helfer gespeicherter Bearer-Token |
 | `refresh_token` | `Flow<String?>` | OAuth Refresh Token                   |
 | `client_id`     | `Flow<String?>` | OAuth Client ID                       |
 | `client_secret` | `Flow<String?>` | OAuth Client Secret                   |
 | `username`      | `Flow<String?>` | Aktueller Nutzername                  |
 | `isLoggedIn`    | `Flow<Boolean>` | Login-Status (Access-Token vorhanden) |
+| `auth_session_revision` | intern String | Neue UUID bei Anmeldung, Abmeldung oder Tokenänderung; Altbestand ohne Feld verwendet `legacy` |
+
+`authSession: Flow<AuthSession>` beziehungsweise `getAuthSession()` lesen Server, nicht leeren Token und Revision gemeinsam. `saveValidatedSession` ersetzt eine vollständige validierte Sitzung atomar und entfernt alte OAuth-/Nutzer-/Fahrtwerte sowie den Erkennungs-Opt-in. `clearSession()` bewahrt den Server und allgemeine Einstellungen, entfernt jedoch Token, Refresh-/Clientdaten, Nutzername, aktive Fahrt, Fahrtcache und Erkennungs-Opt-in und erneuert die Revision.
+
+`trackingConfiguration: Flow<TrackingConfiguration>` liest Auth-Snapshot, aktive Status-ID, GPS-Einstellung und Fahrterkennungs-Opt-in gemeinsam aus derselben Preferences-Ausgabe. Activity und Service dürfen diese Werte nicht aus getrennt eintreffenden Flows zu einer scheinbar gültigen fremden Fahrt zusammensetzen.
+
+`clearSessionIfMatches`, `saveUsernameIfMatches` und `saveTokensIfMatches` schreiben nur für den unveränderten erwarteten Snapshot. `saveActiveStatusIdIfMatches` schützt entsprechend verspätete Check-in-Antworten. Diese Prüfung erfolgt im DataStore-`edit`, nicht nur vor einem suspendierenden Aufruf. Revisionen trennen auch Logout und erneuten Login mit demselben Token; sie sind keine Geheimnisse oder GPS-Daten.
 
 ### Active Status
 
@@ -37,7 +45,7 @@ Zentraler Manager für alle App-Einstellungen und persistierte Daten. Nutzt Andr
 | `trip_tracking_state` | `getTrackingState(): String?` | JSON-Zustand der aktiven Fahrt; intern gespeichert |
 | `location_permission_requested` | `hasRequestedLocationPermission(): Boolean`, `false` | Merkt eine bereits angeforderte Standortfreigabe für den manuellen Weg zu Android-App-Berechtigungen |
 
-`setAnnouncementRadiusMeters` und der lesende Flow setzen ungültige Radien auf Automatik (`0`) zurück. `saveTrackingState(statusId, stateJson)` schreibt nur, wenn diese Status-ID weiterhin aktiv ist. Ein abgelöster Service kann dadurch den Zustand einer neuen Fahrt nicht überschreiben.
+`setAnnouncementRadiusMeters` und der lesende Flow setzen ungültige Radien auf Automatik (`0`) zurück. `saveTrackingState(statusId, stateJson, expectedSession)` schreibt nur, wenn die Status-ID und der übergebene Auth-Snapshot weiterhin passen. Der Tracking-Service liefert diesen Snapshot auch an `clearActiveTracking`; ein abgelöster Service kann damit keine gleich nummerierte Fahrt einer anderen Zugangsgeneration überschreiben oder löschen. Der optionale Sessionparameter dient weiterhin kompatiblen internen Aufrufern; der aktive Service verwendet den Guard.
 
 Ein Wechsel beziehungsweise Löschen der aktiven Status-ID entfernt den Trackingzustand. `clearActiveTracking(statusId)` löscht ihn nur für die passende aktive Fahrt. Auch `clearSession()` entfernt aktive Fahrt und Trackingzustand.
 

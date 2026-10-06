@@ -44,6 +44,8 @@ Das Wegwischen eines Live Updates unterdrückt die erneute Hervorhebungsanfrage 
 
 Die Aktionen `Fahrt öffnen` beziehungsweise Tippen öffnen das passende Fahrtdetail mit `open_status_id`. `Beenden` beendet die Begleitung. Navigation behandelt kalte und bereits laufende Activity-Starts.
 
+`Beenden` und der Wegwisch-Intent tragen zusätzlich die Authrevision sowie eine revisionsbezogene Intent-Identität. Der Service verarbeitet sie nur für seine noch aktuelle Sitzung und Fahrt. Eine alte Benachrichtigungsaktion darf daher keine gleich nummerierte aktive Fahrt eines anderen Kontos beenden oder deren Hervorhebung deaktivieren. Die lokale ID-/Cache-Löschung ist ebenfalls sitzungsgebunden; Details: [TripTracking](./trip-tracking.md).
+
 ## Einstellungen und Datenschutz
 
 `live_progress_enabled` und `lock_screen_details_enabled` sind standardmäßig `true`. Werden Sperrbildschirmdetails ausgeschaltet, wird die öffentliche Anzeige durch einen allgemeinen Routely-Hinweis ersetzt. Die Hervorhebung wird dann nicht angefordert, damit Route und Halte nicht über eine andere Sperrbildschirmfläche offengelegt werden. Android-Sperrbildschirmeinstellungen wirken zusätzlich.

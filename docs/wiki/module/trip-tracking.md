@@ -15,6 +15,8 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/SpeechDeliveryQueue.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingWakeLockLease.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/TrackingLocationObservation.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/SessionStartRequests.kt`
 - `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
 - `app/src/main/AndroidManifest.xml`
@@ -25,6 +27,12 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 `CheckInViewModel` speichert nach einem erfolgreichen Check-in nur die aktive Status-ID. `MainActivity` beobachtet diese und die GPS-Einstellung im Zustand `RESUMED`; der Service wird aus der sichtbaren Activity gestartet. Präzise Standortfreigabe und aktivierte Ortungsdienste bestimmen, ob GPS aktiviert werden darf. Ohne diese Voraussetzungen startet der Fahrplanmodus. Automatische Standortanfragen werden je aktiver Fahrt begrenzt; der manuelle Einstellungsbutton kann bei dauerhafter Ablehnung die App-Berechtigungen öffnen.
 
 Das Manifest deklariert `location|dataSync` sowie `FOREGROUND_SERVICE_LOCATION`. Der Service aktiviert bei GPS den Typ `location`, sonst `dataSync`. Bei einem `START_STICKY`-Neustart ohne Start-Intent wird GPS nicht eigenständig wieder aktiviert: Standortzugriff bleibt aus, bis eine sichtbare Activity ihn erneut geprüft hat. Dies ist ein vorübergehender Ausfall, kein bewusst gewählter Zeitmodus; ein bereits per GPS etablierter Besuch bleibt geschützt. Ein korrekt gestarteter Location-Foreground-Service kann auch bei ausgeschaltetem Display Updates erhalten; die tatsächliche Zustellung bleibt geräteabhängig.
+
+Activity und Service lesen aktive ID und `AuthSession` gemeinsam über `trackingConfiguration`. Die sichtbare Startanfrage trägt die Sessionrevision; der Service bindet seine Verarbeitung an den vollständigen Snapshot und Fahrtgeneration. Ein Zugangsgenerationswechsel invalidiert laufende Verarbeitung sofort, auch wenn ein anderer Auftrag noch den Tracking-Mutex hält. Restore, API-Ergebnis, Anzeige, TTS und Persistenz prüfen die passende Sitzung erneut. Dieselbe numerische Status-ID auf einem anderen Konto oder Server gilt damit als neue Fahrt. Stop- und Wegwischaktionen der Benachrichtigung enthalten ebenfalls Revision und eine revisionsbezogene Intent-Identität; eine alte Aktion darf die neue gleich nummerierte Fahrt nicht verändern.
+
+`SessionStartRequests` hält ausschließlich kurzlebige Startaufträge im RAM. Erst ein atomar gültiger Start verdrängt ältere Initialisierungen. Ein später eingetroffener ungültiger Auftrag einer früheren Sitzung darf einen noch wartenden gültigen Auftrag der aktuellen Sitzung/Fahrt nicht verdrängen. Ohne passenden laufenden oder wartenden Start wird eine bloß vorläufige Foreground-Anzeige beendet; ein gültiger Stop beziehungsweise Timeout invalidiert wartende Starts.
+
+`TripTrackingService.onTimeout(startId, fgsType)` beendet die laufende Verarbeitung synchron, falls Android die Foreground-Zeitgrenze meldet. Jobs, Standortupdates, TTS, Audiofokus und WakeLock werden freigegeben; Kommando-/Fahrtgeneration und Service-Scope verhindern eine spätere Veröffentlichung aus bereits wartenden Starts. Live-Zustand und Widget werden zurückgesetzt, aktive Status-ID und Fahrtcache dagegen für einen späteren sichtbaren Wiederanlauf erhalten. Der Callback wartet weder auf Preference-Schreiben noch auf die letzte Ansage und bestätigt keine Zielankunft. Das reguläre Android-15-Budget von insgesamt sechs Hintergrundstunden je 24 Stunden für `dataSync` gilt erst bei `targetSdk >= 35`; die App hat derzeit `targetSdk = 34` und `compileSdk = 36`. Die Behandlung ist daher eine Absicherung für die ausdrücklich aktivierte Android-Kompatibilitätsgrenze oder ein späteres Target-Upgrade, kein Nachweis eines regulären Budgetabsturzes dieses Builds. Eine Akku-Ausnahme hebt dieses Budget nicht auf.
 
 ## Display aus, CPU-WakeLock und Doze
 
@@ -53,13 +61,15 @@ Die LocationRequest-Mindestintervalle liegen bei 5 beziehungsweise 2 Sekunden; A
 
 Standort-Batches werden vollständig in zeitlicher Reihenfolge verarbeitet. Ein gemeinsamer Mutex schützt Engine-Mutation und Übernahme des Ergebnisses einschließlich Notification, UI-Fortschritt, TTS und Persistenz gegenüber Tick, Routen- und Einstellungsänderungen. Netzwerkzugriffe liegen außerhalb dieser Sperre.
 
+`trackingLocationFix` unterscheidet eine tatsächlich fehlende Android-Geschwindigkeitsangabe (`null`) von einer gemeldeten ungültigen Angabe wie NaN, Unendlich oder einem negativen Wert. Letztere bleibt als ungültiger Wert für Engine und Schätzer erkennbar und darf nicht über die Zehn-Sekunden-Regel für unbekannte Geschwindigkeit einen Einstiegs-Wartehinweis oder GPS-Aufenthaltsversatz ermöglichen. Die bisherige getrennte Ziel-Aufenthaltsprüfung wird dadurch nicht geändert.
+
 Das Repository liefert Status und Stopovers. `checkedInRoute` grenzt die Route anhand von `matchesStopover` auf Einstieg bis Ziel ein; nicht auflösbare Grenzen ersetzen keine gültige Route. Manuelle Check-in-Zeiten werden in Echtzeitfelder übernommen. `TrackingStop` enthält Name, Koordinaten und Plan-/Echtzeit der Station sowie einen Besuchsschlüssel: bevorzugt Stopover-UUID, sonst Station-ID, Planzeiten und Routenindex.
 
 `StationTrackingEngine` ist reine Kotlin-Logik ohne Android- oder Netzwerkzugriffe. Sie prüft die geordnete Haltfolge und bewahrt den aktuellen Besuch bei API-Aktualisierungen über seinen Schlüssel. Es wird nicht beliebig der global nächstgelegene Bahnhof ausgewählt. Ein noch rein zeitbasierter Cursor bleibt vorläufig: Der erste brauchbare GPS-Fix kann ihn bei einem eindeutigen nahen Halt räumlich neu verankern, auch bei großer Verspätung. Mehrdeutige Stationsbesuche werden nicht beliebig ausgewählt.
 
 Ein erster Fix fern aller Stationen macht einen bereits zeitbasiert vorgerückten Cursor nicht zu einer bestätigten GPS-Zuordnung. Er bleibt nach Cache-Restaurierung korrigierbar und wird bis zur räumlichen Bestätigung als `Fahrplan · ungefähr` angezeigt. Ein späterer eindeutiger stationsnaher Fix kann ihn zum passenden Besuch zurückführen.
 
-`trackingLiveState` veröffentlicht Cursor, Besuchsschlüssel, passenden Halt, Ankunfts-/Abschlussstatus, Fortschrittsquelle und optional `gpsTimes` als prozesslokalen `StateFlow`. Der Zustand wird beim Fahrtwechsel und Service-Ende entfernt. Er enthält keine Geräteposition und wird nicht in einem neuen DataStore-Key gespeichert. Die [Status-Detail-Timeline](./status-detail.md) übernimmt ihn nur für die eigene, angezeigte aktive Fahrt.
+`trackingLiveState` veröffentlicht Cursor, Besuchsschlüssel, passenden Halt, Ankunfts-/Abschlussstatus, Fortschrittsquelle, Sessionrevision und optional `gpsTimes` als prozesslokalen `StateFlow`. Der Zustand wird beim Fahrtwechsel und Service-Ende entfernt. Er enthält keine Geräteposition und wird nicht in einem neuen DataStore-Key gespeichert. Die [Status-Detail-Timeline](./status-detail.md) übernimmt ihn nur für die eigene, angezeigte aktive Fahrt derselben Zugangsgeneration.
 
 ## SEV-Punkte und asynchrone Anreicherung
 
@@ -153,6 +163,8 @@ Auch die zusätzlichen Straßen-Geometrien bleiben ausschließlich im RAM: höch
 
 Nach mindestens einem erfolgreichen Laden kann diese Route bei API-Ausfällen und nach Service-Neustart wiederverwendet werden. Ohne gültigen Cache und ohne erfolgreiche API-Antwort existiert keine auswertbare Haltfolge. Fortschritt wird nur für die noch aktive Status-ID gespeichert; Fahrtwechsel, Logout und bestätigtes Beenden entfernen den zugehörigen Cache.
 
+Schreiben und Löschen des Fahrtcache prüfen den erwarteten Auth-Snapshot zusätzlich zur ID innerhalb derselben DataStore-Transaktion. Die Service-Sessionbindung bleibt RAM-Zustand; sie führt keine Zugangsdaten oder neue Revisionsfelder in das Version-1-Cache-JSON ein.
+
 ## TTS, Notification und Widget
 
 TTS benötigt die separate Option `Haltestellen ansagen` und Audiofokus. Sprache und Stimme kommen aus den Einstellungen. Ein Ansageschlüssel wird nur nach erfolgreichem Einreihen mit `TextToSpeech.SUCCESS` dauerhaft bestätigt. Bei ausgeschalteter/nicht bereiter TTS, verweigertem Audiofokus oder fehlgeschlagenem Einreihen wird er für erneuten Versuch freigegeben. Eine während der Initialisierung wartende Ansage wird nur abgespielt, wenn ihr Besuch noch aktuell ist. Direkt vor Audiofokus und TTS prüft `isOriginAnnouncementRelevant` Einstiegsansagen erneut nach den asynchronen Preference-/Stimmabfragen: Derselbe nicht gestrichene Ursprungsbesuch muss aktuell und unabgeschlossen sein, und das bevorstehende effektive Abfahrtsfenster muss weiterhin gelten. Frisches GPS benötigt den bestätigten Wartebeleg, auch wenn der alte Versuch ursprünglich aus dem Fahrplanmodus kam. Ein inzwischen veralteter GPS-Versuch wird nicht als bloße Fahrplanansage nachgereicht. Ohne verwertbares GPS bleibt ein gültiger reiner Fahrplanversuch möglich. Ein abgelehnter Versuch wird über die bestehende Freigabe-/Retry-Logik behandelt.
@@ -166,6 +178,8 @@ Einstiegsansagen werden zusätzlich zurückgestellt, solange `SpeechDeliveryQueu
 Bei Zielankunft wartet der Service auf eine bereits laufende oder gerade eingereihte Zielansage. Erst deren Abschluss, Fehler-/Stop-Callback oder spätestens ein 15-Sekunden-Timeout beendet den Service; die eigene Zielansage wird nicht sofort durch `stopTracking` abgeschnitten.
 
 Notification und Widget erhalten Linie, nächsten Halt, Ziel, aufgelöste Zeit, Gleis sowie positive oder negative Abweichung zur Planzeit. Die Zeitquelle wird als `GPS beobachtet`, `GPS-Schätzung`, `Manuell`, `API-Echtzeit` oder `Fahrplan` gekennzeichnet. Gleisinformation bleibt aus den API-Feldern; GPS-Prognosen erzeugen keine Gleisdaten.
+
+Der gemeinsame Helfer `trackingPlatform` wählt für Notification, Widget und Stationssprache am Einstieg das Echtzeit-Abfahrtsgleis, sonst das geplante Abfahrtsgleis und zuletzt das Legacy-Feld. Spätere Besuche verwenden entsprechend Ankunftsgleise. Leere oder reine Leerraumwerte werden übersprungen; Bus-RE/RB-Kandidaten erhalten weiterhin keine Bahngleisanzeige.
 
 ## Fahrtänderungen und Fortschrittsanzeige
 
@@ -195,6 +209,7 @@ Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS
 ## Offizielle Quellen
 
 - [Foreground-Service-Typen](https://developer.android.com/develop/background-work/services/fgs/service-types)
+- [Foreground-Service-Zeitgrenzen](https://developer.android.com/develop/background-work/services/fgs/timeout)
 - [Standortberechtigungen und Display-aus-Betrieb](https://developer.android.com/develop/sensors-and-location/location/permissions)
 - [Geofencing: mögliche Hintergrundverzögerung](https://developer.android.com/develop/sensors-and-location/location/geofencing)
 - [LocationRequest: Best-Effort-Vorgaben](https://developers.google.com/android/reference/com/google/android/gms/location/LocationRequest)

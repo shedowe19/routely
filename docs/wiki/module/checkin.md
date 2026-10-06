@@ -12,6 +12,7 @@ Der Check-in Prozess führt den Nutzer schrittweise von der Ortung/Suche bis zur
 
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/CheckInScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInViewModel.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInSelection.kt`
 
 ## Verhalten und Ablauf
 
@@ -33,6 +34,8 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
    - Die App zeigt die Liste der kommenden Haltestellen an.
    - Stationsdaten stammen aus `stopover.station`. Start und Ziel nutzen `stationId`, Namen nutzen `stationName`, Kennungen nutzen `stationIdentifier(type)`.
    - Konkrete Halte werden über `matchesStopover` unterschieden, damit mehrere Besuche desselben Bahnhofs auf einer Fahrt nicht verwechselt werden.
+   - `resolveCheckInOriginIndex` sucht anhand Station-ID beziehungsweise IBNR und der ausgewählten geplanten oder realen Abfahrtszeit genau einen Einstieg. Ohne Zeitbeleg genügt nur ein insgesamt eindeutiger Stationsbesuch. Ein wiederholter uneindeutiger Einstieg wird nicht durch den ersten Treffer ersetzt.
+   - Ziele müssen nach diesem Einstieg liegen, nicht gestrichen sein und Station-ID sowie eine Ankunftszeit besitzen. Fehlt der eindeutige Einstieg oder ein zulässiges Ziel, bleibt der Ablauf mit einer erklärenden Fehlermeldung bei der Auswahl; die Route wird nicht pauschal angeboten.
 
 4. **Der eigentliche Check-in:**
    - Wenn Start, Fahrt und Ziel bekannt sind, wird der Check-in durchgeführt.
@@ -44,9 +47,11 @@ Abfahrten zeigen `direction` als Fahrtrichtung und nutzen `delayMinutes`, berech
 
 Der Check-in überträgt weiterhin numerische interne Station-IDs für `start` und `destination` und den Provider-Identifier für `tripId`. Eine Stopover-ID, IBNR oder Trip-UUID darf diese Werte nicht ersetzen.
 
+Suche, Standortabfrage, Abfahrtswahl und Zielwechsel besitzen eine gemeinsame Auswahlgeneration. Neue Auswahl beziehungsweise Zurücksetzen beendet die alten Ladeaufträge; eine verspätete Antwort darf weder die aktuelle Station noch den Schritt überschreiben. Der Standortcallback aus dem Screen wird vor Übernahme ebenfalls auf diese Generation geprüft. Während laufender Bestätigung wird kein zweiter Check-in gestartet. Ein erfolgreicher alter Auftrag darf die aktive Status-ID nur für den noch passenden atomaren Auth-Snapshot speichern; Sitzung oder Auswahlwechsel verhindern die Übernahme.
+
 ## Fahrtvorschläge aus GPS
 
-Der Stationsschritt enthält die ausdrücklich aktivierbare [Fahrterkennung](./ride-recognition.md). Eine laufende eigene Fahrt pausiert die Suche. Kandidaten bleiben prozesslokal und können mehrdeutig sein; der Nutzer prüft Linie/Richtung. `CheckInViewModel` prüft bei Auswahl Fixalter, aktuelle Session und das Fehlen eines aktiven Check-ins erneut. Ein gültiger Vorschlag übernimmt Einstieg, Abfahrt und bereits geladene Tripdetails; anschließend folgen normale Zielauswahl und manuelle Bestätigung. Es gibt keinen automatischen `POST /trains/checkin`.
+Der Stationsschritt enthält die ausdrücklich aktivierbare [Fahrterkennung](./ride-recognition.md). Eine laufende eigene Fahrt pausiert die Suche. Kandidaten bleiben prozesslokal und können mehrdeutig sein; der Nutzer prüft Linie/Richtung. `CheckInViewModel` zeigt nur Kandidaten mit passender `authSessionRevision` und prüft bei Auswahl Fixalter, aktuelle Zugangsgeneration und das Fehlen eines aktiven Check-ins erneut. Ein gültiger Vorschlag übernimmt Einstieg, Abfahrt und bereits geladene Tripdetails; anschließend folgen normale Zielauswahl und manuelle Bestätigung. Es gibt keinen automatischen `POST /trains/checkin`.
 
 ## Zeitfelder und Konflikte
 

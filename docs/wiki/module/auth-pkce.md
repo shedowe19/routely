@@ -22,7 +22,7 @@ PKCE- und OAuth-Hilfsfunktionen sind vorhanden. Der erreichbare `SetupScreen` nu
 - `generateCodeChallenge()` berechnet SHA-256 und kodiert das Ergebnis als Base64-URL.
 - `buildAuthorizationUrl()` setzt an `/oauth/authorize` unter anderem `code_challenge`, `code_challenge_method=S256` und `state`. Callback-Code und State können extrahiert werden.
 - `AuthRepository.exchangeCodeForToken()` sendet `grant_type=authorization_code`, Client-Konfiguration, Redirect-URI, `code` und optional `code_verifier` an `POST /oauth/token`. `code_challenge` gehört zur Autorisierungs-URL und wird hier nicht gesendet.
-- `refreshAccessToken()` sendet `grant_type=refresh_token`, Client-Konfiguration und gespeichertes Refresh-Token an denselben Endpunkt. Eine erfolglose HTTP-Antwort löscht die Session. Der Aufruf erfolgt derzeit nicht automatisch aus ViewModel oder Interceptor.
+- `refreshAccessToken()` sendet `grant_type=refresh_token`, Client-Konfiguration und gespeichertes Refresh-Token an denselben Endpunkt. Nur 400/401/403 löschen die weiterhin passende Sitzung; vorübergehende Fehler erhalten sie. Leere Tokenantworten werden abgelehnt, späte Antworten nach Sitzungswechsel nicht gespeichert. Der Aufruf erfolgt derzeit nicht automatisch aus ViewModel oder Interceptor.
 
 Die Manifest-URI `traewelling://oauth-callback` ist registriert. Eine passende Verarbeitung des Callback-Codes, des PKCE-Verifiers und des States ist in `MainActivity` nicht angebunden.
 
@@ -35,6 +35,8 @@ Die Manifest-URI `traewelling://oauth-callback` ist registriert. Eine passende V
 | `refresh_token` | String | Refresh Token         |
 | `client_id`     | String | OAuth Client ID       |
 | `client_secret` | String | OAuth Client Secret   |
+
+Diese Keys gehören zur revisionsgeschützten Session-Verwaltung unter [Auth](./auth.md). Der manuelle Login benötigt keine Client-ID und entfernt alte OAuth-Konfiguration bei einer neuen validierten Anmeldung. Ein registrierter Callback ist weiterhin kein Beleg für einen vollständigen Browser-Login.
 
 ## Offene Fragen
 

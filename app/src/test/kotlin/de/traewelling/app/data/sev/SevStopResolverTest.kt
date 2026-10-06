@@ -144,6 +144,64 @@ class SevStopResolverTest {
         assertTrue(info.reason!!.contains("Gültigkeit"))
     }
 
+    @Test fun broadMapWindowDoesNotHideASeparateExpiredOrFutureRestriction() {
+        for (restriction in listOf("Die Ersatzhaltestelle gilt nur bis zum 05.10.2026.",
+            "Die Ersatzhaltestelle gilt erst ab dem 31.10.2026.")) {
+            for (notes in listOf(listOf(temporary, restriction), listOf("$temporary\n$restriction"))) {
+                val info = resolve(listOf(essen), map(essen,
+                    listOf(SevPoint("sev", 51.45018831, 7.0101172, null)), notes))
+                    .getValue("essen-visit")
+                assertFalse(info.hasCoordinates)
+                assertTrue(info.guidance.contains(restriction))
+                assertTrue(info.reason!!.contains("Gültigkeit"))
+            }
+        }
+    }
+
+    @Test fun invalidFiveDigitRangeYearCannotBeReadAsAnOtherwiseValidFourDigitYear() {
+        val info = resolve(listOf(essen), map(essen,
+            listOf(SevPoint("sev", 51.45018831, 7.0101172, null)),
+            listOf("Ersatzhaltestelle vom 04.09 bis 30.10.20260"))).getValue("essen-visit")
+        assertFalse(info.hasCoordinates)
+    }
+
+    @Test fun expiredFirstDirectionCannotSelectAnOpposingPointFromALaterRouteLeg() {
+        val later = instant("2026-10-10T10:00:00Z")
+        val current = muelheim.copy(departurePlanned = Instant.ofEpochMilli(later).toString())
+        val map = map(current, listOf(toDuisburg, toEssen), listOf(temporary)).copy(fetchedAtMillis = later)
+        val info = SevStopResolver.resolve(checkin(), listOf(current, oberhausen, essen),
+            mapOf(map.slug to map), later).getValue("muelheim-visit")
+        assertFalse(info.hasCoordinates)
+    }
+
+    @Test fun futureVisitAfterDirectionExpiryCannotUseAnOpposingLaterRouteLeg() {
+        val current = muelheim.copy(departurePlanned = "2026-10-10T10:00:00Z")
+        val info = resolve(listOf(current, oberhausen, essen),
+            map(current, listOf(toDuisburg, toEssen), listOf(temporary))).getValue("muelheim-visit")
+        assertFalse(info.hasCoordinates)
+    }
+
+    @Test fun expiredDirectionCanYieldToAnExplicitlyActivePointForTheSameFirstPlace() {
+        val later = instant("2026-10-10T10:00:00Z")
+        val current = muelheim.copy(departurePlanned = Instant.ofEpochMilli(later).toString())
+        val expired = toDuisburg.copy(label = "Richtung Oberhausen bis 05.10.2026")
+        val active = toEssen.copy(label = "Richtung Oberhausen bis 30.10.2026")
+        val map = map(current, listOf(expired, active), listOf(temporary)).copy(fetchedAtMillis = later)
+        val info = SevStopResolver.resolve(checkin(), listOf(current, oberhausen, essen),
+            mapOf(map.slug to map), later).getValue("muelheim-visit")
+        assertTrue(info.hasCoordinates)
+        assertEquals(active.latitude, info.latitude!!, 0.0)
+    }
+
+    @Test fun unknownOrMissingLabelOnAnotherPointCannotProveTheKnownDirectionUnique() {
+        for (label in listOf(null, "Ersatzhalt am ZOB", "Richtung Oberhausen bis 31.02.2026")) {
+            val info = resolve(listOf(muelheim, essen),
+                map(muelheim, listOf(toDuisburg.copy(label = label), toEssen), listOf(temporary)))
+                .getValue("muelheim-visit")
+            assertFalse(info.hasCoordinates)
+        }
+    }
+
     @Test fun mapMustBeFreshAndNotFutureDatedEvenForSinglePoint() {
         for (fetched in listOf(now - 24 * 60 * 60 * 1000L - 1, now + 1, 0L)) {
             val map = map(essen, listOf(toDuisburg.copy(label = null))).copy(fetchedAtMillis = fetched)

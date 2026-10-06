@@ -909,6 +909,28 @@ class GpsJourneyTimeEstimatorTest {
     }
 
     @Test
+    fun fallbackVisitCannotKeepGpsTimesAfterEitherPlannedMarkerIsRemoved() {
+        val snapshot = snapshot(listOf(gpsTime().copy(stopKey = "2:planned:departure:1")))
+        val stop = rawStop(null)
+        assertNotNull(snapshot.timeFor(stop, base + 10_000))
+        assertNull(snapshot.timeFor(stop.copy(arrivalPlanned = null), base + 10_000))
+        assertNull(snapshot.timeFor(stop.copy(departurePlanned = null), base + 10_000))
+    }
+
+    @Test
+    fun fallbackVisitCannotKeepGpsTimesAfterAPreviouslyMissingPlannedMarkerIsAdded() {
+        val stop = rawStop(null)
+        val departureOnly = snapshot(listOf(gpsTime().copy(stopKey = "2:planned:departure:1",
+            plannedArrivalMillis = null, arrivalMillis = null)))
+        val arrivalOnly = snapshot(listOf(gpsTime().copy(stopKey = "2:planned:arrival:1",
+            plannedDepartureMillis = null, departureMillis = null)))
+        assertNotNull(departureOnly.timeFor(stop.copy(arrivalPlanned = null), base + 10_000))
+        assertNotNull(arrivalOnly.timeFor(stop.copy(departurePlanned = null), base + 10_000))
+        assertNull(departureOnly.timeFor(stop, base + 10_000))
+        assertNull(arrivalOnly.timeFor(stop, base + 10_000))
+    }
+
+    @Test
     fun timeForCannotMatchByBareIndexOrStationId() {
         val stop = rawStop(null).copy(arrivalPlanned = null, departurePlanned = null)
         assertNull(snapshot().timeFor(stop, base + 10_000))

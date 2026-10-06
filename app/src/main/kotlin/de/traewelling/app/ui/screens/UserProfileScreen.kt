@@ -52,7 +52,7 @@ fun UserProfileScreen(
     val shouldLoadMore = remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= uiState.statuses.size - 3 && uiState.hasMore && !uiState.isLoading
+            lastVisible >= uiState.statuses.size - 3 && uiState.hasMore && !uiState.isLoading && uiState.error == null
         }
     }
     LaunchedEffect(shouldLoadMore.value) {
@@ -65,7 +65,7 @@ fun UserProfileScreen(
                 title = "@$username",
                 navigationIcon = {
                     IconButton(onClick = {
-                        viewModel.reset()
+                        viewModel.reset(username)
                         onBack()
                     }) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
@@ -93,6 +93,12 @@ fun UserProfileScreen(
                         onAction = viewModel::refresh
                     )
                 else -> {
+                uiState.error?.let { error ->
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text(error, color = MaterialTheme.colorScheme.error)
+                        TextButton(onClick = viewModel::refresh) { Text("Erneut versuchen") }
+                    }
+                }
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
@@ -117,7 +123,7 @@ fun UserProfileScreen(
                         items(uiState.statuses, key = { it.id }) { status ->
                             StatusCard(
                                 status = status,
-                                onLike = {},
+                                onLike = null,
                                 onStatusClick = { onStatusClick(status.id) }
                             )
                         }
@@ -235,7 +241,7 @@ private fun UserProfileHeader(
                 user.followPending == true -> {
                     OutlinedButton(
                         onClick = onToggleFollow,
-                        enabled = !isFollowLoading,
+                        enabled = false,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
                     ) {

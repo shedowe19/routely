@@ -28,7 +28,7 @@ import de.traewelling.app.util.formatTimestamp
 @Composable
 fun StatusCard(
     status: Status,
-    onLike: () -> Unit,
+    onLike: (() -> Unit)?,
     onUserClick: (String) -> Unit = {},
     onStatusClick: () -> Unit = {}
 ) {
@@ -224,7 +224,8 @@ fun StatusCard(
             Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
-                    onClick = onLike,
+                    onClick = { onLike?.invoke() },
+                    enabled = onLike != null && status.isLikable != false,
                     shape = RoundedCornerShape(16.dp),
                     color = if (isLiked) MaterialTheme.colorScheme.error.copy(alpha = 0.1f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.05f)
                 ) {

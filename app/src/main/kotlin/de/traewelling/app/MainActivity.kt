@@ -31,7 +31,10 @@ import de.traewelling.app.ui.theme.TraewellingTheme
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
+import androidx.lifecycle.ViewModelProvider
 import de.traewelling.app.util.PreferencesManager
+import de.traewelling.app.util.AuthSession
+import de.traewelling.app.util.SessionViewModelStore
 import de.traewelling.app.viewmodel.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,13 +48,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private val authViewModel:         AuthViewModel         by viewModels()
-    private val feedViewModel:         FeedViewModel         by viewModels()
-    private val checkInViewModel:      CheckInViewModel      by viewModels()
-    private val profileViewModel:      ProfileViewModel      by viewModels()
-    private val notificationViewModel: NotificationViewModel by viewModels()
-    private val userProfileViewModel:  UserProfileViewModel  by viewModels()
-    private val statusDetailViewModel: StatusDetailViewModel by viewModels()
-    private val userSearchViewModel:   UserSearchViewModel   by viewModels()
+    private val sessionViewModels:     SessionViewModelStore by viewModels()
     private val settingsViewModel:     SettingsViewModel     by viewModels()
 
     private val permissionRevision = MutableStateFlow(0)
@@ -86,6 +83,10 @@ class MainActivity : ComponentActivity() {
                 val authState         by authViewModel.uiState.collectAsState()
                 val requestedNavigation by navigationRequest.collectAsState()
 
+                LaunchedEffect(authState.isLoggedIn, authState.sessionRevision) {
+                    if (!authState.isLoggedIn) sessionViewModels.clearSession()
+                }
+
                 // Show "Willkommen @user" once after login / startup validation
                 LaunchedEffect(authState.welcomeMessage) {
                     authState.welcomeMessage?.let { msg ->
@@ -106,25 +107,34 @@ class MainActivity : ComponentActivity() {
                 ) { innerPadding ->
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (authState.isLoggedIn) {
-                            MainNavigation(
-                            authViewModel         = authViewModel,
-                            feedViewModel         = feedViewModel,
-                            checkInViewModel      = checkInViewModel,
-                            profileViewModel      = profileViewModel,
-                            notificationViewModel = notificationViewModel,
-                            userProfileViewModel  = userProfileViewModel,
-                            statusDetailViewModel = statusDetailViewModel,
-                            userSearchViewModel   = userSearchViewModel,
-                            settingsViewModel     = settingsViewModel,
-                            onRequestGpsPermission = { requestGpsPermission(fromSettings = true) },
-                            onStartRideRecognition = { requestRideRecognitionStart() },
-                            onStopRideRecognition = { stopRideRecognition() },
-                            onOpenLiveUpdateSettings = { openLiveUpdateSettings() },
-                            navigationRequest = requestedNavigation,
-                            onNavigationRequestConsumed = { consumedToken ->
-                                if (navigationRequest.value?.token == consumedToken) navigationRequest.value = null
+                            key(authState.sessionRevision) {
+                                val featureModels = remember(authState.sessionRevision) {
+                                    ViewModelProvider(
+                                        sessionViewModels.forSession(authState.sessionRevision),
+                                        defaultViewModelProviderFactory,
+                                        defaultViewModelCreationExtras
+                                    )
+                                }
+                                MainNavigation(
+                                    authViewModel         = authViewModel,
+                                    feedViewModel         = featureModels[FeedViewModel::class.java],
+                                    checkInViewModel      = featureModels[CheckInViewModel::class.java],
+                                    profileViewModel      = featureModels[ProfileViewModel::class.java],
+                                    notificationViewModel = featureModels[NotificationViewModel::class.java],
+                                    userProfileViewModel  = featureModels[UserProfileViewModel::class.java],
+                                    statusDetailViewModel = featureModels[StatusDetailViewModel::class.java],
+                                    userSearchViewModel   = featureModels[UserSearchViewModel::class.java],
+                                    settingsViewModel     = settingsViewModel,
+                                    onRequestGpsPermission = { requestGpsPermission(fromSettings = true) },
+                                    onStartRideRecognition = { requestRideRecognitionStart() },
+                                    onStopRideRecognition = { stopRideRecognition() },
+                                    onOpenLiveUpdateSettings = { openLiveUpdateSettings() },
+                                    navigationRequest = requestedNavigation,
+                                    onNavigationRequestConsumed = { consumedToken ->
+                                        if (navigationRequest.value?.token == consumedToken) navigationRequest.value = null
+                                    }
+                                )
                             }
-                        )
                         } else {
                             Box(modifier = Modifier.padding(innerPadding)) {
                                 SetupScreen(viewModel = authViewModel)
@@ -150,17 +160,18 @@ class MainActivity : ComponentActivity() {
             hasRequestedLocationPermission = prefs.hasRequestedLocationPermission()
             // Location foreground services must start while the Activity is visible.
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                combine(prefs.activeStatusId, prefs.gpsTrackingEnabled, permissionRevision) { id, enabled, revision ->
-                    Triple(id, enabled, revision)
-                }.distinctUntilChanged().collect { (statusId, gpsEnabled, _) ->
+                combine(prefs.trackingConfiguration, permissionRevision) { config, revision ->
+                    TrackingStartState(config.activeStatusId, config.gpsEnabled, config.session, revision)
+                }.distinctUntilChanged().collect { state ->
+                    val statusId = state.statusId
                     visibleTrackingStatusId = statusId
-                    if (statusId == null) {
+                    if (statusId == null || state.session.accessToken == null) {
                         permissionAskedForStatusId = null
                         stopService(Intent(this@MainActivity, TripTrackingService::class.java))
                     } else {
                         val fineGranted = hasPreciseLocationPermission()
-                        startTripTracking(statusId, gpsEnabled && fineGranted && locationServicesEnabled())
-                        if (gpsEnabled && !fineGranted && permissionAskedForStatusId != statusId) {
+                        startTripTracking(statusId, state.gpsEnabled && fineGranted && locationServicesEnabled(), state.session.revision)
+                        if (state.gpsEnabled && !fineGranted && permissionAskedForStatusId != statusId) {
                             permissionAskedForStatusId = statusId
                             requestGpsPermission()
                         }
@@ -186,9 +197,11 @@ class MainActivity : ComponentActivity() {
         val statusId = intent?.getIntExtra(EXTRA_OPEN_STATUS_ID, -1)?.takeIf { it > 0 }
         val openRecognition = intent?.getBooleanExtra(RideRecognitionService.EXTRA_OPEN_RECOGNITION, false) == true
         if (statusId != null || openRecognition) {
-            navigationRequest.value = NavigationRequest(++navigationToken, statusId, openRecognition)
+            navigationRequest.value = NavigationRequest(++navigationToken, statusId, openRecognition,
+                intent?.getStringExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION))
             intent?.removeExtra(EXTRA_OPEN_STATUS_ID)
             intent?.removeExtra(RideRecognitionService.EXTRA_OPEN_RECOGNITION)
+            intent?.removeExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION)
         }
     }
 
@@ -196,15 +209,16 @@ class MainActivity : ComponentActivity() {
         val prefs = PreferencesManager(this)
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                combine(prefs.rideRecognitionEnabled, prefs.activeStatusId, prefs.isLoggedIn, permissionRevision) {
-                        enabled, activeId, loggedIn, revision ->
-                    RecognitionStartState(enabled, activeId, loggedIn, revision)
+                combine(prefs.trackingConfiguration, permissionRevision) { config, revision ->
+                    RecognitionStartState(config.recognitionEnabled, config.activeStatusId, config.session, revision)
                 }.distinctUntilChanged().collect { state ->
-                    if (state.enabled && state.loggedIn && state.activeId == null &&
+                    if (state.enabled && state.session.accessToken != null && state.activeId == null &&
                         hasPreciseLocationPermission() && locationServicesEnabled()
                     ) {
                         try {
-                            ContextCompat.startForegroundService(this@MainActivity, RideRecognitionService.startIntent(this@MainActivity))
+                            ContextCompat.startForegroundService(this@MainActivity,
+                                RideRecognitionService.startIntent(this@MainActivity).putExtra(
+                                    RideRecognitionService.EXTRA_AUTH_SESSION_REVISION, state.session.revision))
                         } catch (error: RuntimeException) {
                             android.util.Log.w("MainActivity", "Fahrterkennung konnte nicht gestartet werden", error)
                         }
@@ -216,12 +230,17 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private data class RecognitionStartState(val enabled: Boolean, val activeId: Int?, val loggedIn: Boolean, val revision: Int)
+    private data class TrackingStartState(val statusId: Int?, val gpsEnabled: Boolean, val session: AuthSession, val revision: Int)
+    private data class RecognitionStartState(val enabled: Boolean, val activeId: Int?, val session: AuthSession, val revision: Int)
 
     private fun requestRideRecognitionStart() {
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        val revision = authViewModel.uiState.value.sessionRevision
         lifecycleScope.launch {
-            PreferencesManager(this@MainActivity).setRideRecognitionEnabled(true)
+            val prefs = PreferencesManager(this@MainActivity)
+            val session = prefs.getAuthSession()
+            if (session.revision != revision || session.accessToken == null ||
+                !prefs.setRideRecognitionEnabled(true, session)) return@launch
             requestNotificationPermission()
             requestGpsPermission(fromSettings = true)
             permissionRevision.value += 1
@@ -229,7 +248,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun stopRideRecognition() {
-        lifecycleScope.launch { PreferencesManager(this@MainActivity).setRideRecognitionEnabled(false) }
+        val revision = authViewModel.uiState.value.sessionRevision
+        lifecycleScope.launch {
+            val prefs = PreferencesManager(this@MainActivity)
+            val session = prefs.getAuthSession()
+            if (session.revision == revision) prefs.setRideRecognitionEnabled(false, session)
+        }
         stopService(Intent(this, RideRecognitionService::class.java))
     }
 
@@ -275,11 +299,12 @@ class MainActivity : ComponentActivity() {
         ))
     }
 
-    private fun startTripTracking(statusId: Int, enableGps: Boolean) {
+    private fun startTripTracking(statusId: Int, enableGps: Boolean, sessionRevision: String) {
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
         val intent = Intent(this, TripTrackingService::class.java).apply {
             putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
             putExtra(TripTrackingService.EXTRA_ENABLE_GPS, enableGps)
+            putExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION, sessionRevision)
         }
         try {
             ContextCompat.startForegroundService(this, intent)

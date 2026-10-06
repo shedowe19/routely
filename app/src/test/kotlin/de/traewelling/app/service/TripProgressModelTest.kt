@@ -14,6 +14,28 @@ class TripProgressModelTest {
     private val route = listOf(stop("origin"), stop("one"), stop("two"), stop("destination"))
 
     @Test
+    fun boardingPlatformUsesDepartureInsteadOfDifferentArrivalPlatform() {
+        val visit = route.first().copy(arrivalPlatformReal = "2", departurePlatformReal = "4")
+        assertEquals("4", trackingPlatform(visit, isOrigin = true, isReplacementBus = false))
+        assertEquals("2", trackingPlatform(visit, isOrigin = false, isReplacementBus = false))
+    }
+
+    @Test
+    fun blankLivePlatformFallsBackToTheMatchingPlannedPlatform() {
+        val visit = route.first().copy(arrivalPlatformReal = " ", arrivalPlatformPlanned = " 2 ",
+            departurePlatformReal = "", departurePlatformPlanned = " 4 ", platform = "8")
+        assertEquals("4", trackingPlatform(visit, isOrigin = true, isReplacementBus = false))
+        assertEquals("2", trackingPlatform(visit, isOrigin = false, isReplacementBus = false))
+    }
+
+    @Test
+    fun replacementBusNeverPublishesOrSpeaksRailPlatforms() {
+        val visit = route.first().copy(arrivalPlatformReal = "2", departurePlatformReal = "4", platform = "8")
+        assertNull(trackingPlatform(visit, isOrigin = true, isReplacementBus = true))
+        assertNull(trackingPlatform(visit, isOrigin = false, isReplacementBus = true))
+    }
+
+    @Test
     fun originIsExcludedFromRemainingStops() {
         val model = model(route[0], arrived = true)
         assertEquals(3, model.totalStops)

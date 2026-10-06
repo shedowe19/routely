@@ -22,6 +22,8 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 - **Globaler Feed**: `GET /api/v1/statuses` – Öffentliche Check-ins aller Nutzer.
 - **Status (Singular)**: `GET/PUT/DELETE /api/v1/status/{id}` sowie `POST/DELETE /api/v1/status/{id}/like` – Einzelnen Check-in abrufen, ändern, löschen, liken/entliken.
 
+Der persönliche Dashboard-Vertrag verwendet numerische Seiten mit `simplePaginate(15)`. Der globale `statuses`-Controller liefert eine unpaginierte Antwort; die App bietet weitere Seiten nur bei tatsächlich vorhandenem `links.next` an. Ein deklarierter `page`-Parameter macht den globalen Endpunkt nicht automatisch paginiert.
+
 **2. Bahnhöfe & Abfahrten (Reiseplanung)**
 
 - **Station Search**: `GET /api/v1/trains/station/autocomplete/{query}` – Suche von Haltestellen per Text.
@@ -49,7 +51,7 @@ Zentrale Schnittstelle, definiert in `TraewellingApiService.kt`. Die App kommuni
 
 ## OAuth
 
-Token Exchange und Refreshing laufen über den `OAuthApiService` in `TraewellingApiService.kt` (`POST /oauth/token`).
+`OAuthApiService` in `TraewellingApiService.kt` deklariert Austausch und Refresh über `POST /oauth/token`. Diese Helfer sind noch nicht an einen erreichbaren Browser-Login oder automatischen Refresh angebunden. Der aktuelle [Anmeldeablauf](../module/auth.md) validiert einen manuell eingegebenen Token mit `GET /api/v1/auth/user` und speichert die Sitzung erst nach einer vollständigen erfolgreichen Antwort.
 
 ## Kompatibilitätsstand
 

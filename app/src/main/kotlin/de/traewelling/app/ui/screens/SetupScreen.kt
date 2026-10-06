@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.sp
 import de.traewelling.app.ui.theme.DeepIndigo
 import de.traewelling.app.ui.theme.TealAccent
 import de.traewelling.app.viewmodel.AuthViewModel
+import de.traewelling.app.data.api.ApiServerUrl
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -37,6 +38,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
     val uiState    by viewModel.uiState.collectAsState()
     val uriHandler = LocalUriHandler.current
     var showToken  by remember { mutableStateOf(false) }
+    var browserError by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -185,14 +187,24 @@ fun SetupScreen(viewModel: AuthViewModel) {
                             )
                             TextButton(
                                 onClick = {
-                                    val url = uiState.serverUrl.trimEnd('/').ifBlank { "https://traewelling.de" }
-                                    uriHandler.openUri("$url/settings#security")
+                                    browserError = try {
+                                        val url = ApiServerUrl.normalize(uiState.serverUrl)
+                                        uriHandler.openUri("$url/settings#security")
+                                        null
+                                    } catch (e: IllegalArgumentException) {
+                                        e.message ?: "Bitte eine gültige HTTPS-Server-URL eingeben."
+                                    } catch (_: android.content.ActivityNotFoundException) {
+                                        "Es ist keine App zum Öffnen dieses Links verfügbar."
+                                    }
                                 },
                                 contentPadding = PaddingValues(0.dp)
                             ) {
                                 Text("Im Browser öffnen", style = MaterialTheme.typography.labelMedium, color = TealAccent)
                                 Spacer(Modifier.width(4.dp))
                                 Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(14.dp), tint = TealAccent)
+                            }
+                            browserError?.let { error ->
+                                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
                             }
                         }
                     }

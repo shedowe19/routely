@@ -14,6 +14,12 @@ Erklärung, wie Daten durch die App fließen.
 6. Das `ViewModel` aktualisiert den `StateFlow` mit den neuen Daten.
 7. Der Compose-Screen (View) beobachtet den `StateFlow` (`collectAsStateWithLifecycle()`) und recomposed sich mit den neuen Daten.
 
+## Sitzungs- und Anforderungsgrenzen
+
+Der erreichbare Login validiert einen manuellen Token vor dem atomaren Speichern von Server, Token und Nutzer. `AuthSession.revision` trennt Zugangsgenerationen auch bei später wieder gleichen Zugangsdaten. Vergleichende DataStore-Schreiboperationen verhindern, dass alte Auth-/Check-in-Antworten eine neue Sitzung löschen, verändern oder als aktive Fahrt belegen. Logout entfernt die lokale Sitzung vor dem optionalen API-Aufruf.
+
+`MainActivity` erhält Feature-ViewModels innerhalb derselben Sitzung über Rotation und löscht ihren Store beim Sitzungswechsel. Suche, Auswahl, Feed, Meldungen und Profile haben zusätzlich Anforderungsgenerationen gegen verspätete Antworten innerhalb derselben Sitzung. Repository-Abbrüche bleiben `CancellationException` und werden nicht als Cache-/UI-Erfolg zurückgegeben. Der Room-Feedcache ist nach Server-/Token-Digest und Feedart partitioniert; nur temporäre Seite-1-Fehler erlauben den passenden Offline-Rückfall. Verträge: [Auth](../module/auth.md), [Feed](../module/feed.md) und [Schemas](../daten/schemas.md).
+
 ## Aktive Fahrt und Stationsalarm
 
 Nach einem erfolgreichen Check-in speichert `CheckInViewModel` die aktive Status-ID. Die sichtbare `MainActivity` prüft Standortfreigabe und GPS-Einstellung und startet den Foreground-Service. Ein ViewModel startet keinen GPS-Service aus dem Hintergrund.

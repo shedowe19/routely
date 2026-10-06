@@ -61,7 +61,8 @@ fun CheckInScreen(
                 title = title,
                 navigationIcon = {
                     if (showBack) {
-                        IconButton(onClick = viewModel::goBack) {
+                        IconButton(onClick = viewModel::goBack,
+                            enabled = !(uiState.step == CheckInStep.CONFIRM && uiState.isLoading)) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
                         }
                     }
@@ -93,18 +94,30 @@ private fun StationSearchStep(
 
     val context = LocalContext.current
     val fusedLocationClient = remember { LocationServices.getFusedLocationProviderClient(context) }
+    var pendingLocationRequest by remember { mutableStateOf<Long?>(null) }
+    var locationCancellation by remember { mutableStateOf<CancellationTokenSource?>(null) }
+    DisposableEffect(viewModel) {
+        onDispose {
+            locationCancellation?.cancel()
+            pendingLocationRequest?.let(viewModel::cancelLocationLookup)
+        }
+    }
 
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
+        val request = pendingLocationRequest ?: return@rememberLauncherForActivityResult
+        if (!viewModel.isLocationLookupCurrent(request)) return@rememberLauncherForActivityResult
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
                       permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
         if (granted) {
             if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
                 ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED) {
                 @Suppress("MissingPermission")
-                fetchLocation(context, fusedLocationClient, viewModel)
+                locationCancellation = fetchLocation(context, fusedLocationClient, viewModel, request)
             }
+        } else {
+            viewModel.finishLocationLookup(request, null, null, "Standortfreigabe wurde nicht erteilt. Bitte suche die Station manuell.")
         }
     }
 
@@ -143,11 +156,14 @@ private fun StationSearchStep(
 
             FilledIconButton(
                 onClick = {
+                    locationCancellation?.cancel()
+                    val request = viewModel.beginLocationLookup()
+                    pendingLocationRequest = request
                     val hasFine = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     val hasCoarse = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
                     if (hasFine || hasCoarse) {
                         @Suppress("MissingPermission")
-                        fetchLocation(context, fusedLocationClient, viewModel)
+                        locationCancellation = fetchLocation(context, fusedLocationClient, viewModel, request)
                     } else {
                         locationPermissionLauncher.launch(
                             arrayOf(
@@ -261,18 +277,31 @@ private fun RideRecognitionCard(
 private fun fetchLocation(
     context: Context,
     fusedLocationClient: com.google.android.gms.location.FusedLocationProviderClient,
-    viewModel: CheckInViewModel
-) {
+    viewModel: CheckInViewModel,
+    request: Long
+): CancellationTokenSource {
+    val cancellation = CancellationTokenSource()
     if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
         ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     ) {
-        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, CancellationTokenSource().token)
+        try {
+        fusedLocationClient.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cancellation.token)
             .addOnSuccessListener { location ->
-                if (location != null) {
-                    viewModel.searchNearbyStations(location.latitude, location.longitude)
+                if (!cancellation.token.isCancellationRequested) {
+                    viewModel.finishLocationLookup(request, location?.latitude, location?.longitude)
+                }
+            }.addOnFailureListener {
+                if (!cancellation.token.isCancellationRequested) {
+                    viewModel.finishLocationLookup(request, null, null, "Standort konnte nicht ermittelt werden. Bitte suche die Station manuell.")
                 }
             }
+        } catch (_: SecurityException) {
+            viewModel.finishLocationLookup(request, null, null, "Standortfreigabe fehlt. Bitte suche die Station manuell.")
+        }
+    } else {
+        viewModel.finishLocationLookup(request, null, null, "Standortfreigabe fehlt. Bitte suche die Station manuell.")
     }
+    return cancellation
 }
 
 // ─── Step 2: Abfahrten ───────────────────────────────────────────────────────
@@ -456,11 +485,13 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                 Spacer(Modifier.height(16.dp))
                 TravelReasonSelector(
                     selected = uiState.travelReason,
-                    onSelected = viewModel::updateTravelReason
+                    onSelected = viewModel::updateTravelReason,
+                    enabled = !uiState.isLoading
                 )
                 Spacer(Modifier.height(16.dp))
                 OutlinedTextField(
                     value = uiState.statusBody,
+                    enabled = !uiState.isLoading,
                     onValueChange = viewModel::updateStatusBody,
                     label = { Text("Statusmeldung (optional)") },
                     placeholder = { Text("Was machst du auf dieser Reise?") },
@@ -474,6 +505,7 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                 Row(Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = uiState.manualDeparture,
+                        enabled = !uiState.isLoading,
                         onValueChange = viewModel::updateManualDeparture,
                         label = { Text("Abfahrt") },
                         modifier = Modifier.weight(1f),
@@ -482,6 +514,7 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                     Spacer(Modifier.width(8.dp))
                     OutlinedTextField(
                         value = uiState.manualArrival,
+                        enabled = !uiState.isLoading,
                         onValueChange = viewModel::updateManualArrival,
                         label = { Text("Ankunft") },
                         modifier = Modifier.weight(1f),
@@ -573,7 +606,8 @@ private fun InfoRow(icon: androidx.compose.ui.graphics.vector.ImageVector, label
 @Composable
 private fun TravelReasonSelector(
     selected: TravelReason,
-    onSelected: (TravelReason) -> Unit
+    onSelected: (TravelReason) -> Unit,
+    enabled: Boolean = true
 ) {
     Column(Modifier.fillMaxWidth()) {
         Text(
@@ -589,6 +623,7 @@ private fun TravelReasonSelector(
         ) {
             TravelReason.entries.forEach { reason ->
                 FilterChip(
+                    enabled = enabled,
                     selected = selected == reason,
                     onClick = { onSelected(reason) },
                     label = { Text(travelReasonTitle(reason)) },

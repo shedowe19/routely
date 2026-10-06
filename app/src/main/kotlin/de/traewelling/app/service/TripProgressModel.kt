@@ -5,6 +5,14 @@ import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
+/** The current boarding visit uses its departure platform; later visits use arrival. */
+internal fun trackingPlatform(stop: StopStation?, isOrigin: Boolean, isReplacementBus: Boolean): String? {
+    if (isReplacementBus || stop == null) return null
+    val values = if (isOrigin) listOf(stop.departurePlatformReal, stop.departurePlatformPlanned, stop.platform)
+        else listOf(stop.arrivalPlatformReal, stop.arrivalPlatformPlanned, stop.platform)
+    return values.firstNotNullOfOrNull { it?.trim()?.takeIf(String::isNotEmpty) }
+}
+
 /**
  * Progress counts ordered stopover visits. Arrival times use the shared resolver.
  * The origin is excluded and a cancelled stop is never counted as a remaining halt.

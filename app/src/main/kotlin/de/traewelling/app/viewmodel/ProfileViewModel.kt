@@ -8,6 +8,9 @@ import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.User
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -26,41 +29,47 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
 
     private val _uiState = MutableStateFlow(ProfileUiState())
     val uiState: StateFlow<ProfileUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
+    private var generation = 0L
 
-    fun loadProfile() {
-        if (_uiState.value.isLoading) return
+    fun loadProfile(refresh: Boolean = false) {
+        if (_uiState.value.isLoading && !refresh) return
+        val request = ++generation
+        loadJob?.cancel()
+        _uiState.update { it.copy(isLoading = true, error = null) }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-
+        loadJob = viewModelScope.launch {
             val userResult  = repo.getCurrentUser()
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
+            val user = userResult.getOrElse { error ->
+                _uiState.update { it.copy(isLoading = false, error = "Profil konnte nicht geladen werden: ${error.message}") }
+                return@launch
+            }
+            _uiState.update { it.copy(user = user) }
             val statsResult = repo.getStatistics()
-
-            userResult.onSuccess { user ->
-                _uiState.update { it.copy(user = user) }
-                repo.getUserStatuses(user.username, 1).onSuccess { response ->
-                    _uiState.update { it.copy(recentStatuses = response.data ?: emptyList()) }
-                }
-            }
-
-            statsResult.onSuccess { statsData ->
-                _uiState.update { it.copy(statistics = statsData) }
-            }
-
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
+            val statusesResult = repo.getUserStatuses(user.username, 1)
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
             _uiState.update {
                 it.copy(
                     isLoading = false,
-                    error = if (userResult.isFailure)
-                        "Profil konnte nicht geladen werden: ${userResult.exceptionOrNull()?.message}"
-                    else null
+                    statistics = statsResult.getOrNull() ?: it.statistics,
+                    recentStatuses = statusesResult.getOrNull()?.data?.distinctBy { status -> status.id } ?: it.recentStatuses,
+                    error = when {
+                        statsResult.isFailure -> "Statistiken konnten nicht geladen werden: ${statsResult.exceptionOrNull()?.message}"
+                        statusesResult.isFailure -> "Fahrten konnten nicht geladen werden: ${statusesResult.exceptionOrNull()?.message}"
+                        else -> null
+                    }
                 )
             }
         }
     }
 
     fun refresh() {
-        _uiState.update { it.copy(user = null, statistics = null, recentStatuses = emptyList()) }
-        loadProfile()
+        loadProfile(refresh = true)
     }
 
     fun clearError() = _uiState.update { it.copy(error = null) }

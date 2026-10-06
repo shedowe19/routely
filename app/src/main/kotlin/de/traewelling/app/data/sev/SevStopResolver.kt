@@ -114,20 +114,21 @@ object SevStopResolver {
 
     private data class DateRange(val start: LocalDate, val end: LocalDate)
     private val dateRange = Regex(
-        "(?:vom|von)\\s+(\\d{1,2})\\.(\\d{1,2})(?:\\.(\\d{4}))?\\.?\\s*(?:bis|–|-)\\s*(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})",
+        "(?:vom|von)\\s+(\\d{1,2})\\.(\\d{1,2})(?:\\.(\\d{4}))?\\.?\\s*(?:bis|–|-)\\s*(\\d{1,2})\\.(\\d{1,2})\\.(\\d{4})(?!\\d)",
         RegexOption.IGNORE_CASE
     )
 
     private fun mapValidity(notes: List<String>, today: LocalDate, eventDate: LocalDate): String? {
         val ranges = mutableListOf<DateRange>()
-        val hasRecognizedRange = notes.any(dateRange::containsMatchIn)
         for (note in notes) {
             val matches = dateRange.findAll(note).toList()
             val unmatchedBound = Regex(
                 "\\b(?:ab(?:\\s+dem)?|bis(?:\\s+zum)?|vom|von)\\s+\\d{1,2}\\.\\d{1,2}(?:\\.\\d{4})?",
                 RegexOption.IGNORE_CASE
-            ).containsMatchIn(note)
-            if (matches.isEmpty() && ((unmatchedBound && !hasRecognizedRange) ||
+            ).containsMatchIn(dateRange.replace(note, ""))
+            // A broad known interval cannot prove that another ab/bis
+            // restriction applies to the same point or may be ignored.
+            if (unmatchedBound || (matches.isEmpty() &&
                     Regex("tempor[aä]r|vor[uü]bergehend", RegexOption.IGNORE_CASE).containsMatchIn(note))) {
                 return "Die Gültigkeit der vorübergehenden Ersatzhaltestellen ist nicht eindeutig angegeben."
             }
@@ -179,15 +180,23 @@ object SevStopResolver {
         .map(::normalise).map { it.replace(Regex("[^a-z0-9]+"), " ").trim() }.filter { it.isNotEmpty() }
 
     private fun chooseByDirection(points: List<SevPoint>, following: List<StopStation>, today: LocalDate, eventDate: LocalDate): SevPoint? {
-        val rules = points.associateWith { point -> directions(point.label).filter {
-            it.until == null || (today <= it.until && eventDate <= it.until)
-        } }
+        val rules = points.associateWith { point -> directions(point.label) }
+        // An unclassified point could serve the same direction as a labelled
+        // one. Missing/unknown labels do not prove that it is an alternative.
+        if (rules.values.any { it.isEmpty() }) return null
         for (next in following.filter { it.cancelled != true }) {
             val nextName = next.stationName?.let(::normalise)?.replace(Regex("[^a-z0-9]+"), " ")?.trim() ?: continue
             val matches = rules.filterValues { directions -> directions.any { rule ->
                 nextName == rule.place || nextName.startsWith("${rule.place} ")
-            } }.keys
-            if (matches.isNotEmpty()) return matches.singleOrNull()
+            } }
+            if (matches.isNotEmpty()) {
+                // The first known directional place remains decisive even if
+                // its rule expired. A later opposing stop cannot revive it.
+                return matches.filterValues { directions -> directions.any { rule ->
+                    (nextName == rule.place || nextName.startsWith("${rule.place} ")) &&
+                        (rule.until == null || (today <= rule.until && eventDate <= rule.until))
+                } }.keys.singleOrNull()
+            }
         }
         return null
     }

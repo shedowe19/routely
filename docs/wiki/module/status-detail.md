@@ -12,6 +12,7 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StatusDetailScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusEditRequest.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
@@ -35,9 +36,13 @@ Schlägt die Halteanfrage fehl, werden dennoch die neuen Status-/Text-/manuellen
 
 Antworten auf Status-, Halte- und Nutzeranfragen werden nur übernommen, wenn weiterhin dieselbe Status-ID angezeigt wird. Späte Antworten einer zuvor geöffneten Fahrt überschreiben dadurch nicht die neue Ansicht.
 
+Lade- und Ansichtsgenerationen trennen zusätzlich mehrere Refreshs derselben Status-ID. Während Speichern oder Löschen sind Auto-Refresh und alte Ladeaufträge ausgesetzt; gegenseitige beziehungsweise doppelte Mutationen werden abgelehnt. Reset und Fahrtwechsel beenden auch den laufenden Mutationsauftrag. Ein gescheiterter Schreibauftrag kann den Auto-Refresh der weiterhin passenden Ansicht wieder starten.
+
 ### GPS-Zeiten und API-Rückfall
 
 `JourneyTimeResolver` entscheidet für Header und Halte dieselbe Priorität: frische GPS-Zeit des konkreten Ereignisses, manuelle Check-in-Zeit, parsebare API-Echtzeit, Planzeit. GPS-Werte werden nur aus dem passenden eigenen aktiven `TrackingLiveState` übernommen. Ankunft und Abfahrt erhalten getrennte Quellenhinweise; beobachtete Ankunft und Prognose sind unterscheidbar. Fehlende GPS-Abfahrt verhindert keine gültige API-Abfahrt desselben Halts. Ein bereits belegter passender GPS-Wert kann bei Bremsen und geordnetem Haltwechsel bis zu seinem ursprünglichen Gültigkeitsende erhalten bleiben; die UI führt dafür keine eigene Quellenverzögerung ein. Unbrauchbare oder abgelaufene Werte fallen weiterhin auf die nächsten Quellen zurück.
+
+Eine frisch geladene API-Grenze darf keinen GPS-Wert eines früheren Planpaares übernehmen. Auch ohne Stopover-UUID müssen geplante Ankunft und Abfahrt einschließlich fehlender Marker exakt zum GPS-Besuch passen. Entfernt oder ergänzt der Refresh einen Marker, folgt die Anzeige unmittelbar der neuen API-/manuellen Basis, ohne auf das getrennte Service-Polling zu warten.
 
 `StatusDetailContent` liest für jede neue Zusammensetzung die aktuelle Systemzeit und verwendet diesen gemeinsamen Zeitpunkt für Header, Haltzeiten und Timeline-Fortschritt. Ein zwischen den sekündlichen UI-Ticks eintreffender GPS-Datensatz wird dadurch nicht gegen die ältere Tickzeit geprüft und fälschlich als Zukunftswert verworfen. Der Ein-Sekunden-Ticker bleibt aktiv, damit GPS-Zeiten auch ohne neue Service-Publikation ablaufen. Die strikte Ablehnung tatsächlich zukünftiger Zeitstempel und die ursprüngliche GPS-Gültigkeitsdauer bleiben unverändert; die UI verlängert oder puffert keine Prognose.
 
@@ -67,9 +72,15 @@ Für diese Ersatzbusfahrten nennt die Ansicht zusätzlich OSRM und OpenStreetMap
 - `saveStatusEdit()`: Sendet PUT `/api/v1/status/{id}` mit UpdateStatusRequest
 - Bei einem Zielwechsel speichert `editDestinationStop` den ausgewählten Halt. Der Request enthält dann dessen `stationId` als `destinationId` und `arrivalPlanned` als `destinationArrivalPlanned`, da Upstream beide Felder gemeinsam verlangt. Reine Text- oder Zeitkorrekturen übertragen kein Zielpaar.
 
+`buildStatusEditRequest` vergleicht die Formularzeiten mit den beim Öffnen aufgelösten Anfangswerten. Unveränderte Ankunft/Abfahrt werden im Request ausgelassen, damit eine reine Textänderung die damalige Providerzeit nicht versehentlich als manuelle Istzeit festschreibt. Eine bewusst geleerte Zeit wird als leerer String übertragen. Auch ein anderer Besuch derselben Station gilt als Zielwechsel; eine reine Echtzeitänderung desselben Besuchs nicht. Ein neues Ziel muss nach dem eindeutig zugeordneten Einstieg liegen und darf nicht gestrichen sein. Der GPS-freie Formularresolver bleibt erhalten.
+
+Bei einem neuen Ziel wird ein vorhandener, vom Nutzer unveränderter manueller Ankunfts-Override des alten Ziels ausdrücklich mit `manualArrival = ""` gelöscht. Upstream wandelt diesen leeren Wert in `null` um; bloßes Weglassen würde den alten Override behalten. Eine eigens im Formular geänderte Zielzeit bleibt dagegen erhalten. Bei Rückwahl des ursprünglichen Besuchs wird dessen ursprünglicher manueller Wert wieder angezeigt. Speichern-/Löschfehler bleiben auch bei vorhandenem Status beziehungsweise offenem Bearbeitungsdialog sichtbar; laufendes Speichern sperrt dessen Bestätigung und Schließen.
+
 ### Löschung
 
 - `deleteStatus()`: Sendet DELETE `/api/v1/status/{id}`
+
+Nur eigene Status dürfen geändert oder gelöscht werden. Die lokale aktive Fahrt wird nach erfolgreichem Löschen zusätzlich gegen den vor dem Auftrag aufgenommenen Auth-Snapshot geprüft; eine gleich nummerierte Fahrt eines neu angemeldeten Kontos wird nicht entfernt.
 
 ### Timeline-Darstellung (StatusDetailScreen)
 
@@ -92,6 +103,8 @@ Die Timeline zeigt:
 ### Gemeinsamer Besuchsfortschritt
 
 Für den eigenen, weiterhin aktiven und gerade geöffneten Status übernimmt das ViewModel den In-Memory-`StateFlow` `TripTrackingService.trackingLiveState`. `StopTimelineProgress` ordnet dessen Besuch über `matchesStopover` beziehungsweise UUID der vollständigen Timeline zu. Der Index der eingegrenzten Service-Route wird nicht als Index der vollständigen Haltefolge verwendet; Rundfahrten bleiben besuchsbezogen.
+
+Die Übernahme prüft außerdem `TrackingLiveState.sessionRevision` gegen die aktuelle Authrevision. Eine gleiche numerische Status-ID auf einem neu angemeldeten Konto genügt nicht für alte GPS-Zeiten, SEV-Hinweise oder Cursor.
 
 | Quelle und Zustand | Markierung |
 | --- | --- |

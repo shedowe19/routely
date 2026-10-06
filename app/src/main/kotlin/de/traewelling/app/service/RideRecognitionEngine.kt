@@ -38,7 +38,8 @@ data class RideRecognitionState(
     val phase: RideRecognitionPhase = RideRecognitionPhase.OFF,
     val message: String = "Fahrterkennung ist ausgeschaltet.",
     val candidates: List<RecognizedRide> = emptyList(),
-    val sessionId: Long = 0L
+    val sessionId: Long = 0L,
+    val authSessionRevision: String? = null
 )
 
 /**
@@ -51,6 +52,7 @@ class RideRecognitionEngine {
     private val fixes = ArrayDeque<LocationFix>()
     private val routes = linkedMapOf<String, RecognizableRide>()
     private var latestFixReliable = false
+    private var latestObservedFixMillis: Long? = null
 
     fun updateRides(rides: List<RecognizableRide>, nowMillis: Long) {
         prune(nowMillis)
@@ -61,7 +63,11 @@ class RideRecognitionEngine {
 
     fun onLocation(fix: LocationFix, nowMillis: Long): List<RecognizedRide> {
         // Delayed batches must not rewind reliable movement or resurrect older candidates.
-        if (fixes.lastOrNull()?.let { fix.timeMillis <= it.timeMillis } == true) return matches(nowMillis)
+        if (latestObservedFixMillis?.let { fix.timeMillis <= it } == true) return matches(nowMillis)
+        // A newer inaccurate fix still ends the earlier reliable observation.
+        // A delayed older precise sample must not undo that loss of confidence.
+        // Future timestamps are never consumed, so they cannot freeze the session.
+        if (fix.timeMillis <= nowMillis) latestObservedFixMillis = fix.timeMillis
         latestFixReliable = isReliable(fix, nowMillis)
         if (!latestFixReliable) return emptyList()
         if (fixes.lastOrNull()?.let { fix.timeMillis - it.timeMillis > MAX_FIX_AGE_MILLIS } == true) {
@@ -88,7 +94,7 @@ class RideRecognitionEngine {
         routes.entries.removeAll { it.value.departure.tripId in tripIds }
     }
 
-    fun clear() { fixes.clear(); routes.clear(); latestFixReliable = false }
+    fun clear() { fixes.clear(); routes.clear(); latestFixReliable = false; latestObservedFixMillis = null }
 
     internal val storedFixCount: Int get() = fixes.size
     internal val storedRouteCount: Int get() = routes.size
@@ -133,8 +139,20 @@ class RideRecognitionEngine {
         if (samples.size < 3) return null
         val duration = (latest.timeMillis - samples.first().timeMillis) / 1000.0
         if (duration < MIN_OBSERVATION_MILLIS / 1000.0) return null
-        val projections = samples.map { fix ->
-            val point = localPoint(fix.latitude, fix.longitude, start) ?: return null
+        val points = samples.map { fix -> localPoint(fix.latitude, fix.longitude, start) ?: return null }
+        // A plausible total average must not hide an instantaneous GPS jump.
+        // Accuracy remains a positional tolerance, not additional vehicle speed.
+        if (samples.indices.drop(1).any { index ->
+            val previous = samples[index - 1]
+            val current = samples[index]
+            val seconds = (current.timeMillis - previous.timeMillis) / 1000.0
+            val distance = hypot(points[index].first - points[index - 1].first,
+                points[index].second - points[index - 1].second)
+            seconds <= 0.0 || distance > MAX_MOVEMENT_METERS_PER_SECOND * seconds +
+                previous.accuracyMeters + current.accuracyMeters
+        }) return null
+        val projections = samples.mapIndexed { index, fix ->
+            val point = points[index]
             val along = (point.first * segment.first + point.second * segment.second) / length
             val lateral = abs(point.first * segment.second - point.second * segment.first) / length
             if (lateral > max(180.0, fix.accuracyMeters * 3.0)) return null
@@ -162,6 +180,7 @@ class RideRecognitionEngine {
         const val MAX_FIXES = 24
         private const val HISTORY_MILLIS = 120_000L
         private const val MIN_OBSERVATION_MILLIS = 8_000L
+        private const val MAX_MOVEMENT_METERS_PER_SECOND = 100.0
         private const val MINUTE = 60_000L
 
         fun isReliable(fix: LocationFix, nowMillis: Long): Boolean =

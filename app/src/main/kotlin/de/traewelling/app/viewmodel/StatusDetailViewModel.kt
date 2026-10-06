@@ -20,6 +20,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import java.time.Instant
 
 data class StatusDetailUiState(
@@ -55,6 +57,12 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     private var autoRefreshJob: Job? = null
     private var currentStatusId: Int? = null
+    private var loadJob: Job? = null
+    private var mutationJob: Job? = null
+    private var loadGeneration = 0L
+    private var viewGeneration = 0L
+    private var editInitialDeparture = ""
+    private var editInitialArrival = ""
     private var sevEnrichmentJob: Job? = null
     private var sevGeneration = 0L
     private var sevSnapshot: SevDetailSnapshot? = null
@@ -64,10 +72,12 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             combine(
                 TripTrackingService.trackingLiveState,
                 prefs.activeStatusId,
+                prefs.authSession,
                 _uiState.map { it.status?.id to it.isOwnStatus }.distinctUntilChanged()
-            ) { tracking, activeStatusId, viewedStatus ->
+            ) { tracking, activeStatusId, session, viewedStatus ->
                 tracking?.takeIf {
-                    viewedStatus.second && it.statusId == viewedStatus.first && it.statusId == activeStatusId
+                    session.accessToken != null && it.sessionRevision == session.revision &&
+                        viewedStatus.second && it.statusId == viewedStatus.first && it.statusId == activeStatusId
                 }
             }.collect { tracking ->
                 _uiState.update { state ->
@@ -80,73 +90,21 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun loadStatusDetail(statusId: Int) {
+        if (statusId <= 0) return
         if (currentStatusId != statusId) {
-            autoRefreshJob?.cancel()
+            ++viewGeneration
+            mutationJob?.cancel()
             cancelSevEnrichment()
             _uiState.value = StatusDetailUiState()
-        }
+        } else if (_uiState.value.isUpdating || _uiState.value.isDeleting) return
         currentStatusId = statusId
-
-        viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-
-            // Load status detail
-            repo.getStatusDetail(statusId)
-                .onSuccess statusLoaded@ { status ->
-                    if (currentStatusId != statusId) return@statusLoaded
-                    // Keep API stopovers intact. Manual and GPS times are resolved only for display.
-                    // Load stopovers using the trip ID from the checkin
-                    val tripId = status.checkin?.trip
-                    if (tripId != null) {
-                        repo.getStopovers(tripId)
-                            .onSuccess stopsLoaded@ { stops ->
-                                if (currentStatusId != statusId) return@stopsLoaded
-                                _uiState.update {
-                                    it.copy(
-                                        isLoading = false,
-                                        status = statusWithStopoverBoundaries(status, stops),
-                                        stopovers = stops,
-                                        lastUpdated = System.currentTimeMillis()
-                                    )
-                                }
-                                enrichSevStops(status, stops)
-                            }
-                            .onFailure { e ->
-                                if (currentStatusId != statusId) return@onFailure
-                                _uiState.update {
-                                    val stops = compatibleExistingStopovers(status, it)
-                                    it.copy(
-                                        isLoading = false,
-                                        status = statusWithStopoverBoundaries(status, stops),
-                                        stopovers = stops,
-                                        lastUpdated = System.currentTimeMillis(),
-                                        error = "Halte konnten nicht geladen werden: ${e.message}"
-                                    )
-                                }
-                                enrichSevStops(status, _uiState.value.stopovers)
-                            }
-                    } else {
-                        _uiState.update {
-                            it.copy(
-                                isLoading = false,
-                                status = status,
-                                stopovers = emptyList(),
-                                lastUpdated = System.currentTimeMillis()
-                            )
-                        }
-                        enrichSevStops(status, emptyList())
-                    }
-                    if (currentStatusId == statusId) checkIfOwnStatus(status)
-                }
-                .onFailure { e ->
-                    if (currentStatusId != statusId) return@onFailure
-                    _uiState.update {
-                        it.copy(isLoading = false, error = "Status nicht gefunden: ${e.message}")
-                    }
-                }
-
-            // Start auto-refresh for live delay data
-            if (currentStatusId == statusId) startAutoRefresh(statusId)
+        autoRefreshJob?.cancel()
+        loadJob?.cancel()
+        val request = ++loadGeneration
+        _uiState.update { it.copy(isLoading = true, error = null) }
+        loadJob = viewModelScope.launch {
+            loadSnapshot(statusId, request, showLoading = true)
+            if (currentStatusId == statusId && request == loadGeneration) startAutoRefresh(statusId)
         }
     }
 
@@ -154,48 +112,41 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         autoRefreshJob?.cancel()
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
-                delay(30_000) // Refresh every 30 seconds
-                refreshSilently(statusId)
+                delay(30_000)
+                if (currentStatusId != statusId || loadJob?.isActive == true ||
+                    _uiState.value.isUpdating || _uiState.value.isDeleting) continue
+                loadSnapshot(statusId, ++loadGeneration, showLoading = false)
             }
         }
     }
 
-    private suspend fun refreshSilently(statusId: Int) {
-        if (currentStatusId != statusId) return
-        // Silently update — no loading spinner
-        repo.getStatusDetail(statusId).onSuccess statusRefreshed@ { status ->
-            if (currentStatusId != statusId) return@statusRefreshed
-            val tripId = status.checkin?.trip
-            if (tripId != null) {
-                repo.getStopovers(tripId).onSuccess stopsRefreshed@ { stops ->
-                    if (currentStatusId != statusId) return@stopsRefreshed
-                    _uiState.update {
-                        it.copy(
-                            status = statusWithStopoverBoundaries(status, stops),
-                            stopovers = stops,
-                            lastUpdated = System.currentTimeMillis()
-                        )
-                    }
-                    enrichSevStops(status, _uiState.value.stopovers)
-                }.onFailure {
-                    if (currentStatusId != statusId) return@onFailure
-                    _uiState.update {
-                        val stops = compatibleExistingStopovers(status, it)
-                        it.copy(
-                            status = statusWithStopoverBoundaries(status, stops),
-                            stopovers = stops,
-                            lastUpdated = System.currentTimeMillis()
-                        )
-                    }
-                    enrichSevStops(status, _uiState.value.stopovers)
-                }
-            } else {
-                _uiState.update {
-                    it.copy(status = status, stopovers = emptyList(), lastUpdated = System.currentTimeMillis())
-                }
-                enrichSevStops(status, emptyList())
+    private suspend fun loadSnapshot(statusId: Int, request: Long, showLoading: Boolean) {
+        val result = repo.getStatusDetail(statusId)
+        coroutineContext.ensureActive()
+        if (currentStatusId != statusId || request != loadGeneration) return
+        val status = result.getOrElse { error ->
+            if (showLoading) _uiState.update {
+                it.copy(isLoading = false, error = "Status nicht gefunden: ${error.message}")
             }
+            return
         }
+        val stopsResult = status.checkin?.trip?.let { repo.getStopovers(it) }
+        coroutineContext.ensureActive()
+        if (currentStatusId != statusId || request != loadGeneration) return
+        _uiState.update { state ->
+            val stops = stopsResult?.getOrNull() ?: if (stopsResult != null)
+                compatibleExistingStopovers(status, state) else emptyList()
+            state.copy(
+                isLoading = false,
+                status = statusWithStopoverBoundaries(status, stops),
+                stopovers = stops,
+                lastUpdated = System.currentTimeMillis(),
+                error = if (showLoading && stopsResult?.isFailure == true)
+                    "Halte konnten nicht geladen werden: ${stopsResult.exceptionOrNull()?.message}" else state.error
+            )
+        }
+        enrichSevStops(status, _uiState.value.stopovers)
+        if (showLoading) checkIfOwnStatus(status)
     }
 
     /** Public map requests run after the API snapshot is visible and never block its refresh. */
@@ -282,15 +233,31 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     fun deleteStatus(onSuccess: () -> Unit) {
         val statusId = currentStatusId ?: return
-        viewModelScope.launch {
-            _uiState.update { it.copy(isDeleting = true) }
+        if (!_uiState.value.isOwnStatus || _uiState.value.isDeleting || _uiState.value.isUpdating) return
+        val view = viewGeneration
+        ++loadGeneration
+        loadJob?.cancel()
+        autoRefreshJob?.cancel()
+        _uiState.update { it.copy(isDeleting = true, isLoading = false) }
+        mutationJob = viewModelScope.launch {
+            val session = prefs.getAuthSession()
+            coroutineContext.ensureActive()
+            if (view != viewGeneration || currentStatusId != statusId) return@launch
             repo.deleteStatus(statusId)
                 .onSuccess {
+                    coroutineContext.ensureActive()
+                    if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
+                    prefs.clearActiveTracking(statusId, session)
+                    coroutineContext.ensureActive()
+                    if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
                     _uiState.update { it.copy(isDeleting = false) }
                     onSuccess()
                 }
                 .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (view != viewGeneration || currentStatusId != statusId) return@onFailure
                     _uiState.update { it.copy(isDeleting = false, error = "Löschen fehlgeschlagen: ${e.message}") }
+                    startAutoRefresh(statusId)
                 }
         }
     }
@@ -298,6 +265,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     // ─── Editing ──────────────────────────────────────────────────────────────
 
     fun startEditing() {
+        if (!_uiState.value.isOwnStatus || _uiState.value.isUpdating || _uiState.value.isDeleting) return
         val status = _uiState.value.status ?: return
         _uiState.update {
             it.copy(
@@ -312,9 +280,12 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 editVisibility = status.visibility ?: 0
             )
         }
+        editInitialDeparture = _uiState.value.editDeparture
+        editInitialArrival = _uiState.value.editArrival
     }
 
     fun stopEditing() {
+        if (_uiState.value.isUpdating) return
         _uiState.update { it.copy(isEditing = false) }
     }
 
@@ -331,13 +302,24 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun updateEditDestination(stop: StopStation) {
+        if (_uiState.value.isUpdating || stop.cancelled == true || stop.stationId == null) return
+        val state = _uiState.value
+        val origin = state.status?.checkin?.origin ?: return
+        val originIndex = state.stopovers.indices.filter { state.stopovers[it].matchesStopover(origin) }.singleOrNull() ?: return
+        if (state.stopovers.drop(originIndex + 1).none { it.matchesStopover(stop) }) return
+        val hadManualEdit = state.editArrival != editInitialArrival
+        val manualArrival = state.status?.checkin?.manualArrival.takeIf {
+            stop.matchesStopover(state.status?.checkin?.destination)
+        }
+        val newArrival = JourneyTimeResolver.arrival(stop, null, 0, manualArrival)?.millis?.let { Instant.ofEpochMilli(it).toString() } ?: ""
         _uiState.update {
             it.copy(
                 editDestinationId = stop.stationId,
                 editDestinationStop = stop,
-                editArrival = JourneyTimeResolver.arrival(stop, null, 0)?.millis?.let { millis -> Instant.ofEpochMilli(millis).toString() } ?: ""
+                editArrival = if (hadManualEdit) it.editArrival else newArrival
             )
         }
+        editInitialArrival = newArrival
     }
 
     fun updateEditVisibility(visibility: Int) {
@@ -347,6 +329,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     fun saveStatusEdit() {
         val statusId = currentStatusId ?: return
         val state = _uiState.value
+        if (!state.isOwnStatus || !state.isEditing || state.isUpdating || state.isDeleting) return
         val destination = state.editDestinationStop
         val originalDestination = state.status?.checkin?.destination
         val destinationChanged = destination != originalDestination &&
@@ -358,20 +341,18 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             return
         }
 
-        viewModelScope.launch {
-            _uiState.update { it.copy(isUpdating = true) }
-            
-            val request = de.traewelling.app.data.model.UpdateStatusRequest(
-                body = state.editBody,
-                visibility = state.editVisibility,
-                destination = if (destinationChanged) destination?.stationId else null,
-                destinationArrivalPlanned = if (destinationChanged) destination?.arrivalPlanned else null,
-                departure = state.editDeparture,
-                arrival = state.editArrival
-            )
+        val view = viewGeneration
+        ++loadGeneration
+        loadJob?.cancel()
+        autoRefreshJob?.cancel()
+        _uiState.update { it.copy(isUpdating = true, isLoading = false, error = null) }
+        mutationJob = viewModelScope.launch {
+            val request = buildStatusEditRequest(state, editInitialDeparture, editInitialArrival)
             
             repo.updateStatus(statusId, request)
                 .onSuccess { updatedStatus ->
+                    coroutineContext.ensureActive()
+                    if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
                     _uiState.update { 
                         val stops = compatibleExistingStopovers(updatedStatus, it)
                         it.copy(
@@ -388,26 +369,36 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                     refresh()
                 }
                 .onFailure { e ->
+                    if (e is CancellationException) throw e
+                    if (view != viewGeneration || currentStatusId != statusId) return@onFailure
                     _uiState.update { 
                         it.copy(isUpdating = false, error = "Änderung fehlgeschlagen: ${e.message}") 
                     }
+                    startAutoRefresh(statusId)
                 }
         }
     }
 
     private fun checkIfOwnStatus(status: Status) {
+        val view = viewGeneration
         viewModelScope.launch {
             repo.getCurrentUser().onSuccess { currentUser ->
+                coroutineContext.ensureActive()
                 _uiState.update {
-                    if (currentStatusId == status.id && it.status?.id == status.id) {
-                        it.copy(isOwnStatus = status.user?.id == currentUser.id)
+                    if (view == viewGeneration && currentStatusId == status.id && it.status?.id == status.id) {
+                        it.copy(isOwnStatus = status.user?.id != null && status.user.id == currentUser.id)
                     } else it
                 }
             }
         }
     }
 
-    fun reset() {
+    fun reset(statusId: Int? = null) {
+        if (statusId != null && currentStatusId != statusId) return
+        ++viewGeneration
+        ++loadGeneration
+        loadJob?.cancel()
+        mutationJob?.cancel()
         autoRefreshJob?.cancel()
         cancelSevEnrichment()
         currentStatusId = null

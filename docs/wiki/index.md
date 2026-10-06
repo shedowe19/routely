@@ -4,6 +4,8 @@ Dieses Wiki ist das Langzeitgedächtnis des Projekts. Es erklärt Architektur, M
 
 Code ist die Quelle der Wahrheit. Das Wiki erklärt die Quelle der Wahrheit.
 
+Der Main-Audit vom 06.10.2026 ergänzt die bestehenden Verträge für [Sitzungen](./module/auth.md), [Feedcache](./module/feed.md), [GPS-Besuchsidentität](./module/gps-zeiten.md), [SEV-Zuordnung](./module/sev-haltestellen.md) und [Android-Lebenszyklus](./module/trip-tracking.md). Prüfziele und tatsächlich ausgeführte CI-Läufe bleiben unter [Tests](./entwicklung/tests.md) getrennt; offene Geräteprüfungen stehen unter [Offene Fragen](./offene-fragen.md).
+
 ## Projekt
 
 - [Übersicht](./projekt/ueberblick.md)

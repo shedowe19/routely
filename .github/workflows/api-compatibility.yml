@@ -40,8 +40,8 @@ jobs:
       - name: Make Gradle wrapper executable
         run: chmod +x gradlew
 
-      - name: Run unit tests and build debug and release APKs
-        run: ./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace
+      - name: Run unit tests, full debug lint and build debug and release APKs
+        run: ./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace
 
       - name: Upload debug APK for device testing
         uses: actions/upload-artifact@v4
@@ -57,7 +57,7 @@ jobs:
           path: app/build/outputs/apk/release/app-release-unsigned.apk
           if-no-files-found: error
 
-      - name: Upload release lint reports
+      - name: Upload debug and release lint reports
         if: always()
         uses: actions/upload-artifact@v4
         with:

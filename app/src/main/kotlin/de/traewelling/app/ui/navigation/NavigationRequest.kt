@@ -4,5 +4,6 @@ package de.traewelling.app.ui.navigation
 data class NavigationRequest(
     val token: Long,
     val statusId: Int? = null,
-    val showCheckIn: Boolean = false
+    val showCheckIn: Boolean = false,
+    val authSessionRevision: String? = null
 )

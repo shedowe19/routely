@@ -37,6 +37,8 @@ Antworten müssen HTTPS, einem der beiden bahnhof.de-Hosts und dem HTML-Inhaltst
 
 `SevJourneyEnricher` begrenzt die Stationsmenge auf 64 eindeutige Slugs und führt höchstens drei Stationsabrufe gleichzeitig aus. Eine gesamte Abrufrunde hat 45 Sekunden Zeit; bereits erfolgreiche Stationsergebnisse bleiben auch bei Ablauf erhalten. Ein Fehler dieser optionalen Quelle darf die API-Route nicht ersetzen oder den Standortservice blockieren.
 
+Vor einer Anfrage müssen Einstieg und Ziel jeweils genau einen konkreten Besuch in der vollständigen Fahrt treffen und in gültiger Reihenfolge liegen. Mehrdeutige wiederholte Halte, fehlende Grenzen oder ein Ziel vor dem Einstieg ergeben keine öffentlichen Stationsabrufe. Ein eindeutig anhand der Planzeit gebundener wiederholter Stationsbesuch bleibt zulässig. Die vollständige Haltfolge wird weiterhin nur als Richtungskontext verwendet; sie erweitert das Anfragefenster nicht.
+
 ### HTML- und GeoJSON-Auswertung
 
 `BahnhofSevParser` dekodiert JSON-Argumente der gestreamten Next.js-Datensätze. Webseiten-JavaScript wird nicht ausgeführt. Der Parser benötigt einen eindeutig passenden Stations-Slug und prüft die Bahnhofkoordinate als Quellenkontext. Er übernimmt ausschließlich Features mit `type = RAIL_REPLACEMENT_TRANSPORT` und `geometry.type = Point`. GeoJSON enthält **Längengrad, Breitengrad**; in `SevPoint` werden beide Werte benannt gespeichert.
@@ -49,7 +51,11 @@ Die Auflösung verwendet bevorzugt die Stopover-UUID, sonst Station-ID und gepla
 
 Eine Quelle darf höchstens 24 Stunden alt sein und nicht aus der Zukunft stammen. Datumsprüfungen verwenden `Europe/Berlin`: Sowohl das aktuelle Datum als auch das Datum der geplanten Haltankunft/-abfahrt müssen zu einer auswertbaren Maßnahme passen. Fehlen parsebare Haltzeiten, wird das aktuelle Datum verwendet. Hinweise auf temporäre Halte ohne auswertbaren Zeitraum, widersprüchliche Datumsgrenzen und mehrere unterschiedliche Maßnahmenzeiträume führen zum Rückfall.
 
+Ein gültiger breiter Zeitraum macht zusätzliche nicht unterstützte `ab`-/`bis`-Einschränkungen nicht gültig. Auch eine separate Notiz oder ein angehängter Zusatz nach einem erkannten Zeitraum verhindert dann die Koordinatenübernahme. Jahreszahlen müssen vollständig auswertbar sein; ein fünfstelliger Jahreswert darf nicht als gültiges vierstelliges Jahr abgeschnitten werden.
+
 Ein einzelner Punkt ohne Richtungsbezeichnung ist verwendbar, wenn die übrigen Prüfungen bestehen. Bei mehreren oder ausdrücklich richtungsabhängigen Punkten durchsucht der Resolver die folgenden nicht gestrichenen Halte der **vollständigen API-Fahrt**. Der erste belegte Richtungsort muss genau einen Kandidaten ergeben. Er verwendet weder die Gegenrichtung aus vorherigen Halten noch die Luftlinie als Richtungsbeweis. Unbekannte Richtungsformate bleiben mehrdeutig.
+
+Der erste bekannte Richtungsort bleibt auch bei abgelaufener Sonderfrist entscheidend. Der Resolver darf ihn nicht entfernen und stattdessen einen späteren Gegenrichtungsort derselben Fahrt auswählen. Nur ein eindeutig aktuell gültiger Punkt für denselben ersten Ort kann die Auswahl übernehmen. Ein konkurrierender Punkt mit fehlendem oder unbekanntem Label lässt die Richtung unbestätigt, statt als vermeintlich andere Richtung ignoriert zu werden.
 
 Die Quelle für Mülheim nennt temporäre Punkte bis 30.10.2026 und eine zusätzliche Oberhausen-Zuordnung nur bis 09.10.2026. Diese Sonderfrist gilt für den zusätzlichen Richtungsort, nicht für den Duisburg-Punkt insgesamt. Feature-Bearbeitungsdatum, Maßnahmenzeitraum und Richtungs-Sonderfrist bleiben getrennt. Wenn die API-Fahrt tatsächlich in Duisburg endet und keine spätere Richtung belegt, wird keiner der dortigen Richtungspunkte als sichere Ankunft erfunden.
 

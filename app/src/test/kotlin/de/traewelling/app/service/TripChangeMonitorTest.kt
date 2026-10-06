@@ -52,6 +52,16 @@ class TripChangeMonitorTest {
         assertEquals(listOf("exit"), result.map { it.stopKey })
     }
 
+    @Test fun cancellingNextStopStillExplainsTheNewNextServedStopsPlatformChange() {
+        val monitor = TripChangeMonitor()
+        monitor.observe(snapshot(listOf(stop(), stop("following"), stop("exit", destination = true)), 1))
+        val changed = listOf(stop(cancelled = true), stop("following", platform = "4"), stop("exit", destination = true))
+        val result = monitor.observe(snapshot(changed, 2))
+        assertEquals(listOf(TripChangeKind.CANCELLED, TripChangeKind.PLATFORM), result.map { it.kind })
+        assertEquals(listOf("next", "following"), result.map { it.stopKey })
+        assertTrue(monitor.observe(snapshot(changed, 3, nextIndex = 1)).isEmpty())
+    }
+
     @Test fun passedStopsNeverGenerateAnAlert() {
         val monitor = TripChangeMonitor()
         monitor.observe(snapshot(listOf(stop("origin", origin = true), stop(), stop("exit", destination = true)), 1, 1))

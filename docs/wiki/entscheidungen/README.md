@@ -6,10 +6,14 @@
 
 ## Liste der Entscheidungen
 
-- Bisher keine formellen ADRs angelegt. Kleine Architektur-Entscheidungen sind in [Architektur Entscheidungen](../architektur/entscheidungen.md) dokumentiert.
+- [28.04.2026: App-Umbenennung zu Routely](./2026-04-28-app-rename-routely.md)
+- [29.04.2026: Dark Mode und Settings](./2026-04-29-dark-mode-und-settings.md)
+
+Weitere kleinere Architektur-Entscheidungen sind in [Architektur Entscheidungen](../architektur/entscheidungen.md) dokumentiert.
 
 ## Verwandte Seiten
 
 - [Architektur Entscheidungen](../architektur/entscheidungen.md)
 - [ADR Template](./adr-template.md)
 - [App-Umbenennung zu "Routely"](./2026-04-28-app-rename-routely.md)
+- [Dark Mode und Settings](./2026-04-29-dark-mode-und-settings.md)

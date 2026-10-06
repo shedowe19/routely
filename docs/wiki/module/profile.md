@@ -15,6 +15,8 @@ Der Profile-Tab zeigt nach dem Login die eigenen Nutzerdaten, Statistiken (Fahrt
 
 ## Verhalten
 
+Profil-Refresh ersetzt den bisherigen Ladeauftrag und erhöht eine Generation. Späte Profil-, Statistik- oder Historienantworten dürfen nur in die weiterhin aktuelle Ladung übernommen werden. Ein Fehler beim eigenen Profil beendet den Durchlauf mit Hinweis; fehlgeschlagene Statistik-/Historienteile erhalten vorhandene passende Daten und zeigen den Teilfehler, statt ihn zu verschweigen. Fahrten werden nach Status-ID dedupliziert. Konto-/Sitzungswechsel löscht das gesamte Feature-ViewModel über den [Auth-Store](./auth.md).
+
 ### Lade-Prozess
 
 1. `loadProfile()` lädt den User und anschließend die Statistiken sequenziell über `repo.getCurrentUser()` und `repo.getStatistics()`.
@@ -36,7 +38,7 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 - Profilkopf als große Gradient-Hero-Card mit Avatar, Benutzername, Bio und Statistik-Chips
 - Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
 - Lade- und Fehlerzustände via `StateMessage`
-- Letzte Fahrten werden über `StatusCard` dargestellt. Der Herz-Handler ist hier leer (`onLike = {}`); Tippen führt keinen Like-Aufruf aus.
+- Letzte Fahrten werden über `StatusCard` dargestellt. Das Profil übergibt `onLike = null`; die Herz-Aktion ist dadurch ausdrücklich deaktiviert. Like/Unlike ist derzeit im Feed verfügbar.
 
 ## UI-Zustand (ProfileUiState)
 
@@ -57,7 +59,7 @@ TTS-Zustand liegt im `SettingsViewModel`, nicht im `ProfileUiState`.
 
 ## Offene Fragen
 
-- TODO: Sichtbaren Herz-Button der Fahrtkarten mit Like/Unlike verbinden oder die Aktion in dieser Ansicht deaktivieren.
+- Fehler beim Aktualisieren bleiben auch mit vorhandenen Profilinhalten sichtbar. Die deaktivierte Herz-Aktion ist eine bewusst angezeigte Funktionsgrenze, kein leerer Klickhandler.
 
 ## Verwandte Seiten
 

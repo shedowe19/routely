@@ -7,11 +7,12 @@ Beschreibung der lokalen Entity Schemas.
 ## StatusEntity
 
 ```kotlin
-@Entity(tableName = "feed_statuses")
+@Entity(tableName = "feed_statuses", primaryKeys = ["id", "type"])
 data class StatusEntity(
-    @PrimaryKey val id: Int,
+    val id: Int,
     val statusJson: String,
-    val type: String // "dashboard" or "global"
+    val type: String, // Feedart + Digest der Server-/Tokenzuordnung
+    val position: Int = 0 // ursprüngliche Reihenfolge der API-Seite
 )
 ```
 
@@ -19,9 +20,14 @@ data class StatusEntity(
 
 | Spalte       | Typ      | Beschreibung                           |
 | ------------ | -------- | -------------------------------------- |
-| `id`         | Int (PK) | Status-ID von der API                  |
+| `id`         | Int (Teil des PK) | Status-ID von der API                  |
 | `statusJson` | String   | Serialisiertes Status-Objekt (Gson)    |
-| `type`       | String   | "dashboard" oder "global" für Feed-Typ |
+| `type`       | String (Teil des PK) | `dashboard:<digest>` oder `global:<digest>`; Digest aus Server und Token |
+| `position` | Int | Index innerhalb der erfolgreich gespeicherten ersten API-Seite |
+
+Der SHA-256-Digest partitioniert den Cache, ohne den Bearer-Token als Cachekey zu speichern. Er ist keine Verschlüsselung der enthaltenen Statusdaten. Alte unpartitionierte Typen `dashboard`/`global` werden nicht als kontobezogener Rückfall gelesen. Die Schemaänderung verwendet Datenbankversion 2 mit destruktivem Neuaufbau des Feedcaches; der Version-1-Fahrtcache in DataStore bleibt davon getrennt.
+
+`StatusDao` liest nach `position ASC, id DESC`; das Repository speichert die ursprüngliche API-Reihenfolge mit `mapIndexed`. Das Dashboard sortiert nach Abfahrt, nicht nach Status-ID oder Erstellungsfolge. Offline wird deshalb die gespeicherte Reihenfolge erhalten.
 
 ## Aktiver Fahrtcache in DataStore
 

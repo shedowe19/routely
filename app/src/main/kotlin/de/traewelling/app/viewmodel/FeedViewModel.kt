@@ -6,6 +6,9 @@ import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -28,21 +31,28 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _uiState = MutableStateFlow(FeedUiState())
     val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
+    private var loadJob: Job? = null
+    private var generation = 0L
+    private val pendingLikes = mutableSetOf<Int>()
 
     fun loadFeed(refresh: Boolean = false) {
+        if (!refresh && (_uiState.value.isLoading || _uiState.value.isRefreshing)) return
+        if (refresh && _uiState.value.isRefreshing) return
         val feedType = _uiState.value.feedType
         val page = if (refresh) 1 else _uiState.value.currentPage
+        val request = ++generation
+        loadJob?.cancel()
+        _uiState.update {
+            it.copy(isLoading = !refresh, isRefreshing = refresh, error = null)
+        }
 
-        viewModelScope.launch {
-            _uiState.update {
-                if (refresh) it.copy(isRefreshing = true, error = null)
-                else         it.copy(isLoading = true, error = null)
-            }
-
+        loadJob = viewModelScope.launch {
             val result = when (feedType) {
                 FeedType.DASHBOARD -> repo.getDashboard(page)
                 FeedType.GLOBAL    -> repo.getGlobalFeed(page)
             }
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
 
             result.onSuccess { response ->
                 val fetched = response.data ?: emptyList()
@@ -51,17 +61,15 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
                 } else {
                     _uiState.value.statuses + fetched
                 }
-                // Dashboard API uses cursor pagination — no last_page field!
-                // Use links.next to determine if more pages exist.
                 val hasMore = response.links?.next != null
                 val meta    = response.meta
                 _uiState.update {
                     it.copy(
                         isLoading    = false,
                         isRefreshing = false,
-                        statuses     = newStatuses,
+                        statuses     = newStatuses.distinctBy { status -> status.id },
                         hasMore      = hasMore,
-                        currentPage  = (meta?.currentPage ?: 1) + 1,
+                        currentPage  = (meta?.currentPage ?: page) + 1,
                         error        = null
                     )
                 }
@@ -76,33 +84,42 @@ class FeedViewModel(application: Application) : AndroidViewModel(application) {
     fun refresh() = loadFeed(refresh = true)
 
     fun loadMore() {
-        if (!_uiState.value.isLoading && _uiState.value.hasMore) {
+        if (!_uiState.value.isLoading && !_uiState.value.isRefreshing && _uiState.value.hasMore) {
             loadFeed(refresh = false)
         }
     }
 
     fun switchFeedType(type: FeedType) {
         if (type == _uiState.value.feedType) return
-        _uiState.update { it.copy(feedType = type, statuses = emptyList(), currentPage = 1) }
+        ++generation
+        loadJob?.cancel()
+        _uiState.value = FeedUiState(feedType = type)
         loadFeed(refresh = true)
     }
 
     fun likeStatus(statusId: Int) {
+        val currentStatus = _uiState.value.statuses.find { it.id == statusId } ?: return
+        if (currentStatus.isLikable == false || !pendingLikes.add(statusId)) return
         viewModelScope.launch {
-            val currentStatus = _uiState.value.statuses.find { it.id == statusId } ?: return@launch
             val isLiked = currentStatus.liked == true
             val likes   = currentStatus.likes ?: 0
+            val optimisticLikes = if (isLiked) (likes - 1).coerceAtLeast(0) else likes + 1
             // Optimistic update
             updateStatusInList(statusId) {
-                it.copy(liked = !isLiked, likes = if (isLiked) likes - 1 else likes + 1)
+                it.copy(liked = !isLiked, likes = optimisticLikes)
             }
-            val result = if (!isLiked) repo.likeStatus(statusId)
-                         else          repo.unlikeStatus(statusId)
-            result.onFailure {
-                // Revert on failure
-                updateStatusInList(statusId) {
-                    it.copy(liked = isLiked, likes = likes)
+            try {
+                val result = if (!isLiked) repo.likeStatus(statusId) else repo.unlikeStatus(statusId)
+                coroutineContext.ensureActive()
+                result.onFailure {
+                    updateStatusInList(statusId) { status ->
+                        // A refreshed server snapshot may already have replaced this optimistic value.
+                        if (status.liked == !isLiked && status.likes == optimisticLikes)
+                            status.copy(liked = isLiked, likes = likes) else status
+                    }
                 }
+            } finally {
+                pendingLikes.remove(statusId)
             }
         }
     }

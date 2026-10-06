@@ -47,9 +47,17 @@ fun MainNavigation(
     onNavigationRequestConsumed: (Long) -> Unit = {}
 ) {
     val navController = rememberNavController()
+    val authState by authViewModel.uiState.collectAsState()
+    val currentNavigation = navigationRequest?.takeIf {
+        it.authSessionRevision == null || it.authSessionRevision == authState.sessionRevision
+    }
 
     LaunchedEffect(navigationRequest?.token) {
-        val request = navigationRequest ?: return@LaunchedEffect
+        val request = currentNavigation
+        if (request == null) {
+            navigationRequest?.let { onNavigationRequestConsumed(it.token) }
+            return@LaunchedEffect
+        }
         val statusId = request.statusId
         if (statusId != null && statusId > 0) {
             navController.navigate("statusDetail/$statusId") { launchSingleTop = true }
@@ -74,7 +82,7 @@ fun MainNavigation(
             val pagerState = rememberPagerState(pageCount = { tabs.size })
             val coroutineScope = rememberCoroutineScope()
             LaunchedEffect(navigationRequest?.token) {
-                val request = navigationRequest
+                val request = currentNavigation
                 if (request?.showCheckIn == true) {
                     pagerState.scrollToPage(1)
                     onNavigationRequestConsumed(request.token)

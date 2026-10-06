@@ -21,6 +21,8 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 2. `loadMore()` lädt weitere Seiten (Pagination via `links.next`)
 3. `refresh()` lädt die erste Seite mit Pull-to-Refresh
 
+Refresh beendet den alten Ladeauftrag und erhöht die Generation; eine ältere Seite darf die neue Liste nicht überschreiben. Pagination wartet auf laufenden Refresh und dedupliziert nach Meldungs-ID. Einträge ohne brauchbare ID werden nicht als ausführbare Meldung übernommen. Sessionwechsel beendet das gesamte Feature-ViewModel über den [Auth-Store](./auth.md).
+
 ### Unread-Count Polling
 
 - Im `init` wird ein Coroutine gestartet, der alle 60 Sekunden `refreshUnreadCount()` aufruft
@@ -31,6 +33,8 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 - `markAsRead(notificationId)`: Optimistic Update + API-Aufruf
 - `markAllAsRead()`: Setzt alle auf gelesen
 - Tippen auf eine Meldung ruft nur für ungelesene Einträge `markAsRead()` auf. Es gibt dabei keine Zielnavigation zum Profil oder zur Fahrt.
+
+Unbekannte oder bereits gelesene IDs verringern den Badge nicht. Pro Meldung ist höchstens ein Leseauftrag offen; `markAllAsRead` und einzelne Leseaufträge überschneiden sich nicht. Neue Listenantworten erhalten noch offene optimistische Lesemarkierungen. Bei API-Fehler werden die weiterhin passende vorläufige Markierung und ihr eigener Zähleranteil zurückgenommen; konkurrierende Markierungen bleiben erhalten. Bei fehlgeschlagenem `markAllAsRead` wird der frühere Zähler ebenfalls wiederhergestellt, auch wenn die anschließende Zähleranfrage fehlschlägt. Eine Zählerrevision verwirft Pollantworten, die vor einer inzwischen gestarteten Leseaktion begonnen haben.
 
 ### Notification-Typen
 

@@ -8,6 +8,8 @@ import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlin.coroutines.coroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -29,21 +31,25 @@ class UserSearchViewModel(application: Application) : AndroidViewModel(applicati
     val uiState: StateFlow<UserSearchUiState> = _uiState.asStateFlow()
 
     private var searchJob: Job? = null
+    private var generation = 0L
 
     fun updateQuery(query: String) {
-        _uiState.update { it.copy(query = query, error = null) }
+        val request = ++generation
+        searchJob?.cancel()
+        _uiState.value = UserSearchUiState(query = query)
 
         if (query.isBlank()) {
             _uiState.update { it.copy(searchResults = emptyList(), isLoading = false) }
-            searchJob?.cancel()
             return
         }
 
-        searchJob?.cancel()
         searchJob = viewModelScope.launch {
             delay(350) // Debounce typing
             _uiState.update { it.copy(isLoading = true) }
-            repo.searchUsers(query)
+            val result = repo.searchUsers(query.trim())
+            coroutineContext.ensureActive()
+            if (request != generation) return@launch
+            result
                 .onSuccess { users ->
                     _uiState.update { it.copy(isLoading = false, searchResults = users) }
                 }

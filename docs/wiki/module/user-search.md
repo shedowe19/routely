@@ -21,6 +21,8 @@ Aufgerufen vom Feed-Screen über die Suchen-Schaltfläche. Navigiert nach Auswah
 2. Nach 350ms Debounce wird `repo.searchUsers(query)` aufgerufen
 3. Ergebnisse werden als LazyColumn mit kartenartigen UserListItems angezeigt
 
+Jede neue Eingabe beendet den bisherigen Suchauftrag, leert alte Treffer und erhöht die Suchgeneration. Selbst eine verspätete API-Antwort darf nur zur weiterhin aktuellen Eingabe veröffentlicht werden. Leere Eingabe startet keine Anfrage; Sitzungwechsel beendet das ViewModel über den [Auth-Store](./auth.md).
+
 ### UI-Darstellung
 
 - Suchzustände, leere Ergebnisse und Ladezustände werden via `StateMessage` angezeigt

@@ -11,7 +11,7 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 - `./gradlew compileDebugKotlin` - Kotlin-Code kompilieren ohne vollen Build
 - `./gradlew build` - Vollständiger Build
 - `./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace` - API-Regressionstests und Debug-APK gemeinsam prüfen
-- `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace` - Unit-Tests sowie Debug- und Release-Build einschließlich Release-Lint prüfen
+- `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace` - Unit-Tests, vollständiges Debug-Lint sowie Debug- und Release-Build einschließlich Release-Lint prüfen
 
 ## Build-Konfiguration
 
@@ -26,12 +26,13 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 
 ## GitHub Actions CI/CD (Deployment)
 
-Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pushes auf `main`, Pull Requests und manuell. Er führt Android-Unit-Tests, `assembleDebug` und `assembleRelease` mit JDK 17, Android-SDK 36 und Build Tools 35.0.0 aus. Damit wird auch Release-Lint geprüft. Er benötigt keine Signierungssecrets und erstellt kein GitHub Release. Debug-APK, unsignierte Release-APK und Prüfberichte werden als Workflow-Artefakte bereitgestellt; Namen und Prüfstand beschreibt [Tests](./tests.md).
+Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pushes auf `main`, Pull Requests und manuell. Er führt Android-Unit-Tests, vollständiges `lintDebug`, `assembleDebug` und `assembleRelease` mit JDK 17, Android-SDK 36 und Build Tools 35.0.0 aus. Damit werden vollständiges Debug-Lint und zusätzlich Release-Lint geprüft. Er benötigt keine Signierungssecrets und erstellt kein GitHub Release. Debug-APK, unsignierte Release-APK und Prüfberichte werden als Workflow-Artefakte bereitgestellt; Namen und Prüfstand beschreibt [Tests](./tests.md).
 
 Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.github/workflows/android.yml`).
 
 - **Trigger**: Manueller Start (`workflow_dispatch`), bei dem `version_name` (z.B. `1.0.0`) und `version_code` (z.B. `1`) angegeben werden.
-- **Build**: Es wird `./gradlew assembleRelease` ausgeführt.
+- **Eingabeprüfung**: `version_name` beginnt mit einem Buchstaben oder einer Ziffer, ist höchstens 64 Zeichen lang und enthält ausschließlich Buchstaben, Ziffern, Punkt, Unterstrich oder Bindestrich. `version_code` ist eine ganze Zahl von 1 bis 2.100.000.000 ohne führende Null. Ungültige Eingaben brechen vor dem Build ab.
+- **Build**: Unit-Tests laufen vor dem Release-Build: `./gradlew :app:testDebugUnitTest :app:assembleRelease` mit validierten gequoteten Versionsargumenten. Workflow-Eingaben werden über Jobvariablen übernommen, nicht direkt in Shellcode eingefügt.
 - **Signierung**: Die generierte APK wird mithilfe von `r0adkll/sign-android-release` unter Verwendung von GitHub Secrets (`SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, `KEY_PASSWORD`) signiert.
 - **APK-Dateiname**: Das signierte Release-Artefakt wird als `routely-v<version_name>.apk` veröffentlicht.
 - **Changelog**: Es wird automatisch ein Changelog aus der Git-Historie (Commits seit dem letzten Tag) generiert.

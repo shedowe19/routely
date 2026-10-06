@@ -5,7 +5,7 @@ import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
 
-@Database(entities = [StatusEntity::class], version = 1, exportSchema = false)
+@Database(entities = [StatusEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun statusDao(): StatusDao
 
@@ -15,13 +15,11 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
-                val instance = Room.databaseBuilder(
+                INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
                     "traewelling_database"
-                ).fallbackToDestructiveMigration().build()
-                INSTANCE = instance
-                instance
+                ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
             }
         }
     }

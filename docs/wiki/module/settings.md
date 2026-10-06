@@ -27,6 +27,8 @@ Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `P
 - Einstellungsbereiche werden als abgerundete Cards mit Icon, Beschreibung und dezentem Border angezeigt
 - TTS-Optionen bleiben als Dropdowns verfügbar, sobald Haltestellenansagen aktiviert sind
 
+TTS-Aktivierung, Engine, Sprache und Stimme werden als gemeinsame Konfiguration verarbeitet. Initialisierung und Enginewechsel tragen eine Generation; späte Callbacks einer verworfenen Engine dürfen keine neue Auswahl überschreiben. `null` bezeichnet die Android-Standardengine und ist ein gültiger Initialisierungszustand. Verfügbare Sprachen kommen aus `TextToSpeech.availableLanguages`, Stimmen aus der gewählten Engine; es wird nicht jede mögliche Java-Locale einzeln über Binder geprüft. Ausschalten und ViewModel-Ende geben die Testinstanz frei.
+
 ### Stationsansagen mit GPS
 
 Der Bereich `Stationsansagen mit GPS` bietet `GPS verwenden` und die Entfernung für die Ansage. Standard ist GPS mit automatischem Radius von 300–2.000 Metern; alternativ sind 300, 500, 1.000 oder 2.000 Meter fest wählbar. `SettingsViewModel` schreibt `gps_tracking_enabled` und `announcement_radius_meters` über DataStore.
@@ -68,7 +70,7 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 ## Offene Fragen
 
 - Fehlerbehandlung in PreferencesManager — offen — @dev
-- Integration von App-spezifischen Spracheinstellungen — offen — @dev
+- TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.
 - TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.
 
 ## Verwandte Seiten

@@ -8,8 +8,8 @@ Dokumentiert, wie die App getestet wird.
 
 - **Unit-Tests ausführen**: `./gradlew :app:testDebugUnitTest`.
 - **API-Regressionen und Debug-Build zusammen prüfen**: `./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`.
-- **Vollständiger CI-Prüfumfang einschließlich Release**: `./gradlew :app:testDebugUnitTest :app:assembleDebug :app:assembleRelease --stacktrace`.
-- **Coroutines testen**: Nutzung von `TestScope` und `runTest` in Unit-Tests für ViewModels oder asynchrone Repositories.
+- **Vollständiger CI-Prüfumfang einschließlich Debug-Lint und Release**: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace`.
+- **Coroutines testen**: Die aktuellen Auth-/Repository-Regressionen verwenden `runBlocking` und kontrollierte Fakes beziehungsweise `CompletableDeferred`. `kotlinx-coroutines-test`, `TestScope` und `runTest` sind noch nicht eingerichtet; es gibt damit keinen virtuellen ViewModel-Zeitplan-Test.
 - Der Unit-Test `TraewellingApiServiceTest` prüft den Retrofit-Vertrag für den Abfahrts-Endpunkt, damit die Route nicht versehentlich wieder unter `/api/v1/trains/station/...` geführt wird.
 - `ApiCompatibilityTest` lädt Fixtures aus `app/src/test/resources/traewelling/`. Die Antworten lassen auslaufende Kompatibilitätsfelder bewusst weg und unterscheiden Stopover-ID und Station-ID.
 - Die Modelltests prüfen verschachtelte Stationen, optionale Kennungen, IBNR/RIL100, numerische und UUID-Operator-IDs, echte und geplante Zeiten, berechnete Abfahrtsverspätungen, Stopover-Erkennung bei wiederholten Stationsbesuchen, Deduplizierung einschließlich verschiedener Stopover-UUIDs und die neuen Check-in-Erfolgs- und Konfliktantworten.
@@ -28,14 +28,14 @@ Dokumentiert, wie die App getestet wird.
 
 ## Automatisierte Prüfung
 
-`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 36 und Build Tools 35.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt.
+`.github/workflows/api-compatibility.yml` führt bei Pushes auf `main`, Pull Requests und manuellem Start Unit-Tests, vollständiges `lintDebug` sowie Debug- und Release-Build aus. Der Workflow richtet JDK 17, Android-SDK 36 und Build Tools 35.0.0 ein. `assembleRelease` prüft zusätzlich die Release-Lint-Anforderungen, die ein reiner Debug-Build nicht abdeckt. Der manuelle signierte Release-Workflow führt ebenfalls Unit-Tests vor dem Release-Build und der Signierung aus.
 
 | Artefakt | Inhalt |
 | --- | --- |
 | `api-compatibility-test-results` | JUnit-Ergebnisse und HTML-Testberichte |
 | `routely-debug-apk` | Debug-APK für Geräteprüfungen nach erfolgreichem Build |
 | `routely-release-unsigned-apk` | Unsignierte Release-APK nach erfolgreichem Build |
-| `release-lint-results` | Vorhandene Release-Lint-Berichte, auch bei fehlgeschlagenem Build |
+| `release-lint-results` | Vorhandene Debug- und Release-Lint-Berichte, auch bei fehlgeschlagenem Build; Artefaktname unverändert |
 
 Die Ursache und der explizite Fragment-Versionsfix für den fehlgeschlagenen `1.7.0`-Release-Build stehen unter [Build](./build.md). Bisherige Debug-Nachweise enthalten keinen Release-Lint-Nachweis für diesen Fix; aktuelle Ergebnisse des erweiterten Prüfumfangs stehen unter [API Compatibility](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml). Signierung und Veröffentlichung erfolgen weiterhin ausschließlich im manuellen Workflow `android.yml`.
 
@@ -183,6 +183,22 @@ Der korrigierte Main-Code `d2d376afdf08b6468621382fe9c3601256df8d1c` bestand am 
 
 TODO: Auf dem Gerät Essen Hbf → Bismarckplatz → Savignystraße ohne GPS im Tunnel und mit Signalrückkehr am späteren Halt prüfen. Fix-/Audioverlauf, drei unabhängige Kandidatenfixes, Cursor/Timeline, neutrale Diagnose, erneute Zeiten und verspätete TTS-Initialisierung gemeinsam erfassen. Zusätzlich Mehrdeutigkeit, wiederholte Stationen, stationäres Wiederfinden, erneuter Ausfall, Cache-Neustart und Rückkehr erst am Ziel prüfen. Keine reale GPS-/Audiozustellung oder genaue Tram-ETA ist durch diese synthetischen Tests nachgewiesen.
 
+## Vollständiger Main-Audit vom 06.10.2026
+
+Die Quellprüfung verwendet den Main-Ausgangsstand `b2bd7b75d01ca05377433455563f176c34956c1c` und umfasst API-/Auth-/Cache-Verträge, Feature-Verbraucher, GPS-Zeit- und Besuchslogik, SEV-/Straßenquellen, Android-Begleitung und Workflows. Die zusätzlichen Regressionen prüfen folgende bestätigte Fehler:
+
+- `AuthRepositoryTest`, `ApiServerUrlTest`, `AuthSessionTest` und `SessionViewModelStoreTest`: Persistenz erst nach gültiger vollständiger Profilantwort, HTTPS-URL-Prüfung, temporäre Startupfehler, 401/403 nur für dieselbe Sitzung, lokale Abmeldung vor Netzwerk, Abmelde-Speicherfehler, späte OAuth-/Refreshantworten, Abbruch und getrennte Generationen auch bei gleichen Zugangsdaten. Atomare Reducer verhindern zusätzlich alte Check-in-/Fahrtcache-Schreiboperationen nach Kontowechsel; der Feature-Store wird bei Rotation erhalten und bei Sessionwechsel geleert.
+- `SessionStartRequestsTest`: Ein neuer ungültiger Start verdrängt keinen passenden wartenden Start; ein neuerer validierter Start sperrt ältere Initialisierungen. Gelöschte Aufträge halten keinen Service am Leben, und eine falsche Fahrt-ID begründet keinen passenden Start. Die reine Queueprüfung führt den Android-Foreground-Lebenszyklus nicht selbst aus.
+- `TraewellingRepositoryTest`: getrennte Server-/Konten-/Feedpartitionen, gleichzeitige Status-ID in verschiedenen Feeds, atomarer Ersatz einer leeren ersten Seite, erhaltene ursprüngliche API-Reihenfolge, kein Cache-Rückfall bei Auth-/Formatfehlern oder Abbruch, Sitzungswechsel während Netzwerk- und DAO-Verarbeitung sowie ein HTTP-Fehler des Ungelesenzählers statt eines erfundenen erfolgreichen Nullwerts. Der fake DAO prüft den Repositoryvertrag, keine tatsächlich ausgeführte Room-Migration.
+- `GpsJourneyTimeEstimatorTest` und `JourneyTimeResolverTest`: Wird bei einem Besuch ohne UUID einer der beiden Planmarker entfernt oder ein zuvor fehlender ergänzt, darf ein noch frischer früherer GPS-Datensatz die neue API-Basis nicht überlagern. Ein gültiger Ein-Marker-Besuch bleibt verwendbar. Qualitätsgrenzen, Gültigkeit und mehrdeutige Zuordnung werden nicht gelockert.
+- `SevStopResolverTest` und `SevJourneyEnricherTest`: zusätzliche nicht auswertbare Datumsgrenzen trotz breitem gültigem Intervall, vollständig ungültige Jahreswerte, abgelaufener erster Richtungsort vor späterer Gegenrichtung, eindeutiger gültiger Punkt für denselben ersten Ort, konkurrierende unbekannte Labels und ein begrenztes Anfragefenster nur bei eindeutigen geordneten Check-in-Grenzen. Streichungen, wiederholte zeitlich eindeutige Besuche und die 64-Slug-Grenze bleiben berücksichtigt.
+- `RideRecognitionEngineTest`, `TrackingLocationObservationTest`, `TripProgressModelTest` und `TripChangeMonitorTest`: plausible Gesamtgeschwindigkeit verdeckt keinen fast sofortigen GPS-Sprung; verspätete genaue Fixes überschreiben keinen neueren ungenauen Zustand; zukünftige Zeitstempel blockieren keinen folgenden gültigen Fix. Gemeldete ungültige Geschwindigkeit bleibt von tatsächlich fehlender Angabe unterscheidbar. Ursprung verwendet Abfahrtsgleis, spätere Besuche Ankunftsgleis, SEV weiterhin kein Bahngleis; ein gleichzeitig gestrichener nächster Halt verhindert den Gleishinweis zum nun nächsten bedienten Halt nicht.
+- `CheckInSelectionTest`, `NotificationReadStateTest` und `StatusEditRequestTest` prüfen wiederholte Einstiege anhand der gewählten Abfahrtszeit, gültige Ziele ausschließlich nach dem Einstieg, unbekannte beziehungsweise schon gelesene Meldungs-IDs, Rollback eigener Zähleranteile und unveränderte Status-PUT-Bearbeitungswerte. Reine Textänderungen dürfen keine manuellen Providerzeit-Overrides erzeugen; geänderte Einzelzeiten frieren das andere Ereignis nicht ein. Bei Zielwechsel wird ein unveränderter alter manueller Ankunfts-Override ausdrücklich geleert, eigene Zeitänderung bleibt erhalten. Asynchrone ViewModel-/TTS-Generationen, sichtbare Teilfehler, abgebrochene Standortabfragen und deaktivierte nicht angebundene Aktionen sind zusätzliche Quell-/Buildprüfungen; die Helfertests ersetzen keinen vollständigen Compose-/Netzwerkablauf auf dem Gerät.
+
+Der Prüfworkflow fordert zusätzlich vollständiges `lintDebug` an. Der manuelle signierte Release-Workflow validiert Versionswerte und führt Unit-Tests vor Build und Signierung aus. Ein Main-Commit mit grünem Prüfworkflow ist kein Nachweis eines ausgeführten signierten Releases. Auch Widget-Receiverfreigabe und der synchrone `onTimeout`-Lebenszyklus werden durch die Kotlin-Helfertests nicht als Android-Ablauf ausgeführt. Historische grüne Läufe oben gelten ausschließlich für ihre genannten Commits; Testmethoden im Quellcode sind allein kein neuer Erfolgsnachweis.
+
+TODO: Auf dem Gerät verzögerte Antworten mit Logout/Kontowechsel, Rotation, schnelle Auswahl-/Suchwechsel, gleichzeitig laufenden Refresh und Pagination, wiederholtes Tippen auf Like/Lesemarkierung/Bestätigung sowie den Upgrade-Neuaufbau des Feedcaches prüfen. Für Android 15+ den `dataSync`-Timeout auf einem Testgerät ausdrücklich per Kompatibilitätsgrenze aktivieren, Cleanup ohne verspätete Neuveröffentlichung und sichtbaren Wiederanlauf aus erhaltenem Fahrtcache prüfen. Target 34 aktiviert das reguläre Sechs-Stunden-Budget noch nicht. Außerdem Widget-Systemupdates mit `exported=false`, tatsächliche Eingangs-Geschwindigkeitswerte und Erkennungssprünge prüfen; kein realer Nutzer-Fix-/Audioverlauf wurde dadurch reproduziert.
+
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
 Zusätzlich wurden 16 lesende Anfragen gegen `https://traewelling.de` durchgeführt. Alle lieferten HTTP 200; die geprüften Antwortstrukturen entsprachen dem erwarteten Vertrag. Die folgenden Pfade haben jeweils das Präfix `/api/v1/`:
@@ -205,6 +221,7 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.
+- TODO: Für gezielte ViewModel-Tests bei Bedarf `kotlinx-coroutines-test` und kontrollierte Test-Dispatcher ergänzen; die vorhandenen `runBlocking`-Helfertests ersetzen diese Prüfung nicht.
 
 ## Verwandte Seiten
 

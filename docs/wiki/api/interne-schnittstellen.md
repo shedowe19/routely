@@ -31,6 +31,8 @@ class TraewellingRepository(context: Context, prefs: PreferencesManager)
 
 Bei einem Check-in-Konflikt (HTTP 409) wertet das Repository `data.conflicts` als Liste vollständiger `Status`-Objekte aus. Fehlermeldungen hängen nicht von den veralteten Feldern `message.status_id` und `message.lineName` ab. Der Serverfehler wird nicht mehr als unverarbeitetes JSON in die Check-in-Oberfläche übernommen.
 
+`apiResult` reicht `CancellationException` unverändert weiter; ein abgebrochener Auftrag wird weder als gewöhnlicher API-Fehler noch als Offline-Erfolg verarbeitet. Feed-Abrufe verwenden einen atomaren `AuthSession`-Snapshot und prüfen ihn vor Cache-/Antwortübernahme erneut. Der [Feed-Cache](../module/feed.md) ist nach Server, Zugangsdaten und Feedart getrennt.
+
 Stations- und Zeitdaten werden über die Helfer des Datenmodells gelesen: `stationId`, `stationName`, `stationIdentifier(type)`, `effectiveArrival`, `effectiveDeparture` und `matchesStopover(other)`. Damit verwenden UI, ViewModels und Tracking denselben API-Vertrag.
 
 ### AuthRepository
@@ -43,10 +45,14 @@ class AuthRepository(prefs: PreferencesManager)
 
 **Methoden:**
 
+- `loginWithToken(serverUrl, token)` - HTTPS-Server und Token prüfen, danach vollständige Session atomar speichern
+- `validateCurrentSession()` - gespeicherte Session prüfen; nur 401/403 löschen genau diese noch aktuelle Session
 - `exchangeCodeForToken(...)` - OAuth Token Exchange
 - `refreshAccessToken()` - Token erneuern
 - `fetchAndSaveCurrentUser()` - User laden
 - `logout()` - Abmelden
+
+OAuth-Methoden sind vorhandene Helfer, kein angebundener Login-/Auto-Refresh. Vergleichende Session-Schreiboperationen in `AuthSessionStore` verhindern, dass verspätete Antworten eine neuere Anmeldung überschreiben oder löschen. Logout entfernt die lokale Sitzung vor dem optionalen Netzwerkaufruf.
 
 ## Retrofit Services
 
@@ -63,7 +69,7 @@ OAuth-Token-Austausch (Authorization Code + PKCE, Refresh Token).
 ### AppDatabase
 
 ```kotlin
-@Database(entities = [StatusEntity::class], version = 1)
+@Database(entities = [StatusEntity::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase()
 ```
 
@@ -75,8 +81,11 @@ interface StatusDao {
     suspend fun getStatuses(type: String): List<StatusEntity>
     suspend fun insertStatuses(statuses: List<StatusEntity>)
     suspend fun clearStatuses(type: String)
+    suspend fun replaceStatuses(type: String, statuses: List<StatusEntity>)
 }
 ```
+
+`replaceStatuses` ersetzt eine Feedpartition innerhalb einer Room-Transaktion; der zusammengesetzte Primärschlüssel ist unter [Schemas](../daten/schemas.md) dokumentiert.
 
 ## PreferencesManager (DataStore)
 
