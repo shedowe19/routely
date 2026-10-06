@@ -103,6 +103,8 @@ Ein Nutzerbericht meldet ausbleibende Ansagen bei ausgeschaltetem Display. Der B
 
 `TrackingWakeLockLeaseTest` ergänzt acht reine Kotlin-Fälle mit einem künstlichen Plattformhandle: keine Haltung im Leerlauf, immer begrenzter Erwerb, keine verspätete Erneuerung nach Stopp, Generationswechsel, Wiedererwerb nach Plattformablauf, Retry nach fehlgeschlagenem Erwerb, kein Erneuern nach fehlgeschlagener Freigabe und neuer Start nach Abschluss. Der Quellstand enthält damit 283 Unit-Testmethoden in 13 Klassen. Diese Anzahl ist kein neuer erfolgreicher CI-Lauf. Die Tests prüfen den Lease-Zustand und die an den Adapter übergebenen Timeouts, keinen echten Android-WakeLock, Doze-Modus oder Service-Lebenszyklus.
 
+Der Main-Stand `58dcaea7b700dfb4c0ce6b65fb77b884a80729d4` bestand am 06.10.2026 alle 283 Unit-Tests ohne Fehler, Fehlschläge oder übersprungene Tests. Die heruntergeladenen JUnit-Berichte bestätigen die acht neuen Lease-Fälle in insgesamt 13 Testklassen. Derselbe Lauf baute Debug- und unsignierte Release-APK und bestand `lintVitalRelease`. Nachweis: [GitHub-Actions-Lauf 37434663721](https://github.com/shedowe19/routely/actions/runs/37434663721). Die Android-Ausnahme, echte CPU-Haltung und hörbare Display-aus-Zustellung werden dadurch nicht auf einem Gerät nachgewiesen.
+
 | Gerätefall | Zu prüfendes Ergebnis |
 | --- | --- |
 | Samsung S26 Ultra mit einer eingecheckten S28-Fahrt, Display mindestens 30 Minuten aus | Die laufende Fahrtbenachrichtigung bleibt vorhanden. Frische Standortupdates, Haltwechsel und hörbare Stationsansagen werden protokolliert; Einschalten darf nicht erst einen Stau alter Ansagen auslösen. |
