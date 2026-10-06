@@ -29,6 +29,8 @@ Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `P
 
 TTS-Aktivierung, Engine, Sprache und Stimme werden als gemeinsame Konfiguration verarbeitet. Initialisierung und Enginewechsel tragen eine Generation; späte Callbacks einer verworfenen Engine dürfen keine neue Auswahl überschreiben. `null` bezeichnet die Android-Standardengine und ist ein gültiger Initialisierungszustand. Verfügbare Sprachen kommen aus `TextToSpeech.availableLanguages`, Stimmen aus der gewählten Engine; es wird nicht jede mögliche Java-Locale einzeln über Binder geprüft. Ausschalten und ViewModel-Ende geben die Testinstanz frei.
 
+Das Manifest deklariert `android.intent.action.TTS_SERVICE` unter `<queries>`, damit installierte Sprachengines bei eingeschränkter Paketsichtbarkeit auffindbar bleiben. Dies ist keine zusätzliche Berechtigung. Der [Android-Vertrag zur Paketsichtbarkeit](https://developer.android.com/training/package-visibility/use-cases) beschreibt diese TTS-Service-Abfrage.
+
 ### Stationsansagen mit GPS
 
 Der Bereich `Stationsansagen mit GPS` bietet `GPS verwenden` und die Entfernung für die Ansage. Standard ist GPS mit automatischem Radius von 300–2.000 Metern; alternativ sind 300, 500, 1.000 oder 2.000 Meter fest wählbar. `SettingsViewModel` schreibt `gps_tracking_enabled` und `announcement_radius_meters` über DataStore.
@@ -58,7 +60,7 @@ Systemgrundlagen: [Android Doze und App Standby](https://developer.android.com/t
 
 Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../konfiguration/preferences-manager.md).
 
-`Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Auf älteren Geräten wird die allgemeine App-Benachrichtigungseinstellung geöffnet; ohne passende System-Activity fällt der Aufruf auf die App-Detailseite zurück. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
+`Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Der Start wird direkt versucht, damit eingeschränkte Paketsichtbarkeit nicht fälschlich auf eine fehlende Activity schließen lässt. Bei `ActivityNotFoundException` folgt zunächst die allgemeine App-Benachrichtigungseinstellung und danach die App-Detailseite. Auf älteren Geräten beginnt diese Rückfallfolge bei der allgemeinen Benachrichtigungseinstellung. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
 
 ## Abhängigkeiten
 

@@ -1,6 +1,7 @@
 package de.traewelling.app
 
 import android.Manifest
+import android.content.ActivityNotFoundException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
@@ -258,11 +259,21 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openLiveUpdateSettings() {
-        val action = if (Build.VERSION.SDK_INT >= 36) Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS
-            else Settings.ACTION_APP_NOTIFICATION_SETTINGS
-        val settingsIntent = Intent(action).putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-        if (settingsIntent.resolveActivity(packageManager) != null) startActivity(settingsIntent)
-        else startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        if (Build.VERSION.SDK_INT >= 36) {
+            try {
+                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+                return
+            } catch (_: ActivityNotFoundException) {
+                // Some manufacturers omit the promoted-notification settings page.
+            }
+        }
+        try {
+            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+        } catch (_: ActivityNotFoundException) {
+            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+        }
     }
 
     private fun hasPreciseLocationPermission(): Boolean =
