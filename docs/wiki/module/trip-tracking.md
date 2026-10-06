@@ -12,6 +12,7 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/SpeechDeliveryQueue.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/TrackingWakeLockLease.kt`
 - `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
 - `app/src/main/AndroidManifest.xml`
@@ -22,6 +23,20 @@ Der Android-Foreground-Service verfolgt die eingecheckte Haltfolge mit GPS und m
 `CheckInViewModel` speichert nach einem erfolgreichen Check-in nur die aktive Status-ID. `MainActivity` beobachtet diese und die GPS-Einstellung im Zustand `RESUMED`; der Service wird aus der sichtbaren Activity gestartet. Präzise Standortfreigabe und aktivierte Ortungsdienste bestimmen, ob GPS aktiviert werden darf. Ohne diese Voraussetzungen startet der Fahrplanmodus. Automatische Standortanfragen werden je aktiver Fahrt begrenzt; der manuelle Einstellungsbutton kann bei dauerhafter Ablehnung die App-Berechtigungen öffnen.
 
 Das Manifest deklariert `location|dataSync` sowie `FOREGROUND_SERVICE_LOCATION`. Der Service aktiviert bei GPS den Typ `location`, sonst `dataSync`. Bei einem `START_STICKY`-Neustart ohne Start-Intent wird GPS nicht eigenständig wieder aktiviert: Standortzugriff bleibt aus, bis eine sichtbare Activity ihn erneut geprüft hat. Dies ist ein vorübergehender Ausfall, kein bewusst gewählter Zeitmodus; ein bereits per GPS etablierter Besuch bleibt geschützt. Ein korrekt gestarteter Location-Foreground-Service kann auch bei ausgeschaltetem Display Updates erhalten; die tatsächliche Zustellung bleibt geräteabhängig.
+
+## Display aus, CPU-WakeLock und Doze
+
+Der Foreground-Service allein hält die CPU nicht wach. Seit der Korrektur vom 06.10.2026 hält ausschließlich die bestätigte aktive Fahrt einen nicht referenzgezählten `PowerManager.PARTIAL_WAKE_LOCK` mit dem Tag `Routely:TripTracking`. Er wird nach erfolgreicher Foreground-Promotion und Abgleich der aktiven Status-ID angefordert, bereits vor einer möglichen Cache-Wiederherstellung. Das Display bleibt ausgeschaltet; es wird kein Screen-WakeLock verwendet.
+
+`TrackingWakeLockLease` bindet die Haltung an die aktuelle Service-Generation. Jeder `acquire` hat **120 Sekunden Timeout**, eine separate Coroutine erneuert sie nach **60 Sekunden**, solange dieselbe Generation mit aktiver Fahrt läuft und der Service nicht stoppt. Eine veraltete Fahrtgeneration darf nicht erneuern. Das Timeout ist der zusätzliche Rückhalt, falls die Erneuerung nicht mehr läuft; es ersetzt die ausdrückliche Freigabe nicht. Fehlgeschlagenes Anfordern darf die Tracking-App nicht abstürzen lassen und kann bei weiterhin aktiver Fahrt erneut versucht werden.
+
+Fahrtwechsel gibt die alte Haltung frei, bevor die neue Fahrt sie übernimmt. Manuelles Beenden, normaler Service-Abschluss, fehlgeschlagener Start beziehungsweise Foreground-Rückfall und `onDestroy` beenden die Erneuerung und geben die Haltung frei. Beim bestätigten Ziel bleibt sie bis zum bestehenden TTS-Abschluss oder dessen 15-Sekunden-Timeout bestehen. Ein erneuter sichtbarer Start während der letzten Ansage startet GPS/Polling nicht neu. Außerhalb einer aktiven Fahrt wird kein CPU-WakeLock gehalten; die getrennte Fahrterkennung erhält durch diese Änderung keinen dauerhaften WakeLock.
+
+Beim manuellen Beenden schützt die bereits begrenzte Haltung noch das atomare Löschen von aktiver Status-ID und Cache. `stopping=true` verhindert weitere Erneuerung; `finishService` in `finally` gibt sie auch bei einem Speicherfehler frei. Ein hängender Löschvorgang kann die ursprüngliche 120-Sekunden-Lease somit nicht unbegrenzt verlängern.
+
+**Doze bleibt eine Android-Systementscheidung:** Im normalen Doze werden WakeLocks und Netzwerkzugriff beschränkt. Eine vom Nutzer gewährte Akkuoptimierungsausnahme erlaubt unter anderem partielle WakeLocks und Netzwerkzugriff, hebt aber nicht sämtliche Plattform- oder Herstellerbeschränkungen auf. Deshalb ergänzt die [Einstellungs-Card](./settings.md) eine ausdrückliche Systemanfrage und zeigt deren tatsächlichen Status. Ohne Ausnahme darf die App keine unverzögerten Ticks, API-Antworten oder Ansagen im tiefen Doze versprechen. Auch mit Ausnahme bleiben Standortzustellung, Samsung-Hintergrundregeln, Energiesparmodus, die ausgewählte TTS-Engine und Audiofokus separat zu prüfen. Nutzer-Force-Stop, entzogene Freigaben und Systemprozessende werden nicht umgangen.
+
+Android-Grundlagen: [Doze und App Standby](https://developer.android.com/training/monitoring-device-state/doze-standby), [WakeLock anfordern](https://developer.android.com/develop/background-work/background-tasks/awake/wakelock/set) und [WakeLock-Leitlinien](https://developer.android.com/develop/background-work/background-tasks/awake/wakelock/best-practices). Reale Zustellung und Akkuverbrauch stehen in der [Gerätetestmatrix](../entwicklung/tests.md).
 
 ## Datenfluss und Intervalle
 
@@ -122,10 +137,11 @@ Ein als angekommen markierter nicht gestrichener Zielbesuch zeigt null verbleibe
 - Manuell über die Notification-Aktion `Beenden`
 - Aktive Fahrt wird ersetzt oder entfernt, zum Beispiel beim Logout
 
-Beim Beenden werden Location-Callbacks, Polling und TTS gestoppt. Aktive Status-ID und Cache werden gemeinsam und nur für die passende Fahrt gelöscht.
+Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS gestoppt und die CPU-Haltung freigegeben. Aktive Status-ID und Cache werden gemeinsam und nur für die passende Fahrt gelöscht.
 
 ## Validierung und offene Fragen
 
+- Ein Nutzerbericht vom 06.10.2026 meldet teilweise fehlende Ansagen nach Ausschalten des Displays. Im vorherigen Service fehlte ein eigener CPU-WakeLock; daraus folgt kein Nachweis, dass dies die einzige Geräteursache war. Die neue aktive Haltung und die Systemfreigabe müssen mit Standort-/Service-/Audioverlauf, erzwungenem Doze auf einem Testgerät und Samsung-Einstellungen geprüft werden. TODO: Mindestens 30 Minuten Display-aus-Betrieb, gewährte/abgelehnte Ausnahme, Energiesparmodus, GPS-/API-Ausfall, TTS sowie Freigabe aller Stop-/Destroy-Pfade nach der [Testmatrix](../entwicklung/tests.md) auf dem Gerät nachweisen.
 - Ein Nutzerbericht zu `1.7.0` meldet bei einer etwa zwei Minuten verfrühten Fahrt eine korrekte Ansage von Maubisstr. und die fehlende Ansage des folgenden Halts Rathaus. Der Screenshot zeigte mehrere `AKTUELL`-Markierungen und unterbrochene Timeline-Segmente. Das Zeitfenster je Zeile erklärt die mehrfachen Markierungen; überlappende Abfahrtsbereiche und die Ansagezustellung werden durch die Änderungen abgesichert. Unklar: Ohne Fix-/Audioverlauf ist die konkrete Ursache der fehlenden Ansage nicht bewiesen.
 - Ein Nutzerbericht vom 06.10.2026 zur S28 meldet häufiges Umschalten zwischen `GPS-Schätzung` und `API-Echtzeit` sowie eine Einstiegsansage erst nach der Abfahrt. Die Quellauswertung zeigte zwei logische Lücken: Die Prognose verlangte bei jedem Fix erneut Mindestbewegung und speicherte bisher nur acht Samples, was bei häufigen Updates kein achtsekündiges Fenster zuließ. Am Einstieg blockierte ein vorhandener GPS-Fix den zeitbasierten Hinweis, während spätere Näherungsjitter den alten Annäherungstrigger noch auslösen konnten. Die begrenzte Prognosestabilisierung und der bestätigte Wartehinweis sichern diese Fälle ab. Unklar: Ohne aufgezeichnete Fix-/Audiofolge ist der konkrete Gerätevorgang nicht vollständig rekonstruiert.
 - Historische erfolgreiche Prüfläufe und der aktuelle automatisierte Prüfumfang stehen unter [Tests](../entwicklung/tests.md).

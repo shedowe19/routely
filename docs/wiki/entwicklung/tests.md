@@ -97,6 +97,28 @@ Der Main-Stand `454e61710e8f418cdf70b08195657cbf31545d71` bestand am 06.10.2026 
 
 Die neuen Fälle verwenden synthetische Positionen und eine feste Uhr. Sie prüfen weder die tatsächlich von Android gelieferten Location-Callbacks noch den Zeitpunkt hörbarer TTS auf einem Gerät. Der erneute S28-Fahrtversuch mit Bremsen, Ankunft und kurzen Haltwechseln bleibt unter [TripTracking](../module/trip-tracking.md) und [GPS-Zeiten](../module/gps-zeiten.md) offen. Der CI-Nachweis ist weiterhin dem tatsächlich geprüften Commit zuzuordnen; historische 248-Test-Ergebnisse belegen diese neuen Fälle nicht.
 
+## Display-aus- und Doze-Prüfung vom 06.10.2026
+
+Ein Nutzerbericht meldet ausbleibende Ansagen bei ausgeschaltetem Display. Der Bericht enthält keinen Standort-, Service- oder Audioverlauf; die konkrete Geräteursache ist daher nicht bewiesen. Die [Absicherung der aktiven Fahrt](../module/trip-tracking.md) und die [Android-Akkueinstellung](../module/settings.md) müssen auf einem physischen Gerät zusätzlich zum Kotlin-/Build-Prüflauf validiert werden.
+
+`TrackingWakeLockLeaseTest` ergänzt acht reine Kotlin-Fälle mit einem künstlichen Plattformhandle: keine Haltung im Leerlauf, immer begrenzter Erwerb, keine verspätete Erneuerung nach Stopp, Generationswechsel, Wiedererwerb nach Plattformablauf, Retry nach fehlgeschlagenem Erwerb, kein Erneuern nach fehlgeschlagener Freigabe und neuer Start nach Abschluss. Der Quellstand enthält damit 283 Unit-Testmethoden in 13 Klassen. Diese Anzahl ist kein neuer erfolgreicher CI-Lauf. Die Tests prüfen den Lease-Zustand und die an den Adapter übergebenen Timeouts, keinen echten Android-WakeLock, Doze-Modus oder Service-Lebenszyklus.
+
+| Gerätefall | Zu prüfendes Ergebnis |
+| --- | --- |
+| Samsung S26 Ultra mit einer eingecheckten S28-Fahrt, Display mindestens 30 Minuten aus | Die laufende Fahrtbenachrichtigung bleibt vorhanden. Frische Standortupdates, Haltwechsel und hörbare Stationsansagen werden protokolliert; Einschalten darf nicht erst einen Stau alter Ansagen auslösen. |
+| Android-Doze-Test auf einem Testgerät mit gewährter und mit abgelehnter Akku-Ausnahme | Den tatsächlichen CPU-, Standort-, Netzwerk- und TTS-Verlauf getrennt erfassen. Eine gewährte Ausnahme ist keine Garantie für identische GPS-Zustellintervalle. |
+| Energiesparmodus und Samsung-Einschränkungen für Hintergrundbetrieb | Die Android-Ausnahme und die Samsung-Einstellungen getrennt prüfen; beim Rückkehren in Routely muss der angezeigte Ausnahmestatus dem aktuellen Systemwert entsprechen. |
+| GPS-Verlust, entzogene Standortfreigabe oder ausgeschaltete Ortung bei Display aus | Die etablierte Haltidentität bleibt geschützt; verfügbare API-/Fahrplanzeiten werden gekennzeichnet verwendet. Eine Zielankunft wird nicht allein aus der Uhrzeit erfunden. |
+| Netzwerk-/API-Ausfall bei weiterhin frischem GPS und zuvor verfügbarer Route | GPS-Auswertung und Stationsansagen dürfen nicht auf die nächste erfolgreiche API-Antwort warten. |
+| TTS nicht bereit, Audiofokus verweigert oder eine andere Ansage läuft | Kein fälschlich bestätigter Ansageversuch; die vorhandene Freigabe-/Retry-Logik und das Abfahrtsfenster bleiben wirksam. |
+| Fahrt manuell beenden, Zielabschluss, Logout, Fahrtwechsel und Service-Zerstörung | Standortcallbacks und Jobs der beendeten Fahrt verschwinden; kein verwaister CPU-WakeLock bleibt gehalten. Während der abschließenden Zielansage bleibt deren bestehender Abschluss-/Timeoutschutz erhalten. |
+
+Für einen kontrollierten Android-Test kann `adb shell dumpsys deviceidle force-idle` Doze erzwingen; anschließend `adb shell dumpsys deviceidle unforce` und `adb shell dumpsys battery reset` aufrufen. Falls vorher `adb shell dumpsys battery unplug` verwendet wird, ist das Reset auch nach einem abgebrochenen Test nötig. `adb shell dumpsys power` hilft beim Prüfen der gehaltenen WakeLocks. Diese Befehle gehören ausschließlich zur manuellen Testumgebung; die App führt sie nicht aus. Die Fahrten-, Standort- und Audiozeitpunkte müssen separat gemessen werden, weil ein sichtbarer Foreground-Service allein weder frische GPS-Daten noch eine hörbare Ansage belegt.
+
+Die Test- und Ausnahmegrundlagen stehen in der [offiziellen Android-Doze-Dokumentation](https://developer.android.com/training/monitoring-device-state/doze-standby). Der gewährte Ausnahmestatus und die CPU-Haltung sind gesondert zu prüfen; gewöhnliches Doze darf WakeLocks ignorieren.
+
+TODO: Die obige Matrix einschließlich Akkuverbrauch über mindestens 30 Minuten auf dem Nutzergerät ausführen. Automatisierte Unit-Tests ersetzen keinen echten Doze-/OEM-/TTS-Nachweis.
+
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
 Zusätzlich wurden 16 lesende Anfragen gegen `https://traewelling.de` durchgeführt. Alle lieferten HTTP 200; die geprüften Antwortstrukturen entsprachen dem erwarteten Vertrag. Die folgenden Pfade haben jeweils das Präfix `/api/v1/`:

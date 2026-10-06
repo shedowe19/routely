@@ -18,9 +18,11 @@ import android.media.AudioManager
 import android.os.Build
 import android.os.IBinder
 import android.os.Looper
+import android.os.PowerManager
 import android.os.SystemClock
 import android.speech.tts.TextToSpeech
 import android.speech.tts.UtteranceProgressListener
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -81,6 +83,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private var trackingJob: Job? = null
     private var tickJob: Job? = null
+    private var wakeLockRenewalJob: Job? = null
+    private var trackingWakeLock: TrackingWakeLockLease? = null
     private var currentStatusId: Int? = null
     private var lastStartId: Int = 0
     private var commandVersion = 0L
@@ -163,7 +167,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                         engine?.setGpsEnabled(false)
                         disableLocationUpdates()
                         currentStatusId?.let { statusId ->
-                            promoteToForeground(false)
+                            if (!promoteToForeground(false)) {
+                                finishService(statusId)
+                                return@withLock
+                            }
                             engine?.onTimetable(System.currentTimeMillis())?.let {
                                 applyUpdate(it, statusId, generation)
                             }
@@ -271,26 +278,35 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         // A sticky restart has no visible-Activity authorization to create a location FGS.
         gpsRequestedByActivity = intent?.getBooleanExtra(EXTRA_ENABLE_GPS, false) == true && hasPreciseLocation()
         if (!promoteToForeground(gpsRequestedByActivity, requestedId ?: currentStatusId)) {
-            stopSelf(startId)
+            finishService(null)
             return START_NOT_STICKY
         }
         serviceScope.launch {
-            val statusId = requestedId ?: prefs.activeStatusId.first()
-            trackingMutex.withLock {
-                val activeId = prefs.activeStatusId.first()
-                if (thisCommand != commandVersion) return@withLock
-                if (statusId == null || activeId != statusId) {
-                    pendingRequestedStatusId = null
-                    if (currentStatusId == null) finishService(null)
-                    return@withLock
+            try {
+                val statusId = requestedId ?: prefs.activeStatusId.first()
+                trackingMutex.withLock {
+                    val activeId = prefs.activeStatusId.first()
+                    if (thisCommand != commandVersion) return@withLock
+                    if (statusId == null || activeId != statusId) {
+                        pendingRequestedStatusId = null
+                        if (currentStatusId == null) finishService(null)
+                        return@withLock
+                    }
+                    engine?.setGpsEnabled(gpsPreferenceEnabled)
+                    if (!gpsRequestedByActivity) {
+                        engine?.invalidateLocation()
+                        disableLocationUpdates()
+                    }
+                    startTracking(statusId)
+                    if (thisCommand == commandVersion) pendingRequestedStatusId = null
                 }
-                engine?.setGpsEnabled(gpsPreferenceEnabled)
-                if (!gpsRequestedByActivity) {
-                    engine?.invalidateLocation()
-                    disableLocationUpdates()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                trackingMutex.withLock {
+                    // A failed old start must not tear down a replacement trip.
+                    if (thisCommand == commandVersion) finishService(null)
                 }
-                startTracking(statusId)
-                if (thisCommand == commandVersion) pendingRequestedStatusId = null
             }
         }
         return START_STICKY
@@ -333,6 +349,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             stopping = false
             trackingJob?.cancel()
             tickJob?.cancel()
+            releaseTrackingWakeLock()
             completionJob?.cancel()
             completionStatusId = null
             completionUtteranceId = null
@@ -353,9 +370,14 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             tts?.stop()
             speechDeliveries.clear()
             abandonAudioFocus()
+            // Foreground promotion already succeeded and the active status was checked.
+            ensureTrackingWakeLock()
             restoreCachedTrip(statusId)
             updateNotification(lastNotificationTitle, lastNotificationText)
         }
+        ensureTrackingWakeLock()
+        // Resuming the Activity during the final utterance must not restart GPS/polling.
+        if (completionStatusId != null) return
         engine?.setGpsEnabled(gpsPreferenceEnabled)
         if (gpsRequestedByActivity && gpsPreferenceEnabled && hasPreciseLocation() && callback == null) {
             requestLocationUpdates(FAR_INTERVAL_MILLIS)
@@ -385,7 +407,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                             gpsRequestedByActivity = false
                             engine?.invalidateLocation()
                             disableLocationUpdates()
-                            promoteToForeground(false)
+                            if (!promoteToForeground(false)) {
+                                finishService(statusId)
+                                return@withLock
+                            }
                         }
                         engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
                     }
@@ -393,6 +418,52 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                 }
             }
         }
+    }
+
+    private fun ensureTrackingWakeLock() {
+        if (currentStatusId == null || stopping || wakeLockRenewalJob?.isActive == true) return
+        val lease = trackingWakeLock ?: runCatching {
+            val manager = getSystemService(Context.POWER_SERVICE) as PowerManager
+            val wakeLock = manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "Routely:TripTracking")
+                .apply { setReferenceCounted(false) }
+            TrackingWakeLockLease(object : TrackingWakeLockHandle {
+                override fun acquire(timeoutMillis: Long) {
+                    try {
+                        wakeLock.acquire(timeoutMillis)
+                    } catch (e: RuntimeException) {
+                        Log.w(LOG_TAG, "Unable to acquire active trip CPU lock", e)
+                        throw e
+                    }
+                }
+                override fun release() {
+                    // A platform timeout may already have released this lease.
+                    try {
+                        if (wakeLock.isHeld) wakeLock.release()
+                    } catch (e: RuntimeException) {
+                        Log.w(LOG_TAG, "Unable to release active trip CPU lock", e)
+                        throw e
+                    }
+                }
+            })
+        }.onFailure {
+            Log.w(LOG_TAG, "Unable to create active trip CPU lock", it)
+        }.getOrNull()?.also { trackingWakeLock = it } ?: return
+        val ownerGeneration = generation
+        lease.start(ownerGeneration)
+        wakeLockRenewalJob = serviceScope.launch {
+            while (isActive) {
+                delay(TrackingWakeLockLease.RENEW_INTERVAL_MILLIS)
+                if (generation != ownerGeneration || currentStatusId == null || stopping) break
+                // This keeps the CPU available; it never wakes or holds the display.
+                lease.renew(ownerGeneration)
+            }
+        }
+    }
+
+    private fun releaseTrackingWakeLock() {
+        wakeLockRenewalJob?.cancel()
+        wakeLockRenewalJob = null
+        trackingWakeLock?.stop()
     }
 
     private suspend fun restoreCachedTrip(statusId: Int) {
@@ -532,7 +603,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                             gpsRequestedByActivity = false
                             engine?.invalidateLocation()
                             disableLocationUpdates()
-                            promoteToForeground(false)
+                            if (!promoteToForeground(false)) finishService(callbackStatusId)
                             return@withLock
                         }
                         var nextInterval = locationIntervalMillis
@@ -904,14 +975,20 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (currentStatusId != null && currentStatusId != expectedStatusId) return
         stopping = true
         disableLocationUpdates()
-        // Commit the atomic ID+progress clear before stopping/cancelling our own scope.
-        prefs.clearActiveTracking(expectedStatusId)
-        finishService(expectedStatusId)
+        // Keep the current bounded CPU lease through the atomic ID+progress clear.
+        // Renewal sees stopping=true, so a stalled commit cannot extend the lease.
+        try {
+            prefs.clearActiveTracking(expectedStatusId)
+        } finally {
+            // Storage failure must not leave an idle foreground service running.
+            finishService(expectedStatusId)
+        }
     }
 
     private fun finishService(expectedStatusId: Int?) {
         if (expectedStatusId != null && currentStatusId != null && currentStatusId != expectedStatusId) return
         stopping = true
+        releaseTrackingWakeLock()
         generation++
         trackingJob?.cancel()
         tickJob?.cancel()
@@ -933,6 +1010,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     }
 
     override fun onDestroy() {
+        releaseTrackingWakeLock()
         disableLocationUpdates()
         publishWidgetWaiting()
         abandonAudioFocus()
@@ -972,6 +1050,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
         private val mutableTrackingLiveState = MutableStateFlow<TrackingLiveState?>(null)
         val trackingLiveState: StateFlow<TrackingLiveState?> = mutableTrackingLiveState.asStateFlow()
+        private const val LOG_TAG = "TripTrackingService"
         private const val CHANNEL_ID = "TripTrackingChannel"
         private const val NOTIFICATION_ID = 1001
         private const val CHANGES_CHANNEL_ID = "TripChangesChannel"

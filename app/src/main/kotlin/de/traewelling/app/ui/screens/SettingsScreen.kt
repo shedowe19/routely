@@ -1,5 +1,6 @@
 package de.traewelling.app.ui.screens
 
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -11,9 +12,14 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import de.traewelling.app.ui.components.TraewellingTopAppBar
+import de.traewelling.app.util.BatteryOptimization
 import de.traewelling.app.viewmodel.SettingsViewModel
 
 @Composable
@@ -216,6 +222,8 @@ fun SettingsScreen(
                 }
             }
 
+            item { BackgroundTrackingBatteryCard() }
+
             item {
                 Text(
                     text = "Sprachausgabe (TTS)",
@@ -304,6 +312,101 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackgroundTrackingBatteryCard() {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var isExempt by remember(context) { mutableStateOf(BatteryOptimization.isExempt(context)) }
+    var settingsUnavailable by remember { mutableStateOf(false) }
+
+    DisposableEffect(context, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                isExempt = BatteryOptimization.isExempt(context)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        // The card can also enter the composition after the Activity has already resumed.
+        isExempt = BatteryOptimization.isExempt(context)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Text(
+        "Begleitung bei ausgeschaltetem Display",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary
+    )
+    Spacer(Modifier.height(8.dp))
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    if (isExempt == true) Icons.Default.BatteryFull else Icons.Default.BatterySaver,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    when (isExempt) {
+                        true -> "Von Android-Akkuoptimierung ausgenommen"
+                        false -> "Android-Akkuoptimierung aktiv"
+                        null -> "Akkuoptimierungsstatus nicht verfügbar"
+                    },
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                "Damit GPS und Ansagen während deiner Fahrt auch bei ausgeschaltetem Display weiterlaufen, erlaube Routely uneingeschränkte Akkunutzung.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (isExempt != true) {
+                Button(
+                    onClick = {
+                        isExempt = BatteryOptimization.isExempt(context)
+                        if (isExempt != true) {
+                            settingsUnavailable = !BatteryOptimization.requestExemption(context)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Akkuoptimierung aufheben")
+                }
+            }
+            OutlinedButton(
+                onClick = { settingsUnavailable = !BatteryOptimization.openAppSettings(context) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Android-App-Einstellungen")
+            }
+            Text(
+                if (Build.MANUFACTURER.equals("samsung", ignoreCase = true)) {
+                    "Bei Samsung zusätzlich die Akkunutzung auf „Uneingeschränkt“ setzen und Routely zu den Apps hinzufügen, die nie im Standby sind. Die Menünamen können je nach Gerät abweichen."
+                } else {
+                    "Prüfe in den Android-App-Einstellungen auch weitere Akku-Beschränkungen deines Geräteherstellers."
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(
+                "Kann während der Reisebegleitung mehr Akku verbrauchen. Das Display bleibt ausgeschaltet.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (settingsUnavailable) {
+                Text(
+                    "Die Android-Einstellungen konnten nicht geöffnet werden. Öffne sie manuell und suche nach Routely unter Apps und Akku.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

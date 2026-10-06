@@ -14,6 +14,7 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 06.10.2026. Erre
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
 | [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Gemeinsame Quellenwahl mit begrenzt stabilisierter gültiger Prognose und API-/Plan-Rückfall. |
 | [Sprachausgabe](../module/settings.md) | Haltestellen- und Zielansagen; TTS-Engine, Sprache und Stimme konfigurierbar. |
+| [Begleitung bei Display aus](../module/settings.md) | Begrenzte CPU-WakeLock-Haltung während einer aktiven Fahrt, Anzeige des Android-Akkuoptimierungsstatus und ausdrückliche Anfrage einer Ausnahme; Display bleibt ausgeschaltet. |
 | [Fahrterkennung](../module/ride-recognition.md) | Ausdrücklich aktivierte GPS-Suche nach möglichen Fahrten; Linie prüfen, Ziel wählen und Check-in selbst bestätigen. |
 | [Fahrtänderungen](../module/trip-changes.md) | Hinweise zu Gleiswechseln, Haltausfällen/Wiederherstellungen und Verspätungsänderungen ab fünf Minuten. Optional TTS. |
 | [Fahrtbenachrichtigung](../module/trip-progress.md) | Linie, nächster Halt, verbleibende Halte, Zielzeit und Quelle; API 36 ProgressStyle, systemabhängige Live-Update-Hervorhebung und Sperrbildschirm-Privatsphäre. |
@@ -39,6 +40,7 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 06.10.2026. Erre
 - Es gibt keine Ticketverwaltung, Wear-OS-App, Pendelstrecken-/Favoritenverwaltung oder gesonderten Dienstmodus.
 - Die Transitous-Live-Karte aus PR #35 wurde nicht übernommen; der PR ist geschlossen und ungemergt. Im geprüften App-Code existiert kein Transitous-Client.
 - Provider-Echtzeitfelder stammen aus der Träwelling-API und bleiben erhalten. GPS-Zeiten sind lokale Anzeigeprognosen und können bei ungeeigneten Koordinaten oder Bewegungsverläufen trotz Signal auf API/Plan zurückfallen. GPS-Nähe allein liefert keine genaue ETA; Gerätesignale, Prognosegüte, Audioausgabe und kurze Halte müssen weiterhin auf echten Fahrten geprüft werden.
+- Display-aus-Begleitung benötigt weiterhin Android-Freigaben und geeignete Hersteller-/TTS-Einstellungen. CPU-WakeLock und gewährte Akku-Ausnahme garantieren keinen Weiterbetrieb nach Nutzer-Force-Stop und keine festen GPS-/Netzwerkintervalle. Die [Geräteprüfung](../entwicklung/tests.md) bleibt offen.
 
 ## Verwandte Seiten
 

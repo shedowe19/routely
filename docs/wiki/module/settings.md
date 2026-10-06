@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Dieses Modul verwaltet Theme (Hell, Dunkel, AMOLED), GPS-Stationsalarme, Fahrterkennung, Fahrtänderungen, Live-Fortschritt, Sperrbildschirmdetails und Sprachausgabe (TTS).
+Dieses Modul verwaltet Theme (Hell, Dunkel, AMOLED), GPS-Stationsalarme, Fahrterkennung, Fahrtänderungen, Live-Fortschritt, Sperrbildschirmdetails und Sprachausgabe (TTS). Es zeigt außerdem den aktuellen Android-Akkuoptimierungsstatus und bietet eine ausdrückliche Freigabeaktion für die Begleitung bei ausgeschaltetem Display.
 
 ## Kontext
 
@@ -13,6 +13,7 @@ Der SettingsScreen wird über den `ProfileScreen` aufgerufen. Die hier getroffen
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/SettingsScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/SettingsViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/util/PreferencesManager.kt`
+- `app/src/main/kotlin/de/traewelling/app/util/BatteryOptimization.kt`
 - `app/src/main/kotlin/de/traewelling/app/MainActivity.kt`
 
 ## Verhalten
@@ -34,6 +35,18 @@ Der Bereich `Stationsansagen mit GPS` bietet `GPS verwenden` und die Entfernung 
 
 Die Sprachausgabe benötigt weiterhin die separate Option `Haltestellen ansagen`. GPS-Tracking und TTS-Aktivierung sind getrennte Einstellungen. Das genaue Trigger- und Rückfallverhalten beschreibt [TripTracking](./trip-tracking.md).
 
+### Begleitung bei ausgeschaltetem Display
+
+Die gleichnamige Einstellungs-Card liest `PowerManager.isIgnoringBatteryOptimizations(packageName)` und zeigt `Von Android-Akkuoptimierung ausgenommen`, `Android-Akkuoptimierung aktiv` oder einen nicht verfügbaren Status. Der Systemwert wird beim Einfügen der Card und bei `Lifecycle.Event.ON_RESUME` neu gelesen; dadurch ist eine Ablehnung oder spätere Änderung in Android nach der Rückkehr sichtbar. Es gibt keinen DataStore-Key oder Schalter, der eine Ausnahme behauptet.
+
+`Akkuoptimierung aufheben` erscheint, solange keine Ausnahme bestätigt ist. Erst dieser ausdrückliche Nutzertipp öffnet über `BatteryOptimization.requestExemption` `Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` mit der `package:`-URI der App. Routely nimmt keine Ausnahme automatisch vor. Bei fehlender Activity oder verweigertem Start folgen die allgemeine Akkuoptimierungsliste und die Android-App-Detailseite. Ein erfolgreich geöffneter Dialog zählt noch nicht als Freigabe; entscheidend bleibt die erneute Abfrage des Systemwerts.
+
+Der separate Button `Android-App-Einstellungen` öffnet die App-Detailseite mit Rückfall auf die allgemeinen Android-Einstellungen. Sind alle passenden Starts erfolglos, zeigt die Card eine Anleitung zum manuellen Öffnen. Auf Samsung-Geräten nennt sie zusätzlich `Uneingeschränkt` und die Liste der Apps, die nie im Standby sind; Menübezeichnungen unterscheiden sich je Systemversion. Eine Android-Doze-Ausnahme ersetzt zusätzliche Herstellerbeschränkungen nicht.
+
+Die aktive Fahrt verwendet eine begrenzte CPU-WakeLock-Haltung im [Tracking-Service](./trip-tracking.md). Das Display wird nicht eingeschaltet. Diese Absicherung kann mehr Akku verbrauchen; sie garantiert weder feste GPS-Intervalle noch Weiterbetrieb nach Nutzer-Force-Stop, Systemprozessende oder eingeschränkter TTS-Engine. Die manuelle [Display-aus-/Doze-Prüfung](../entwicklung/tests.md) bleibt erforderlich.
+
+Systemgrundlagen: [Android Doze und App Standby](https://developer.android.com/training/monitoring-device-state/doze-standby). Zusätzliche Samsung-Hintergrundregeln beschreibt die [offizielle Anleitung zu schlafenden Apps](https://www.samsung.com/us/support/answer/ANS10003442/); sie ist kein Nachweis eines festen Menüpfads auf One UI 9.
+
 ### Reisebegleitung
 
 - **Fahrten automatisch erkennen:** Standardmäßig aus. Aktivierung erfolgt über `MainActivity` mit präziser Freigabe und startet einen sichtbaren Location-Service; es werden mögliche Fahrten vorgeschlagen, keine automatischen Check-ins erstellt. Die UI erklärt die Standortübertragung an den konfigurierten Träwelling-Server. Technisch werden aus dem Standort abgeleitete Bounding-Box-Grenzen an `GET /api/v1/stations` gesendet.
@@ -50,11 +63,13 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 - `PreferencesManager` (DataStore)
 - `android.speech.tts.TextToSpeech`
 - `TraewellingTheme` (für das reaktive Styling)
+- Android `PowerManager`, Akkuoptimierungs- und App-Einstellungsintents
 
 ## Offene Fragen
 
 - Fehlerbehandlung in PreferencesManager — offen — @dev
 - Integration von App-spezifischen Spracheinstellungen — offen — @dev
+- TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.
 
 ## Verwandte Seiten
 
@@ -65,3 +80,4 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 - [Fahrterkennung](./ride-recognition.md)
 - [Fahrtänderungen](./trip-changes.md)
 - [Reisefortschritt](./trip-progress.md)
+- [Tests](../entwicklung/tests.md)
