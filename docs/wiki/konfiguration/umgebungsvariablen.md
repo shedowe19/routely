@@ -10,7 +10,7 @@ Aktuell werden in Gradle `versionCode` und `versionName` per Property bezogen (`
 
 | Variable                   | Zweck                                    | Erforderlich | Hinweis                                                                                            |
 | -------------------------- | ---------------------------------------- | ------------ | -------------------------------------------------------------------------------------------------- |
-| `versionName` / `versionCode` | APK-Version | Optional lokal | Gradle-Properties; Standard `1.0.0` / `1`. Der manuelle Release-Workflow verlangt und validiert beide Werte. |
+| `versionName` / `versionCode` | APK-Version | Optional lokal | Gradle-Properties; Standard `1.0.0` / `1`. Der manuelle Release-Workflow verlangt einen neuen Versionsnamen; ein optionaler Code muss über dem veröffentlichten Höchstwert liegen, leer wählt Höchstwert + 1. Siehe [Deployment](../entwicklung/deployment.md). |
 | `OAuth Client ID / Secret` | Vorhandene OAuth-Helfer | Nein für den aktuellen Login | Keine Gradle-/Environment-Anbindung. Der erreichbare manuelle Token-Login verwendet diese Werte nicht. |
 | `SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, `KEY_PASSWORD` | Release-Signierung | Nur im manuellen Release-Workflow | GitHub-Actions-Secrets; Werte niemals dokumentieren. |
 

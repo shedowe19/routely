@@ -81,14 +81,19 @@ class AuthRepository internal constructor(
             clientSecret = credentials.clientSecret?.ifBlank { null },
             refreshToken = refreshToken
         )
+        currentCoroutineContext().ensureActive()
         if (!response.isSuccessful) {
-            // OAuth invalid_grant commonly returns 400; outages/rate limits are transient.
-            if (response.code() in listOf(400, 401, 403)) store.clearIfMatches(session)
+            // Client/request/scope failures do not establish that the user's grant is invalid.
+            val invalidGrant = OAuthRefreshError.isInvalidGrant(response)
+            currentCoroutineContext().ensureActive()
+            if (invalidGrant) store.clearIfMatches(session)
             throw HttpException(response)
         }
         val body = response.body() ?: error("Empty refresh response")
         val token = body.accessToken?.takeIf { it.isNotBlank() } ?: error("Empty access token")
-        if (!store.saveTokensIfMatches(session, token, body.refreshToken)) {
+        // RFC 6749 §6: replace the old refresh token only when a replacement is issued.
+        val nextRefreshToken = body.refreshToken?.takeIf { it.isNotBlank() } ?: refreshToken
+        if (!store.saveTokensIfMatches(session, token, nextRefreshToken)) {
             throw CancellationException("Session changed during token refresh")
         }
     }

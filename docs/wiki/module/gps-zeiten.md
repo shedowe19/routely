@@ -11,6 +11,7 @@ Aktualisiert die angezeigten Zeiten der eigenen aktiven Fahrt anhand eines zuver
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/service/GpsJourneyTimeEstimator.kt`
+- `app/src/main/kotlin/de/traewelling/app/service/TrackingLocationObservation.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/model/RoadRouteModels.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/routing/RoadRouteRepository.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/routing/RoadRouteParser.kt`
@@ -46,6 +47,12 @@ Die Gültigkeitsprüfung benötigt einen aktuellen Vergleichszeitpunkt: In [Stat
 
 ## Konservative GPS-Auswertung
 
+Die Android-Beobachtung wird vor Engine und Schätzer durch `TrackingLocationClock` normalisiert. Alter und Reihenfolge stammen aus `elapsedRealtimeNanos`; der Ereigniszeitpunkt wird einmal aus aktueller Systemzeit minus monotonem Alter gebildet. API-/Uhr-Replays desselben Fixes behalten genau diesen ursprünglichen Zeitpunkt. Ein alter Batch, ein zukünftiger monotoner Marker oder ein Fix über 30 Sekunden bestätigt keine neue Bewegung. Ein älterer genauerer Fix darf einen bereits beobachteten neueren Marker nicht überholen.
+
+Springt die Systemzeit gegenüber der monotonen Uhr um mehr als eine Sekunde, setzt der Service `StationTrackingEngine.resetLocationClock()` und den Zeitschätzer zurück. Besuchscursor und bereits gesprochene Schlüssel bleiben erhalten, frühere GPS-Zeiten und transiente Positionsbelege werden verworfen. Der Adapter behält seine monotone Reihenfolge; ein bereits verbrauchter Fix wird nicht mit neuer Systemzeit nochmals als Beobachtung angelegt. Ein strikt neuer Fix muss die bestehende räumliche Zuordnung wieder unterstützen. Diese Prüfung erfolgt auch bei API-/Uhr-Ticks mit vorhandener Position und ersetzt keine manuellen Check-in- oder Providerzeiten.
+
+Vor gewöhnlicher physischer Cursor-Mutation prüft die Stationsengine einen Kurzsprung gegen die vorherige unterstützte Position: Bei einem Fixabstand von einer Millisekunde bis 30 Sekunden gilt höchstens `100 m/s × Zeitabstand + beide Genauigkeiten`. Ein verworfener Sprung verbraucht seinen Zeitmarker, liefert `TIMETABLE` und bestätigt weder Haltefortschritt, Ansage noch Zielabschluss. Er ersetzt die vorherige plausible Position nicht. Die getrennte konservative Zeitauswertung bleibt zusätzlich erforderlich; ein nachträglich verworfener ETA-Wert könnte einen zuvor falsch bestätigten Halt nicht rückgängig machen. Längere Lücken verwenden weiterhin die gesonderte Wiederverankerung.
+
 Der Schätzer setzt einen bereits räumlich etablierten Besuchscursor der `StationTrackingEngine` voraus. Frische Position allein genügt nicht. Fixes müssen gültige Koordinaten und eine Genauigkeit von höchstens 75 Metern haben; ihr Zeitstempel darf weder in der Zukunft liegen noch älter als 30 Sekunden sein. Doppelte Zeitstempel und reine Uhr-/API-Ticks zählen nicht als zusätzliche Bewegung oder Aufenthaltsdauer.
 
 Nach mehreren Halten ohne GPS kann die [Stationsengine den Besuch gesondert wiederverankern](./trip-tracking.md). Während ein späterer Halt noch unabhängige frische Positionsbelege benötigt, liefert sie die Fahrplanquelle; der Schätzer verwirft dadurch die alte lokale Zeitbasis und meldet den noch unbestätigten Besuch. Nach Bestätigung beginnt die Auswertung auf dem neu zugeordneten Besuch. Wiederverankerung erzeugt keine Zeiten für übersprungene Tunnelhalte und garantiert keine sofortige neue GPS-Prognose: Ankunftsbeobachtung, Bewegungsfenster und Abschnittsprojektion müssen weiterhin ihre eigenen Kriterien erfüllen.
@@ -79,6 +86,8 @@ Die Veröffentlichung bleibt an zuverlässige, geordnete Fixes, passende Besuchs
 `OUTSIDE_CORRIDOR` behauptet keine tatsächliche Abweichung vom offiziellen Fahrweg. Der UI-Text erläutert stattdessen, dass sich die GPS-Position dem aktuellen Streckenabschnitt noch nicht sicher zuordnen lässt. Die verwendete Basis kann ein geeigneter Träwelling-Linienzug, die bisherige gerade Haltverbindung oder das getrennte SEV-Straßenmodell sein. Nach einem Tunnel kann zusätzlich zunächst die alte Besuchsbasis nicht mehr zur Position passen. Haltbasierte Wiederverankerung und Geometrieverfügbarkeit bleiben unterschiedliche Belege; keine der Quellen garantiert den aktuell befahrenen offiziellen Weg.
 
 Ein Hinweis kann zugleich mit einer gültigen beobachteten Ereigniszeit erscheinen: Er beschreibt die Zukunftsprognose, nicht pauschal jede lokale GPS-Zeit. Bei Ablauf eines Datensatzes zwischen Service-Updates zeigt der UI-Tick den Hinweis auf fehlendes frisches GPS. Die Diagnose verändert keine Zeitquelle und rekonstruiert keinen früheren Fixverlauf. Eine ausdrücklich eingeblendete Diagnose belegt nur den aktuellen Ablehnungszustand. Die frühere Veröffentlichungskorrektur beobachteter Ereignisse ergänzte noch keine Straßenroute; die getrennte Erweiterung darunter verändert die Geometrie, ohne die GPS-Grenzen zu lockern.
+
+`TrackingLiveState.locationError` und `speechError` sind getrennte Laufzeitdiagnosen: Sie erklären beispielsweise eine fehlgeschlagene Standortregistrierung oder eine nicht verfügbare Sprachengine. Sie erzeugen keine neue GPS-Zeit oder Haltzuordnung. Begrenzte Registrierungs-/TTS-Retries und die Lebensdauer dieser Fehler stehen unter [TripTracking](./trip-tracking.md).
 
 ## Bahn-/Tramabschnitte mit Träwelling-Streckenverlauf
 
@@ -174,7 +183,7 @@ Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträch
 
 ## Offene Fragen
 
-- TODO: Der erneute [Main-Review](../entwicklung/main-review-2026-10-06.md) bestätigt einen fehlenden allgemeinen Sprungschutz der Stationsengine (G1) und den Wallclock-/Monotonie-Mix im Service (G3). Die getrennte Estimator-Ablehnung verhindert keinen bereits falsch mutierten Besuch oder Fahrtabschluss. Beide Pfade gesondert korrigieren und absichern.
+- Die im [Main-Review](../entwicklung/main-review-2026-10-06.md) bestätigten G1-/G3-Pfade sind durch Sprungprüfung vor der physischen Mutation und den monotonen Android-Adapter mit Uhrsprung-Reset abgesichert. Reine Regressionen prüfen diese Regeln; der tatsächlich ausgeführte Prüflauf steht unter [Tests](../entwicklung/tests.md). TODO: Providerwechsel und vor-/zurückgestellte Systemzeit auf einem Gerät prüfen; synthetische Fixfolgen belegen keinen Android-Zustellungsverlauf.
 - TODO: Den Tunnelbericht Essen Hbf → Bismarckplatz → Savignystraße mit zeitlich zugeordneten Fix-/Audioaufzeichnungen auf dem Gerät prüfen: ohne GPS über mehrere Halte, erste frische Fixes am späteren Halt, Cursor, neutrale Abschnittsdiagnose, Ansagen und erneute Zeitprognose. Die bestätigte logische Wiederverankerungslücke im alten Code belegt keine aufgezeichnete Nutzer-Messfolge. Wiederkehrendes GPS darf weder Tunnel-Ankunftszeiten erfinden noch einen ungeprüften Schienenweg oder eine sofortige neue ETA behaupten.
 
 - TODO: Die automatische [SEV-Zuordnung](./sev-haltestellen.md) auf der gemeldeten RE1-Busfahrt vor Ort prüfen. Die tatsächlich von der API gelieferten Stopover-Koordinaten und die Ankunftshaltestelle in Duisburg verifizieren. Ein fehlender Richtungsbeleg muss den bisherigen API-Punkt mit sichtbarer unbestätigter SEV-Position erhalten.

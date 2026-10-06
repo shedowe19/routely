@@ -14,8 +14,10 @@ Wichtige Build- und Config-Dateien des Projekts.
 - `gradle.properties`: Compiler- und Kotlin-Flags.
 - `.gitattributes`: Normalisiert Projekttextdateien auf LF, erzwingt LF für `gradlew`, CRLF für Batch-Dateien und behandelt PNGs als Binärdateien.
 - `.gitignore`: Schließt lokale Build-Artefakte, IDE-Dateien, `.env`-Dateien und lokale Signing-Dateien aus.
-- `.github/workflows/android.yml`: Manueller Release-Workflow für signierte APKs.
-- `.github/workflows/api-compatibility.yml`: Unit-, Debug- und Release-Prüfung bei `main`-Pushes, Pull Requests und manuellem Start; lädt APKs und Prüfberichte als Artefakte hoch.
+- `.github/workflows/android.yml`: Serialisierter manueller Release-Workflow mit unveränderlicher neuer Veröffentlichung signierter APKs.
+- `.github/scripts/release_guard.py`, `.github/tests/test_release_guard.py`, `.github/release-version-floor.json`: Create-only Veröffentlichung, Offline-Regressionen und dauerhaft belegte historische Versionscodeuntergrenze.
+- `app/src/main/res/xml/backup_rules.xml`, `data_extraction_rules.xml`: Ausschlüsse für DataStore und Datenbanken in alten sowie Cloud-/Geräteübertragungs-Regelwerken. Das Manifest bindet beide ein.
+- `.github/workflows/api-compatibility.yml`: Offline-Releaseguard-, Unit-, Debug- und Release-Prüfung bei `main`-Pushes, Pull Requests und manuellem Start; lädt APKs und Prüfberichte als Artefakte hoch.
 
 ## Verwandte Seiten
 

@@ -12,6 +12,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.location.Location
+import android.location.LocationManager
 import android.net.Uri
 import android.media.AudioAttributes
 import android.media.AudioFocusRequest
@@ -59,6 +60,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
@@ -83,7 +85,7 @@ private data class CachedTripTrackingState(
     val sevMaps: Map<String, SevMap>? = null
 )
 
-class TripTrackingService : Service(), TextToSpeech.OnInitListener {
+class TripTrackingService : Service() {
     // The mutex also covers suspension points between cursor mutation and publication/persistence.
     private val serviceJob = SupervisorJob()
     private val serviceScope = CoroutineScope(Dispatchers.Main.immediate + serviceJob)
@@ -121,7 +123,12 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private var radiusMeters = 0
     private var callback: LocationCallback? = null
     private var locationIntervalMillis = 0L
+    private var locationRegistrationOwner = 0L
+    private val locationRetries = LifecycleRetryBudget()
+    private var locationRetryJob: Job? = null
+    private var locationError: String? = null
     private var latestLocation: Location? = null
+    private var locationClock = TrackingLocationClock()
     private var cachedCheckin: CheckinInfo? = null
     private var cachedStops: List<StopStation> = emptyList()
     private var cachedFullStops: List<StopStation> = emptyList()
@@ -136,6 +143,11 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
 
     private var tts: TextToSpeech? = null
     private var isTtsInitialized = false
+    private var speechConfiguration = TrackingSpeechConfiguration()
+    private val speechLifecycle = SpeechInitializationLifecycle()
+    private var speechRetryJob: Job? = null
+    private var speechInitTimeoutJob: Job? = null
+    private var speechError: String? = null
     private var audioFocusRequest: AudioFocusRequest? = null
     private val speechDeliveries = SpeechDeliveryQueue()
     private val tripChanges = TripChangeMonitor()
@@ -181,9 +193,27 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             }
         }
         serviceScope.launch {
-            val selectedEngine = prefs.getTtsEngine()
-            tts = if (selectedEngine == null) TextToSpeech(this@TripTrackingService, this@TripTrackingService)
-                else TextToSpeech(this@TripTrackingService, this@TripTrackingService, selectedEngine)
+            combine(prefs.isTtsEnabled, prefs.ttsEngine, prefs.ttsLanguage, prefs.ttsVoice) {
+                enabled, engine, language, voice -> TrackingSpeechConfiguration(enabled,
+                    engine?.takeIf { it.isNotBlank() }, language?.takeIf { it.isNotBlank() },
+                    voice?.takeIf { it.isNotBlank() })
+            }.distinctUntilChanged().collect { configuration ->
+                trackingMutex.withLock {
+                    val previous = speechConfiguration
+                    speechConfiguration = configuration
+                    if (currentStatusId == null || stopping) return@withLock
+                    if (previous.enabled != configuration.enabled || previous.engine != configuration.engine || tts == null) {
+                        restartSpeechEngine(configuration.enabled)
+                    } else if (previous != configuration && speechLifecycle.state == SpeechEngineState.READY) {
+                        cancelQueuedSpeech(releaseCurrentAnnouncement = true)
+                        isTtsInitialized = configureSpeech()
+                        replayPendingAnnouncement()
+                    }
+                    currentStatusId?.let { saveProgress(it) }
+                    publishRuntimeIssues()
+                    if (!configuration.enabled && completionStatusId != null) completionStatusId?.let { stopTracking(it) }
+                }
+            }
         }
         serviceScope.launch {
             prefs.gpsTrackingEnabled.distinctUntilChanged().collect { enabled ->
@@ -192,6 +222,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                     // Re-enabling needs an explicit, permission-checked start from the visible Activity.
                     if (!enabled) {
                         gpsRequestedByActivity = false
+                        locationError = null
                         engine?.setGpsEnabled(false)
                         disableLocationUpdates()
                         currentStatusId?.let { statusId ->
@@ -250,45 +281,143 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    override fun onInit(status: Int) {
-        if (status != TextToSpeech.SUCCESS) return
-        serviceScope.launch {
-            tts?.setOnUtteranceProgressListener(object : UtteranceProgressListener() {
+    private fun restartSpeechEngine(enabled: Boolean) {
+        speechRetryJob?.cancel()
+        speechInitTimeoutJob?.cancel()
+        speechLifecycle.restart(enabled)
+        cancelQueuedSpeech(releaseCurrentAnnouncement = true)
+        closeSpeechInstance()
+        speechError = null
+        if (!enabled) pendingAnnouncement = null
+        else startSpeechEngineAttempt()
+    }
+
+    private fun startSpeechEngineAttempt() {
+        val statusId = currentStatusId ?: return
+        val expectedGeneration = generation
+        val session = currentAuthSession ?: return
+        val token = speechLifecycle.beginAttempt() ?: return
+        val listener = TextToSpeech.OnInitListener { status ->
+            serviceScope.launch {
+                trackingMutex.withLock {
+                    if (!speechLifecycle.owns(token) || !isCurrentTracking(statusId, expectedGeneration) ||
+                        prefs.getAuthSession() != session) return@withLock
+                    if (status == TextToSpeech.SUCCESS) onSpeechInitialized(token)
+                    else speechInitializationFailed(token)
+                }
+            }
+        }
+        try {
+            tts = speechConfiguration.engine?.let { TextToSpeech(this, listener, it) }
+                ?: TextToSpeech(this, listener)
+        } catch (_: RuntimeException) {
+            speechInitializationFailed(token)
+            return
+        }
+        speechInitTimeoutJob?.cancel()
+        speechInitTimeoutJob = serviceScope.launch {
+            delay(SPEECH_INIT_TIMEOUT_MILLIS)
+            trackingMutex.withLock {
+                if (isCurrentTracking(statusId, expectedGeneration) && speechLifecycle.owns(token) &&
+                    speechLifecycle.state == SpeechEngineState.INITIALIZING) speechInitializationFailed(token)
+            }
+        }
+    }
+
+    private suspend fun onSpeechInitialized(token: Long) {
+        if (!speechLifecycle.owns(token)) return
+        val instance = tts ?: return
+        val listener = object : UtteranceProgressListener() {
                 override fun onStart(utteranceId: String?) = Unit
                 override fun onDone(utteranceId: String?) {
-                    handleSpeechFinished(utteranceId, successful = true)
+                    handleSpeechFinished(utteranceId, successful = true, initializationToken = token)
                 }
                 @Deprecated("Deprecated in Java")
                 override fun onError(utteranceId: String?) {
-                    handleSpeechFinished(utteranceId, successful = false)
+                    handleSpeechFinished(utteranceId, successful = false, initializationToken = token)
                 }
                 override fun onError(utteranceId: String?, errorCode: Int) {
-                    handleSpeechFinished(utteranceId, successful = false)
+                    handleSpeechFinished(utteranceId, successful = false, initializationToken = token)
                 }
                 override fun onStop(utteranceId: String?, interrupted: Boolean) {
-                    handleSpeechFinished(utteranceId, successful = false)
+                    handleSpeechFinished(utteranceId, successful = false, initializationToken = token)
                 }
-            })
+            }
+        val prepared = runCatching {
+            instance.setOnUtteranceProgressListener(listener) == TextToSpeech.SUCCESS &&
+                instance.setAudioAttributes(speechAudioAttributes()) == TextToSpeech.SUCCESS
+        }.getOrDefault(false)
+        if (!prepared) { speechInitializationFailed(token); return }
+        if (!speechLifecycle.ready(token)) return
+        speechInitTimeoutJob?.cancel()
+        isTtsInitialized = configureSpeech()
+        replayPendingAnnouncement()
+        publishRuntimeIssues()
+    }
+
+    private fun speechInitializationFailed(token: Long) {
+        if (!speechLifecycle.owns(token) || speechLifecycle.state != SpeechEngineState.INITIALIZING) return
+        speechInitTimeoutJob?.cancel()
+        val retryDelay = speechLifecycle.failed(token)
+        closeSpeechInstance()
+        speechError = if (retryDelay == null) "Sprachausgabe nicht verfügbar. Sprachengine in den Einstellungen prüfen."
+            else "Sprachausgabe startet nicht. Erneuter Versuch folgt."
+        publishRuntimeIssues()
+        val statusId = currentStatusId ?: return
+        val expectedGeneration = generation
+        speechRetryJob?.cancel()
+        if (retryDelay != null) speechRetryJob = serviceScope.launch {
+            delay(retryDelay)
             trackingMutex.withLock {
-                configureSpeech()
-                tts?.setAudioAttributes(speechAudioAttributes())
-                isTtsInitialized = true
-                pendingAnnouncement?.let { (stop, source) ->
-                    pendingAnnouncement = null
-                    if (engine?.getProgress()?.nextStopKey != stop.key) return@let
-                    // A returning fix may belong to a later visit while the
-                    // protected cursor still waits for independent evidence.
-                    if (engine?.isReacquiringLocation() == true) return@let
-                    val utterance = speakStop(stop, source)
-                    if (utterance != null) {
-                        engine?.acknowledgeAnnouncement(stop.key)
-                        currentStatusId?.let { saveProgress(it) }
-                    }
-                    if (completionStatusId != null) {
-                        completionUtteranceId = utterance?.takeIf(speechDeliveries::contains)
-                        if (completionUtteranceId == null) completionStatusId?.let { stopTracking(it) }
-                    }
-                }
+                if (isCurrentTracking(statusId, expectedGeneration) && speechConfiguration.enabled &&
+                    speechLifecycle.state == SpeechEngineState.RETRY_WAIT) startSpeechEngineAttempt()
+            }
+        }
+    }
+
+    private fun closeSpeechInstance() {
+        val instance = tts
+        tts = null
+        isTtsInitialized = false
+        runCatching { instance?.stop() }
+        runCatching { instance?.shutdown() }
+    }
+
+    private fun cancelQueuedSpeech(releaseCurrentAnnouncement: Boolean) {
+        val statusId = currentStatusId
+        val key = engine?.getProgress()?.nextStopKey
+        if (releaseCurrentAnnouncement && statusId != null && key != null &&
+            speechDeliveries.find(statusId, generation, key) != null) {
+            engine?.releaseAnnouncement(key)
+            val checkin = cachedCheckin
+            val stop = checkin?.let { toTrackingStops(cachedStops, it).firstOrNull { stop -> stop.key == key } }
+            if (stop != null) pendingAnnouncement = stop to (mutableTrackingLiveState.value?.source ?: TrackingSource.TIMETABLE)
+        }
+        runCatching { tts?.stop() }
+        speechDeliveries.clear()
+        completionUtteranceId = null
+        abandonAudioFocus()
+    }
+
+    private suspend fun replayPendingAnnouncement() {
+        if (!isTtsInitialized) return
+        pendingAnnouncement?.let { (stop, source) ->
+            pendingAnnouncement = null
+            if (engine?.getProgress()?.nextStopKey != stop.key) return@let
+            val checkin = cachedCheckin ?: return@let
+            val currentStop = toTrackingStops(cachedStops, checkin).singleOrNull { it.key == stop.key && !it.cancelled }
+                ?: return@let
+            // A returning fix may belong to a later visit while the protected
+            // cursor still waits for independent evidence.
+            if (engine?.isReacquiringLocation() == true) return@let
+            val utterance = speakStop(currentStop, source)
+            if (utterance != null) {
+                engine?.acknowledgeAnnouncement(stop.key)
+                currentStatusId?.let { saveProgress(it) }
+            }
+            if (completionStatusId != null) {
+                completionUtteranceId = utterance?.takeIf(speechDeliveries::contains)
+                if (completionUtteranceId == null) completionStatusId?.let { stopTracking(it) }
             }
         }
     }
@@ -468,6 +597,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             cachedSevMaps = emptyMap()
             cachedSevStops = emptyMap()
             engine = null
+            locationClock = TrackingLocationClock()
+            locationError = null
             gpsJourneyTimes.reset()
             latestLocation = null
             lastSavedJson = null
@@ -478,9 +609,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             tripChanges.reset(statusId)
             publishWidgetWaiting("Lade Reisedaten…")
             pendingAnnouncement = null
-            tts?.stop()
-            speechDeliveries.clear()
-            abandonAudioFocus()
+            restartSpeechEngine(false)
             // Foreground promotion already succeeded and the active status was checked.
             ensureTrackingWakeLock()
             val restoringGeneration = generation
@@ -489,6 +618,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             updateNotification(lastNotificationTitle, lastNotificationText)
         }
         ensureTrackingWakeLock()
+        if (speechConfiguration.enabled && tts == null && speechLifecycle.state != SpeechEngineState.INITIALIZING &&
+            speechLifecycle.state != SpeechEngineState.RETRY_WAIT) restartSpeechEngine(true)
         // Resuming the Activity during the final utterance must not restart GPS/polling.
         if (completionStatusId != null) return
         engine?.setGpsEnabled(gpsPreferenceEnabled)
@@ -516,8 +647,10 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                 while (isActive && generation == expectedGeneration && currentStatusId == statusId) {
                     trackingMutex.withLock {
                         if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null) return@withLock
-                        if (!hasPreciseLocation() && callback != null) {
+                        if ((!hasPreciseLocation() || !locationServicesEnabled()) && (callback != null || locationRetryJob?.isActive == true)) {
                             gpsRequestedByActivity = false
+                            locationError = if (!hasPreciseLocation()) "Präziser Standort nicht freigegeben. Fahrplanmodus."
+                                else "Ortung ausgeschaltet. Fahrplanmodus."
                             engine?.invalidateLocation()
                             disableLocationUpdates()
                             if (!promoteToForeground(false)) {
@@ -527,6 +660,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                         }
                         revalidateSevStops(System.currentTimeMillis())
                         syncTransitRoutes(System.currentTimeMillis())
+                        latestLocation?.let(::observeLocation)
                         engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
                     }
                     delay(TICK_INTERVAL_MILLIS)
@@ -646,8 +780,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             deliverTripChanges(relevantChanges, statusId, expectedGeneration)
             if (!isCurrentTracking(statusId, expectedGeneration)) return@withLock
             currentEngine.setGpsEnabled(gpsPreferenceEnabled)
+            latestLocation?.let(::observeLocation)
             val update = latestLocation?.takeIf { isFreshLocation(it) }?.let {
-                currentEngine.onLocation(toFix(it), System.currentTimeMillis())
+                toFix(it)?.let { fix -> currentEngine.onLocation(fix, System.currentTimeMillis()) }
             } ?: currentEngine.onTimetable(System.currentTimeMillis())
             applyUpdate(update, statusId, expectedGeneration)
             scheduleSevEnrichment(statusId, expectedGeneration, checkin, stops)
@@ -912,29 +1047,45 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
     private fun hasPreciseLocation(): Boolean =
         ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
 
+    private fun locationServicesEnabled(): Boolean = runCatching {
+        val manager = getSystemService(Context.LOCATION_SERVICE) as LocationManager
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) manager.isLocationEnabled
+        else manager.isProviderEnabled(LocationManager.GPS_PROVIDER) || manager.isProviderEnabled(LocationManager.NETWORK_PROVIDER)
+    }.getOrDefault(false)
+
     private fun isFreshLocation(location: Location): Boolean {
         val ageMillis = (SystemClock.elapsedRealtimeNanos() - location.elapsedRealtimeNanos) / 1_000_000L
         return ageMillis in 0..StationTrackingEngine.MAX_FIX_AGE_MILLIS && location.hasAccuracy() &&
             location.accuracy.isFinite() && location.accuracy in 0f..StationTrackingEngine.MAX_ACCURACY_METERS.toFloat()
     }
 
-    private fun toFix(location: Location): LocationFix = trackingLocationFix(
-        location.latitude,
-        location.longitude,
-        location.accuracy.toDouble(),
-        location.time,
-        location.hasSpeed(),
-        location.speed.toDouble()
-    )
+    private fun observeLocation(location: Location): TrackingLocationObservation {
+        val observation = locationClock.observe(location.latitude, location.longitude,
+            if (location.hasAccuracy()) location.accuracy.toDouble() else Double.POSITIVE_INFINITY,
+            location.elapsedRealtimeNanos, SystemClock.elapsedRealtimeNanos(), System.currentTimeMillis(),
+            location.hasSpeed(), location.speed.toDouble())
+        if (observation.clockChanged) {
+            latestLocation = null
+            engine?.resetLocationClock()
+            gpsJourneyTimes.reset()
+        }
+        return observation
+    }
+
+    private fun toFix(location: Location): LocationFix? = observeLocation(location).fix
 
     @SuppressLint("MissingPermission")
-    private fun requestLocationUpdates(intervalMillis: Long) {
-        if (!gpsRequestedByActivity || !gpsPreferenceEnabled || !hasPreciseLocation() || stopping || currentStatusId == null) {
+    private fun requestLocationUpdates(intervalMillis: Long, retryOwner: Long? = null) {
+        if (!gpsRequestedByActivity || !gpsPreferenceEnabled || !hasPreciseLocation() || !locationServicesEnabled() ||
+            stopping || currentStatusId == null || completionStatusId != null) {
             disableLocationUpdates()
             return
         }
         if (callback != null && locationIntervalMillis == intervalMillis) return
-        disableLocationUpdates(clearLocation = false)
+        if (retryOwner != null && retryOwner != locationRegistrationOwner) return
+        if (retryOwner == null && locationRetryJob?.isActive == true) return
+        val registrationOwner = retryOwner ?: (++locationRegistrationOwner).also { locationRetries.begin(it) }
+        disableLocationUpdates(clearLocation = false, cancelRetry = false)
         locationIntervalMillis = intervalMillis
         val callbackGeneration = generation
         val callbackStatusId = currentStatusId ?: return
@@ -947,22 +1098,33 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
                         if (callback !== emittingCallback || !isCurrentTracking(callbackStatusId, callbackGeneration) ||
                             completionStatusId != null || !gpsRequestedByActivity || !gpsPreferenceEnabled
                         ) return@withLock
-                        if (!hasPreciseLocation()) {
+                        if (!hasPreciseLocation() || !locationServicesEnabled()) {
                             gpsRequestedByActivity = false
+                            locationError = if (!hasPreciseLocation()) "Präziser Standort nicht freigegeben. Fahrplanmodus."
+                                else "Ortung ausgeschaltet. Fahrplanmodus."
                             engine?.invalidateLocation()
                             disableLocationUpdates()
                             if (!promoteToForeground(false)) finishService(callbackStatusId)
+                            publishRuntimeIssues()
                             return@withLock
                         }
                         var nextInterval = locationIntervalMillis
                         for (location in locations) {
                             if (!isCurrentTracking(callbackStatusId, callbackGeneration) || completionStatusId != null) break
-                            if (!isFreshLocation(location)) continue
+                            val observation = observeLocation(location)
+                            if (!observation.isNew) continue
+                            val fix = observation.fix ?: continue
+                            if (!isFreshLocation(location)) {
+                                latestLocation = null
+                                gpsJourneyTimes.invalidateLocation()
+                                continue
+                            }
+                            locationError = null
                             latestLocation = location
                             revalidateSevStops(System.currentTimeMillis())
                             syncTransitRoutes(System.currentTimeMillis())
                             val currentEngine = engine ?: continue
-                            val update = currentEngine.onLocation(toFix(location), System.currentTimeMillis())
+                            val update = currentEngine.onLocation(fix, System.currentTimeMillis())
                             applyUpdate(update, callbackStatusId, callbackGeneration)
                             val stop = update.stop
                             val distance = if (stop?.latitude != null && stop.longitude != null) {
@@ -987,17 +1149,65 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             .build()
         try {
             locationClient.requestLocationUpdates(request, nextCallback, Looper.getMainLooper())
-                .addOnFailureListener {
-                    if (callback === nextCallback) disableLocationUpdates()
+                .addOnSuccessListener {
+                    serviceScope.launch { trackingMutex.withLock {
+                        if (callback === nextCallback && locationRegistrationOwner == registrationOwner &&
+                            isCurrentTracking(callbackStatusId, callbackGeneration)) {
+                            locationRetries.success(registrationOwner)
+                            locationError = null
+                            publishRuntimeIssues()
+                        }
+                    } }
                 }
-        } catch (_: SecurityException) {
-            disableLocationUpdates()
-        } catch (_: RuntimeException) {
-            disableLocationUpdates()
+                .addOnFailureListener { error ->
+                    onLocationRegistrationFailed(nextCallback, registrationOwner, callbackStatusId, callbackGeneration, intervalMillis, error)
+                }
+        } catch (error: RuntimeException) {
+            onLocationRegistrationFailed(nextCallback, registrationOwner, callbackStatusId, callbackGeneration, intervalMillis, error)
         }
     }
 
-    private fun disableLocationUpdates(clearLocation: Boolean = true) {
+    private fun onLocationRegistrationFailed(listener: LocationCallback, owner: Long, statusId: Int,
+                                             expectedGeneration: Long, intervalMillis: Long, error: Exception) {
+        serviceScope.launch {
+            trackingMutex.withLock {
+                if (callback !== listener || owner != locationRegistrationOwner ||
+                    !isCurrentTracking(statusId, expectedGeneration)) return@withLock
+                disableLocationUpdates(cancelRetry = false)
+                engine?.invalidateLocation()
+                if (error is SecurityException || !hasPreciseLocation() || !locationServicesEnabled() ||
+                    !gpsRequestedByActivity || !gpsPreferenceEnabled || completionStatusId != null) {
+                    gpsRequestedByActivity = false
+                    disableLocationUpdates()
+                    locationError = "GPS-Zugriff nicht verfügbar. Standortfreigabe und Ortung prüfen."
+                    if (!promoteToForeground(false)) finishService(statusId)
+                } else {
+                    val retryDelay = locationRetries.failure(owner)
+                    locationError = if (retryDelay == null) "GPS-Updates nicht verfügbar. App öffnen, um erneut zu starten."
+                        else "GPS-Updates starten nicht. Erneuter Versuch folgt."
+                    if (retryDelay != null) locationRetryJob = serviceScope.launch {
+                        delay(retryDelay)
+                        trackingMutex.withLock {
+                            locationRetryJob = null
+                            if (owner == locationRegistrationOwner && isCurrentTracking(statusId, expectedGeneration)) {
+                                requestLocationUpdates(intervalMillis, owner)
+                            }
+                        }
+                    }
+                }
+                engine?.onTimetable(System.currentTimeMillis())?.let { applyUpdate(it, statusId, expectedGeneration) }
+                publishRuntimeIssues()
+            }
+        }
+    }
+
+    private fun disableLocationUpdates(clearLocation: Boolean = true, cancelRetry: Boolean = true) {
+        if (cancelRetry) {
+            locationRetryJob?.cancel()
+            locationRetryJob = null
+            locationRetries.stop()
+            locationRegistrationOwner++
+        }
         val oldCallback = callback
         callback = null
         locationIntervalMillis = 0L
@@ -1050,7 +1260,9 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
             sevStops = cachedSevStops,
             gpsTimeUnavailableReason = gpsJourneyTimes.unavailableReason(),
             sessionRevision = session.revision,
-            gpsGeometrySource = gpsJourneyTimes.geometrySource() ?: engine?.geometrySource()
+            gpsGeometrySource = gpsJourneyTimes.geometrySource() ?: engine?.geometrySource(),
+            locationError = locationError,
+            speechError = speechError
         )
         mutableTrackingLiveState.value = liveState
         lastProgressModel = TripProgressModel.from(cachedStops, liveState, destinationName,
@@ -1130,11 +1342,27 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private suspend fun configureSpeech() {
-        val language = prefs.getTtsLanguage()?.let(Locale::forLanguageTag) ?: Locale.GERMAN
-        tts?.setLanguage(language)
-        prefs.getTtsVoice()?.let { voiceName ->
-            tts?.voices?.firstOrNull { it.name == voiceName }?.let { tts?.voice = it }
+    private fun configureSpeech(): Boolean {
+        val instance = tts ?: return false
+        return try {
+            val language = speechConfiguration.language?.let(Locale::forLanguageTag) ?: Locale.GERMAN
+            if (instance.setLanguage(language) < TextToSpeech.LANG_AVAILABLE) {
+                speechError = "Gewählte Sprache fehlt in der Sprachengine. Einstellungen prüfen."
+                false
+            } else {
+                val requestedVoice = speechConfiguration.voice
+                val voice = requestedVoice?.let { name -> instance.voices?.firstOrNull { it.name == name } }
+                if (requestedVoice != null && (voice == null || instance.setVoice(voice) != TextToSpeech.SUCCESS)) {
+                    speechError = "Gewählte Stimme ist in dieser Sprachengine nicht verfügbar. Einstellungen prüfen."
+                    false
+                } else {
+                    speechError = null
+                    true
+                }
+            }
+        } catch (_: RuntimeException) {
+            speechError = "Sprachengine antwortet nicht. Einstellungen prüfen."
+            false
         }
     }
 
@@ -1142,7 +1370,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         val statusId = currentStatusId ?: return null
         val expectedGeneration = generation
         speechDeliveries.find(statusId, expectedGeneration, stop.key)?.let { return it.utteranceId }
-        configureSpeech()
+        if (!configureSpeech()) { publishRuntimeIssues(); return null }
         val session = currentAuthSession ?: return null
         if (!prefs.getTtsEnabled() || prefs.getAuthSession() != session ||
             !isCurrentTracking(statusId, expectedGeneration)) return null
@@ -1214,7 +1442,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         if (!isTtsInitialized || !prefs.getTtsEnabled() || !prefs.getTripChangeSpeechEnabled() ||
             !isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null
         ) return
-        configureSpeech()
+        if (!configureSpeech()) { publishRuntimeIssues(); return }
         if (prefs.getAuthSession() != session || !isCurrentTracking(statusId, expectedGeneration) || !requestAudioFocus()) return
         val eventKey = changes.joinToString("|") { it.key }
         val delivery = speechDeliveries.begin(statusId, expectedGeneration, eventKey, SpeechDeliveryKind.TRIP_CHANGE)
@@ -1224,14 +1452,17 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
     }
 
-    private fun handleSpeechFinished(utteranceId: String?, successful: Boolean) {
+    private fun handleSpeechFinished(utteranceId: String?, successful: Boolean, initializationToken: Long) {
         if (utteranceId == null) return
         serviceScope.launch {
             trackingMutex.withLock {
+                if (!speechLifecycle.owns(initializationToken)) return@withLock
                 val delivery = speechDeliveries.finish(utteranceId) ?: return@withLock
                 // QUEUE_ADD entries share the focus until the last entry has finished.
                 if (speechDeliveries.isEmpty) abandonAudioFocus()
                 if (!isCurrentTracking(delivery.statusId, delivery.generation)) return@withLock
+                speechError = if (successful) null else "Ansage unterbrochen oder fehlgeschlagen. Sprachausgabe prüfen."
+                publishRuntimeIssues()
                 if (!successful && delivery.kind == SpeechDeliveryKind.STOP && engine?.getProgress()?.nextStopKey == delivery.stopKey) {
                     engine?.releaseAnnouncement(delivery.stopKey)
                     saveProgress(delivery.statusId)
@@ -1300,8 +1531,19 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         lastNotificationTitle = title
         lastNotificationText = content
         runCatching {
-            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, createNotification(title, content))
+            (getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager).notify(NOTIFICATION_ID, createNotification(title, contentWithRuntimeIssues(content)))
         }
+    }
+
+    private fun contentWithRuntimeIssues(content: String): String =
+        (listOf(content) + listOfNotNull(locationError, speechError)).joinToString(" • ")
+
+    private fun publishRuntimeIssues() {
+        val statusId = currentStatusId ?: return
+        if (!isCurrentTracking(statusId, generation)) return
+        mutableTrackingLiveState.value?.takeIf { it.statusId == statusId && it.sessionRevision == currentAuthSession?.revision }
+            ?.let { mutableTrackingLiveState.value = it.copy(locationError = locationError, speechError = speechError) }
+        updateNotification(lastNotificationTitle, lastNotificationText)
     }
 
     private fun createNotification(title: String, content: String, model: TripProgressModel? = lastProgressModel,
@@ -1393,9 +1635,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         }
         disableLocationUpdates()
         pendingAnnouncement = null
-        tts?.stop()
-        speechDeliveries.clear()
-        abandonAudioFocus()
+        restartSpeechEngine(false)
+        locationError = null
         currentStatusId = null
         currentAuthSession = null
         lastProgressModel = null
@@ -1416,10 +1657,8 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         publishWidgetWaiting()
         abandonAudioFocus()
         serviceJob.cancel()
-        tts?.stop()
-        speechDeliveries.clear()
+        restartSpeechEngine(false)
         mutableTrackingLiveState.value = null
-        tts?.shutdown()
         super.onDestroy()
     }
 
@@ -1477,6 +1716,7 @@ class TripTrackingService : Service(), TextToSpeech.OnInitListener {
         private const val NEAR_INTERVAL_MILLIS = 3_000L
         private const val FAR_INTERVAL_MILLIS = 12_000L
         private const val FINAL_SPEECH_TIMEOUT_MILLIS = 15_000L
+        private const val SPEECH_INIT_TIMEOUT_MILLIS = 10_000L
         const val EXTRA_STATUS_ID = "extra_status_id"
         const val EXTRA_ENABLE_GPS = "extra_enable_gps"
         const val EXTRA_AUTH_SESSION_REVISION = "extra_auth_session_revision"

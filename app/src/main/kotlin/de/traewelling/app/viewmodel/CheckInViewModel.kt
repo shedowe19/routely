@@ -40,6 +40,7 @@ data class CheckInUiState(
     val manualArrival: String = "",
     // Result
     val checkInResult: CheckInResult? = null,
+    val completionWarning: String? = null,
     val resolvedOriginStop: StopStation? = null,
     val rideRecognitionEnabled: Boolean = false,
     val rideRecognition: RideRecognitionState = RideRecognitionState(),
@@ -347,61 +348,48 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                 ?: state.selectedTripDetails?.stopovers?.let { stops ->
                     stops.getOrNull(resolveCheckInOriginIndex(stops, origin, departure))
                 }
-            val startStationId = originStop?.stationId ?: origin.id
-            val destinationStationId = destination.stationId
-            val departureTime = state.manualDeparture.ifBlank {
-                originStop?.departurePlanned ?: originStop?.effectiveDeparture
-                    ?: departure.plannedWhen ?: departure.realWhen ?: ""
-            }
-            val arrivalTime = state.manualArrival.ifBlank {
-                destination.arrivalPlanned ?: destination.effectiveArrival ?: ""
-            }
-            if (startStationId == null || destinationStationId == null) {
-                _uiState.update { it.copy(isLoading = false, error = "Start- oder Zielbahnhof hat keine gültige ID.") }
+            val submission = try {
+                buildCheckInSubmission(state, originStop)
+            } catch (invalid: IllegalArgumentException) {
+                _uiState.update { it.copy(isLoading = false, error = invalid.message) }
                 return@launch
             }
-            if (departureTime.isBlank() || arrivalTime.isBlank()) {
-                _uiState.update { it.copy(isLoading = false, error = "Abfahrts- oder Ankunftszeit fehlt.") }
-                return@launch
-            }
-
-            val request = CheckInRequest(
-                tripId               = departure.tripId,
-                lineName             = departure.line?.name ?: "",
-                startStationId       = startStationId,
-                destinationStationId = destinationStationId,
-                departure            = departureTime,
-                arrival              = arrivalTime,
-                body                 = state.statusBody.ifBlank { null },
-                business             = state.travelReason.apiValue
+            submitCheckIn(
+                submission = submission,
+                create = { repo.checkIn(it, expectedSession = session) },
+                onCreated = { created ->
+                    ensureActive()
+                    if (requestGeneration != selectionGeneration)
+                        throw CancellationException("Check-in selection changed")
+                    // Once POST succeeded, no later correction/storage failure may offer another POST.
+                    _uiState.update { it.copy(checkInResult = created, step = CheckInStep.SUCCESS, isLoading = true) }
+                    if (prefs.getAuthSession() != session)
+                        throw CancellationException("Session changed after check-in")
+                    if (created?.status?.id != null && !prefs.saveActiveStatusIdIfMatches(session, created.status.id))
+                        throw CancellationException("Session changed after check-in")
+                },
+                correctTimes = { statusId, request -> repo.updateStatus(statusId, request, expectedSession = session) }
             )
-
-            repo.checkIn(request)
-                .onSuccess { result ->
+                .onSuccess { completion ->
                     ensureActive()
-                    if (requestGeneration != selectionGeneration) return@onSuccess
-                    val statusId = result?.status?.id
-                    if (statusId == null || statusId <= 0) {
-                        _uiState.update { it.copy(isLoading = false,
-                            error = "Die Check-in-Antwort enthält keine gültige Fahrt. Bitte aktualisiere den Feed, bevor du erneut eincheckst.") }
-                        return@onSuccess
-                    }
-                    // A response from a previous login may never activate a ride in a new session.
-                    if (!prefs.saveActiveStatusIdIfMatches(session, statusId)) return@onSuccess
-                    ensureActive()
-                    if (requestGeneration == selectionGeneration) {
-                        _uiState.update { it.copy(isLoading = false, checkInResult = result, step = CheckInStep.SUCCESS) }
-                    }
+                    if (requestGeneration != selectionGeneration || prefs.getAuthSession() != session) return@onSuccess
+                    _uiState.update { it.copy(isLoading = false, checkInResult = completion.result,
+                        completionWarning = completion.warning, step = CheckInStep.SUCCESS) }
                 }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
                     if (requestGeneration != selectionGeneration) return@onFailure
-                    _uiState.update { it.copy(isLoading = false, error = "Check-in fehlgeschlagen: ${e.message}") }
+                    _uiState.update {
+                        if (it.step == CheckInStep.SUCCESS) it.copy(isLoading = false,
+                            completionWarning = "Der Check-in wurde angenommen. Weitere Schritte sind fehlgeschlagen; prüfe die Fahrt im Profil. Ein erneuter Check-in ist nicht nötig.")
+                        else it.copy(isLoading = false, error = "Check-in fehlgeschlagen: ${e.message}")
+                    }
                 }
         }
     }
 
     fun reset() {
+        if (_uiState.value.step == CheckInStep.SUCCESS && _uiState.value.isLoading) return
         selectionGeneration++
         searchJob?.cancel()
         selectionJob?.cancel()

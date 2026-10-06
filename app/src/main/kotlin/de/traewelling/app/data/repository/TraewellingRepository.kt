@@ -11,6 +11,9 @@ import de.traewelling.app.data.model.*
 import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
@@ -19,8 +22,13 @@ import java.security.MessageDigest
 class TraewellingRepository internal constructor(
     private val statusDao: StatusDao,
     private val sessionProvider: suspend () -> AuthSession,
-    private val apiFactory: (AuthSession) -> TraewellingApiService
+    private val apiFactory: (AuthSession) -> TraewellingApiService,
+    private val mutations: StatusMutationStore
 ) {
+    internal constructor(statusDao: StatusDao, sessionProvider: suspend () -> AuthSession,
+        apiFactory: (AuthSession) -> TraewellingApiService) :
+        this(statusDao, sessionProvider, apiFactory, StatusMutationEvents.store)
+
     constructor(context: Context, prefs: PreferencesManager) : this(
         AppDatabase.getDatabase(context).statusDao(),
         prefs::getAuthSession,
@@ -51,17 +59,27 @@ class TraewellingRepository internal constructor(
     ): Result<StatusListResponse> = apiResult {
         val session = authenticatedSession()
         val type = cacheType(kind, session)
+        val accountKey = cacheType("account", session)
+        val cacheRevision = mutations.cacheMutex.withLock { mutations.revisionFor(accountKey) }
+        suspend fun requireUnchangedFeed() {
+            requireCurrentSession(session)
+            if (mutations.revisionFor(accountKey) != cacheRevision)
+                throw CancellationException("Status changed during feed request")
+        }
         try {
             val response = fetch(apiFactory(session))
             if (!response.isSuccessful) throw HttpException(response)
             val body = response.body() ?: error("Leere Antwort (" + response.code() + ")")
             val statuses = body.data ?: error("Fehlende Statusliste")
-            requireCurrentSession(session)
-            if (page == 1) {
-                statusDao.replaceStatuses(type, statuses.mapIndexed { position, status ->
-                    StatusEntity(status.id, gson.toJson(status), type, position)
-                })
-                requireCurrentSession(session)
+            mutations.cacheMutex.withLock {
+                requireUnchangedFeed()
+                if (page == 1) {
+                    statusDao.replaceStatuses(type, statuses.mapIndexed { position, status ->
+                        StatusEntity(status.id, gson.toJson(status), type, position)
+                    })
+                    requireUnchangedFeed()
+                    mutations.freshCacheWritten(type)
+                }
             }
             body
         } catch (cancelled: CancellationException) {
@@ -71,17 +89,20 @@ class TraewellingRepository internal constructor(
             val temporaryFailure = failure is IOException || failure is HttpException &&
                 (failure.code() == 408 || failure.code() == 429 || failure.code() >= 500)
             if (page != 1 || !temporaryFailure) throw failure
-            requireCurrentSession(session)
-            val cached = statusDao.getStatuses(type)
-            requireCurrentSession(session)
-            if (cached.isEmpty()) throw failure
-            val statuses = cached.map { gson.fromJson(it.statusJson, Status::class.java) }
-            StatusListResponse(statuses, links = null, meta = null)
+            mutations.cacheMutex.withLock {
+                requireUnchangedFeed()
+                if (!mutations.canReadCache(type)) throw failure
+                val cached = statusDao.getStatuses(type)
+                requireUnchangedFeed()
+                if (cached.isEmpty()) throw failure
+                val statuses = cached.map { gson.fromJson(it.statusJson, Status::class.java) }
+                StatusListResponse(statuses, links = null, meta = null)
+            }
         }
     }
 
     private suspend fun requireCurrentSession(expected: AuthSession) {
-        if (sessionProvider() != expected) throw CancellationException("Session changed during feed request")
+        if (sessionProvider() != expected) throw CancellationException("Session changed during request")
     }
 
     /** Credential digest keeps private snapshots separate without persisting the bearer token. */
@@ -106,14 +127,42 @@ class TraewellingRepository internal constructor(
     }
 
     suspend fun deleteStatus(id: Int): Result<Unit> = apiResult {
-        val r = api().deleteStatus(id)
+        val session = authenticatedSession()
+        val r = apiFactory(session).deleteStatus(id)
         if (!r.isSuccessful) error("Löschen fehlgeschlagen (${r.code()})")
+        completeStatusMutation(session, StatusMutation.Deleted(session.revision, id))
     }
     
-    suspend fun updateStatus(id: Int, request: UpdateStatusRequest): Result<Status> = apiResult {
-        val r = api().updateStatus(id, request)
-        r.body()?.data ?: error("Änderung fehlgeschlagen (${r.code()})")
+    suspend fun updateStatus(id: Int, request: UpdateStatusRequest, expectedSession: AuthSession? = null): Result<Status> = apiResult {
+        val session = authenticatedSession()
+        if (expectedSession != null && session != expectedSession)
+            throw CancellationException("Session changed before status correction")
+        val r = apiFactory(session).updateStatus(id, request)
+        if (!r.isSuccessful) error("Änderung fehlgeschlagen (${r.code()})")
+        val status = r.body()?.data?.takeIf { it.id == id }
+        if (status == null) {
+            completeStatusMutation(session, StatusMutation.Invalidated(session.revision, id))
+            error("Änderung wurde angenommen, aber die Antwort ist unvollständig. Bitte aktualisiere die Fahrt (${r.code()}).")
+        }
+        completeStatusMutation(session, StatusMutation.Updated(session.revision, status))
+        status
     }
+
+    private suspend fun completeStatusMutation(session: AuthSession, event: StatusMutation) =
+        withContext(NonCancellable) {
+            mutations.cacheMutex.withLock {
+                val types = listOf(cacheType("dashboard", session), cacheType("global", session))
+                // Even a late committed response invalidates its original credential partition.
+                // A new revision may reuse those credentials, but may not revive this old cache.
+                mutations.invalidate(cacheType("account", session), types)
+                for (type in types) {
+                    // The server already committed. A storage error must not turn that into a retryable mutation.
+                    try { statusDao.clearStatuses(type) } catch (_: Exception) { /* Invalid cache remains blocked. */ }
+                }
+                requireCurrentSession(session)
+                mutations.publish(event)
+            }
+        }
 
     // ─── Station Search ───────────────────────────────────────────────────────
 
@@ -152,40 +201,7 @@ class TraewellingRepository internal constructor(
             }
         }
 
-        // Custom deduplication to handle variations like "Kaarster See" and "Kaarster See, Kaarst"
-        val distinctStations = mutableListOf<TrainStation>()
-        for (st in sortedData) {
-            val isDuplicate = distinctStations.any { existing ->
-                if (st.latitude != null && st.longitude != null && existing.latitude != null && existing.longitude != null) {
-                    val dLat = st.latitude - existing.latitude
-                    val dLon = (st.longitude - existing.longitude) * Math.cos(Math.toRadians(existing.latitude))
-                    val distSq = dLat * dLat + dLon * dLon
-
-                    // Roughly 200m is about 0.0018 degrees. 0.0018^2 = 0.00000324
-                    val isClose = distSq < 0.0000035
-
-                    val name1 = st.name?.lowercase() ?: ""
-                    val name2 = existing.name?.lowercase() ?: ""
-
-                    val name1NoCity = name1.substringBefore(",").trim()
-                    val name2NoCity = name2.substringBefore(",").trim()
-
-                    val tokens1 = name1NoCity.split(Regex("[\\s\\.-]+")).filter { it.length > 2 }.toSet()
-                    val tokens2 = name2NoCity.split(Regex("[\\s\\.-]+")).filter { it.length > 2 }.toSet()
-
-                    val hasOverlap = tokens1.intersect(tokens2).isNotEmpty() || name1.contains(name2NoCity) || name2.contains(name1NoCity)
-
-                    isClose && hasOverlap
-                } else {
-                    st.name == existing.name
-                }
-            }
-            if (!isDuplicate) {
-                distinctStations.add(st)
-            }
-        }
-
-        distinctStations
+        deduplicateNearbyStations(sortedData)
     }
 
     // ─── Check-in ─────────────────────────────────────────────────────────────
@@ -206,10 +222,14 @@ class TraewellingRepository internal constructor(
         data.copy(stopovers = data.stopovers?.deduplicate())
     }
 
-    suspend fun checkIn(request: CheckInRequest): Result<CheckInResult?> = apiResult {
-        val r = api().checkIn(request)
+    suspend fun checkIn(request: CheckInRequest, expectedSession: AuthSession? = null): Result<CheckInResult?> = apiResult {
+        val session = authenticatedSession()
+        if (expectedSession != null && session != expectedSession)
+            throw CancellationException("Session changed before check-in")
+        val r = apiFactory(session).checkIn(request)
+        requireCurrentSession(session)
         if (r.isSuccessful) {
-            r.body()?.data ?: error("Leere Check-in-Antwort (${r.code()})")
+            r.body()?.data?.takeIf { (it.status?.id ?: 0) > 0 } ?: throw CheckInAcceptedException()
         } else if (r.code() == 409) {
             val conflicts = apiResult {
                 gson.fromJson(r.errorBody()?.string(), CheckInConflictResponse::class.java)

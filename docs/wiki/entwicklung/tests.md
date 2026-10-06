@@ -9,7 +9,7 @@ Dokumentiert, wie die App getestet wird.
 - **Unit-Tests ausführen**: `./gradlew :app:testDebugUnitTest`.
 - **API-Regressionen und Debug-Build zusammen prüfen**: `./gradlew :app:testDebugUnitTest :app:assembleDebug --stacktrace`.
 - **Vollständiger CI-Prüfumfang einschließlich Debug-Lint und Release**: `./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --stacktrace`.
-- **Coroutines testen**: Die aktuellen Auth-/Repository-Regressionen verwenden `runBlocking` und kontrollierte Fakes beziehungsweise `CompletableDeferred`. `kotlinx-coroutines-test`, `TestScope` und `runTest` sind noch nicht eingerichtet; es gibt damit keinen virtuellen ViewModel-Zeitplan-Test.
+- **Coroutines testen**: Auth-/Repository-Regressionen verwenden `runBlocking` und kontrollierte Fakes beziehungsweise `CompletableDeferred`. Für Meldungs- und Feedcontroller ist zusätzlich `kotlinx-coroutines-test` mit `runTest` und kontrolliertem Test-Dispatcher eingerichtet; verzögerte Antworten und virtuelle Zeit prüfen die Requestreihenfolge ohne sleeps.
 - Der Unit-Test `TraewellingApiServiceTest` prüft den Retrofit-Vertrag für den Abfahrts-Endpunkt, damit die Route nicht versehentlich wieder unter `/api/v1/trains/station/...` geführt wird.
 - `ApiCompatibilityTest` lädt Fixtures aus `app/src/test/resources/traewelling/`. Die Antworten lassen auslaufende Kompatibilitätsfelder bewusst weg und unterscheiden Stopover-ID und Station-ID.
 - Die Modelltests prüfen verschachtelte Stationen, optionale Kennungen, IBNR/RIL100, numerische und UUID-Operator-IDs, echte und geplante Zeiten, berechnete Abfahrtsverspätungen, Stopover-Erkennung bei wiederholten Stationsbesuchen, Deduplizierung einschließlich verschiedener Stopover-UUIDs und die neuen Check-in-Erfolgs- und Konfliktantworten.
@@ -227,9 +227,31 @@ TODO: Auf dem Gerät Kurven, parallele Gleise, Rundfahrten, Umleitungen, Tunnel 
 
 Der eigene [CI-Lauf 37523081347](https://github.com/shedowe19/routely/actions/runs/37523081347) von Main `9415e290309bb3e3d2e108e6ba9ca42f4fe03243` ist ebenfalls erfolgreich: 571 Tests in 37 Klassen, 0 Fehlschläge/Fehler/Skipped, Debug-/unsignierter Release-Build sowie vollständiges Debug-Lint mit 0 Fehlern und 53 Warnungen. Dieser Commit unterscheidet sich vom oben geprüften produktiven `028ffe32…` ausschließlich durch die vorherige Testnachweisdokumentation.
 
-Der anschließende [Review mit sechs unabhängigen Perspektiven](./main-review-2026-10-06.md) fand 16 priorisierte offene Befunde. Zwei zusätzliche temporäre Testklassen gegen unveränderten Produktivcode bestätigten drei fehlende Schutzinvarianten: Zielansage und Fahrtabschluss nach einem unplausiblen kurzen GPS-Sprung sowie Rücksetzen eines inzwischen serverseitig geänderten Ziels bei reinem Textedit. Alle drei Assertions schlugen wie vorhergesagt fehl; es gab keine Compilefehler. Der gezielte Gradle-Lauf dauerte 17 Sekunden. Diese reproduzierten Lücken sind nicht von der grünen bestehenden Suite abgedeckt. Die temporären Quelltests wurden anschließend aus dem Repository entfernt; keine Korrektur und keine dauerhafte neue Regression wurden hier veröffentlicht.
+Der anschließende [Review mit sechs unabhängigen Perspektiven](./main-review-2026-10-06.md) fand ursprünglich 16 priorisierte Befunde. Zwei zusätzliche temporäre Testklassen gegen unveränderten Produktivcode bestätigten drei fehlende Schutzinvarianten: Zielansage und Fahrtabschluss nach einem unplausiblen kurzen GPS-Sprung sowie Rücksetzen eines inzwischen serverseitig geänderten Ziels bei reinem Textedit. Alle drei Assertions schlugen wie vorhergesagt fehl; es gab keine Compilefehler. Der gezielte Gradle-Lauf dauerte 17 Sekunden. Diese reproduzierten Lücken sind nicht von der grünen bestehenden Suite abgedeckt. Die temporären Quelltests wurden anschließend aus dem Repository entfernt; der ursprüngliche reine Review veröffentlichte noch keine Codekorrektur. Die nachfolgende Umsetzung ergänzt dauerhafte Regressionen.
 
-TODO: Die bestätigten Lücken mit ihren Fehlerkorrekturen dauerhaft absichern; insbesondere ViewModel-Request-Reihenfolgen, FLP-/TTS-Wiederanlauf und UI-Ereignisfelder benötigen Tests über die bisherigen reinen Helfer hinaus. Geräte-GPS, Samsung/Doze und tatsächliche Audiozustellung bleiben ungeprüft.
+Die bestätigten Lücken sind inzwischen mit den [Befundkorrekturen](./main-review-2026-10-06.md) dauerhaft abgesichert. Geräte-GPS, Samsung/Doze und tatsächliche Audiozustellung bleiben ungeprüft.
+
+## Vollständige Befundkorrekturen vom 06.10.2026
+
+Die 16 Befunde sind im [Main-Review mit Korrekturtabelle](./main-review-2026-10-06.md) als umgesetzt dokumentiert. Sechs Implementierer und gegenseitige Quellprüfungen decken GPS/Android-Laufzeit, Daten/UI, Auth/Backup und Release ab. Produktive Bibliothekspins bleiben unverändert; `kotlinx-coroutines-test` ergänzt ausschließlich die kontrollierbaren Test-Gateways.
+
+87 zusätzliche Android-Regressionen gegenüber dem zuvor geprüften Stand sichern insbesondere diese Verträge:
+
+- `StationTrackingJumpTest` (6) und vier zusätzliche Clockfälle: A → unplausibles B → A, kein falscher Zielabschluss/Ansageverbrauch, plausible schnelle Fahrt, Uhrsprung und Replay ohne neue Beobachtung.
+- `LifecycleRetryBudgetTest` und `SpeechInitializationLifecycleTest` (zusammen 10): begrenzte Backoffs, Besitzerwechsel, Init-/Retryzustand und verspätete Enginecallbacks.
+- `StatusEditRequestTest` (4 zusätzlich), `NotificationControllerTest` (7), `FeedControllerTest` (7), `DeletedStatusCompletionTest` (4): Editor-Anfangsabsicht, bestätigte Lesemarkierungen, geordnete Countantworten, Mutationsereignisse, späte GETs und einmaliger erfolgreicher DELETE-Abschluss trotz lokalem Fehler. Controller verwenden virtuelle Coroutine-Zeit und verzögerte Antworten.
+- `NearbyStationIdentityTest` (6), `DepartureTimePresentationTest` (6), `CheckInSubmissionTest` (12), `StatusMutationRepositoryTest` (12): nahe verschiedene IDs, Echtzeit/Verfrühung, unveränderte POST-Planmarker und nachgelagerte Istzeit-PUTs, Teilerfolg, fehlende akzeptierte Antwort sowie gleiche Credentials nach neuer Loginrevision. Zwei Repositoryinstanzen teilen sich bei der verspäteten GET-Regressionsprüfung denselben DAO-/Mutationsstore.
+- `AuthRepositoryTest` (9 zusätzlich): fehlender/blanker Refresh-Ersatz, echte Rotation, präzises invalid_grant und Erhalt bei generischen/malformed/temporären Fehlern.
+
+26 bestehende Engine-Fixfolgen wurden zeitlich plausibel gemacht, weil sie bisher große Ortswechsel innerhalb einer Sekunde enthielten. Schutzgrenzen und bestehende Assertions bleiben erhalten; lediglich die Wiederverankerung nach mehrfach verworfenen Kurzsprungausreißern benötigt nun eine echte längere Lücke und danach neue unabhängige Belege.
+
+658 Androidtests in 47 Klassen sind im frischen lokalen Lauf erfolgreich: 0 Fehlschläge, 0 Fehler, 0 übersprungen. Zusätzlich bestehen 41 deterministische Python-Releaseguardtests ohne Netzwerk- oder Releasewrites. Beide Workflows führen diese Python-Tests aus: `python3 -m unittest discover -s .github/tests -p 'test_release_guard.py'`.
+
+Der vollständige frische Lauf mit `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-build-cache` ist nach 4 Minuten 15 Sekunden erfolgreich; alle 108 ausführbaren Tasks wurden ausgeführt. Debug-Lint enthält 0 Fehler und 40 Warnungen, Release-Vital-Lint ist ebenfalls erfolgreich. Debug-APK und unsignierte Release-APK wurden gebaut. Die 189 Nicht-Wiki-Eingabedateien blieben vor/nach dem Lauf per SHA-256 identisch. Versionshinweis-Warnungen können sich je erreichbarer Maven-Metadatenquelle von den historischen CI-Warnungszahlen unterscheiden.
+
+Zwei vorherige lokale APK-Versuche fanden eine doppelte `androidx.activity.compose.R` in unterschiedlich alten Dexarchiven; auch der erste Gradle-Clean-Lauf behielt alte Zwischenartefakte. Nach vollständig entferntem generiertem `app/build` und deaktiviertem Buildcache wurden beide APKs erfolgreich frisch gebaut. Dafür wurde kein Produktivcode geändert und keine Prüfung unterdrückt. Der grüne Neuaufbau ist der lokale Buildnachweis dieser Korrektur; der ursprüngliche fehlgeschlagene Lauf wird nicht als erfolgreicher APK-Build gewertet.
+
+Die Android-Adapter sind gegengeprüft, jedoch nicht instrumentiert auf einem physischen Gerät getestet. Die Backupregelwerke wurden als XML und in beiden zusammengeführten Manifesten geprüft. Tatsächliche FLP-/TTS-Bindung, Display-aus-/Doze-/OEM-Zustellung, Backup-Restore und erster neuer signierter Release bleiben Systemprüfungen. Es wurden keine echten Kontotokens verwendet, keine schreibenden Träwelling-Livetests ausgeführt und kein signierter Release veröffentlicht.
 
 ## Authentifizierte Live-Prüfung vom 05.10.2026
 
@@ -253,7 +275,7 @@ Diese Live-Prüfung umfasst ausschließlich GET-Anfragen. Check-in-Erfolgs-/Konf
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.
-- TODO: Für gezielte ViewModel-Tests bei Bedarf `kotlinx-coroutines-test` und kontrollierte Test-Dispatcher ergänzen; die vorhandenen `runBlocking`-Helfertests ersetzen diese Prüfung nicht.
+- `kotlinx-coroutines-test` ist als Testabhängigkeit derselben Coroutines-Version ergänzt. Meldungs- und Feedcontroller verwenden `runTest`, kontrollierte Test-Dispatcher und verzögerte Antworten; keine sleeps ersetzen diese Reihenfolgeprüfungen.
 
 ## Verwandte Seiten
 

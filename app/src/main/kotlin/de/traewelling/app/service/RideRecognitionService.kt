@@ -10,7 +10,6 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.location.Location
 import android.location.LocationManager
 import android.net.Uri
 import android.os.Build
@@ -58,6 +57,8 @@ class RideRecognitionService : Service() {
     private lateinit var prefs: PreferencesManager
     private lateinit var repo: TraewellingRepository
     private val engine = RideRecognitionEngine()
+    private var locationClock = TrackingLocationClock()
+    private var observationRevision = 0L
     private val locationClient by lazy { LocationServices.getFusedLocationProviderClient(this) }
     private var callback: LocationCallback? = null
     private var pollingJob: Job? = null
@@ -210,9 +211,23 @@ class RideRecognitionService : Service() {
             override fun onLocationResult(result: LocationResult) {
                 scope.launch {
                     if (!current(callbackSession) || !isAllowed() || !current(callbackSession)) return@launch
-                    val now = System.currentTimeMillis()
                     result.locations.sortedBy { it.elapsedRealtimeNanos }.forEach { location ->
-                        engine.onLocation(location.toFix(now), now)
+                        val now = System.currentTimeMillis()
+                        val observation = locationClock.observe(
+                            location.latitude, location.longitude,
+                            if (location.hasAccuracy()) location.accuracy.toDouble() else Double.POSITIVE_INFINITY,
+                            location.elapsedRealtimeNanos, SystemClock.elapsedRealtimeNanos(), now,
+                            location.hasSpeed(), location.speed.toDouble()
+                        )
+                        if (observation.clockChanged) {
+                            ++observationRevision
+                            engine.clear()
+                            tripCache.clear()
+                            hasSearched = false
+                            searchError = null
+                            searching = false
+                        }
+                        if (observation.isNew) observation.fix?.let { engine.onLocation(it, now) }
                     }
                     updateMatches()
                 }
@@ -230,15 +245,10 @@ class RideRecognitionService : Service() {
         } catch (_: SecurityException) { false }
     }
 
-    private fun Location.toFix(now: Long): LocationFix {
-        val ageNanos = SystemClock.elapsedRealtimeNanos() - elapsedRealtimeNanos
-        val timestamp = if (elapsedRealtimeNanos > 0 && ageNanos >= 0) now - ageNanos / 1_000_000 else 0L
-        return trackingLocationFix(latitude, longitude, if (hasAccuracy()) accuracy.toDouble() else Double.POSITIVE_INFINITY,
-            timestamp, hasSpeed(), speed.toDouble())
-    }
-
     private suspend fun discover(fix: LocationFix, expected: Long) {
-        if (!current(expected) || !isAllowed()) return
+        val revision = observationRevision
+        fun currentSearch(): Boolean = current(expected) && observationRevision == revision
+        if (!currentSearch() || !isAllowed() || !currentSearch()) return
         searching = true
         if (_state.value.candidates.isEmpty()) publish(RideRecognitionPhase.SEARCHING, "Suche zeitlich passende Fahrten in der Nähe …")
         try {
@@ -263,7 +273,7 @@ class RideRecognitionService : Service() {
                     .sortedBy { (_, dep) -> kotlin.math.abs(now - (RideRecognitionEngine.parseTime(dep.realWhen ?: dep.plannedWhen) ?: now)) }
                     .take(MAX_DEPARTURES)
                 currentCoroutineContext().ensureActive()
-                if (!current(expected) || !isAllowed() || !current(expected)) return@withTimeout emptyList<RecognizableRide>()
+                if (!currentSearch() || !isAllowed() || !currentSearch()) return@withTimeout emptyList<RecognizableRide>()
                 // Successful departure responses remain authoritative even when
                 // subsequent trip-detail lookups fail or time out.
                 engine.removeTrips(cancelledTrips)
@@ -272,12 +282,12 @@ class RideRecognitionService : Service() {
                 tripCache.entries.removeAll { now - it.value.first > RideRecognitionEngine.ROUTE_TTL_MILLIS }
                 for ((station, departure) in departures) {
                     currentCoroutineContext().ensureActive()
-                    if (!current(expected) || !isAllowed()) return@withTimeout emptyList<RecognizableRide>()
+                    if (!currentSearch() || !isAllowed() || !currentSearch()) return@withTimeout emptyList<RecognizableRide>()
                     val key = "${departure.tripId}|${departure.line?.name.orEmpty()}"
                     val cached = tripCache[key]
                     val details = detailRequests.valueOrNull(cached?.let { Result.success(it.second) }
                         ?: repo.getTrip(departure.tripId, departure.line?.name.orEmpty())) ?: continue
-                    if (!current(expected) || !isAllowed() || !current(expected)) return@withTimeout emptyList<RecognizableRide>()
+                    if (!currentSearch() || !isAllowed() || !currentSearch()) return@withTimeout emptyList<RecognizableRide>()
                     if (cached == null) {
                         tripCache[key] = System.currentTimeMillis() to details
                         while (tripCache.size > RideRecognitionEngine.MAX_ROUTES) tripCache.remove(tripCache.keys.first())
@@ -289,7 +299,7 @@ class RideRecognitionService : Service() {
                 rides
             }
             // A new login, route, disabled setting or destroyed service invalidates in-flight reads.
-            if (!current(expected) || !isAllowed() || !current(expected)) return
+            if (!currentSearch() || !isAllowed() || !currentSearch()) return
             hasSearched = true
             searching = false
             searchError = null
@@ -297,7 +307,7 @@ class RideRecognitionService : Service() {
             updateMatches()
         } catch (_: TimeoutCancellationException) {
             currentCoroutineContext().ensureActive()
-            if (current(expected) && isAllowed() && current(expected)) {
+            if (currentSearch() && isAllowed() && currentSearch()) {
                 searching = false
                 searchError = "Die Fahrtsuche dauerte zu lange. Neuer Versuch in 90 Sekunden."
                 publish(RideRecognitionPhase.ERROR, searchError!!)
@@ -305,7 +315,7 @@ class RideRecognitionService : Service() {
         } catch (error: CancellationException) {
             throw error
         } catch (_: Exception) {
-            if (current(expected) && isAllowed() && current(expected)) {
+            if (currentSearch() && isAllowed() && currentSearch()) {
                 searching = false
                 searchError = "Keine Stations- oder Fahrtdaten erhalten. Neuer Versuch in 90 Sekunden."
                 publish(RideRecognitionPhase.ERROR, searchError!!)
@@ -367,6 +377,8 @@ class RideRecognitionService : Service() {
         val endingSessionId = sessionId
         stopped = !preserveForegroundForPendingStart
         sessionId = sequence.incrementAndGet()
+        ++observationRevision
+        locationClock = TrackingLocationClock()
         engine.clear()
         tripCache.clear()
         callback?.let { runCatching { locationClient.removeLocationUpdates(it) } }

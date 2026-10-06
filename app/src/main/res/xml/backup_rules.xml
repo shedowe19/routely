@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<full-backup-content>
+    <!-- Credentials, settings and the tracking snapshot share one DataStore directory. -->
+    <exclude domain="file" path="datastore/" />
+    <exclude domain="device_file" path="datastore/" />
+    <!-- Exclude Room databases and every journal/WAL/SHM file, not only the main DB. -->
+    <exclude domain="database" path="." />
+    <exclude domain="device_database" path="." />
+</full-backup-content>

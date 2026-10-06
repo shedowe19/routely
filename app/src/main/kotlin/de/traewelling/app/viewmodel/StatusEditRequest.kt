@@ -7,7 +7,10 @@ internal fun buildStatusEditRequest(
     state: StatusDetailUiState, initialDeparture: String, initialArrival: String
 ): UpdateStatusRequest {
     val destination = state.editDestinationStop
-    val original = state.status?.checkin?.destination
+    // A background refresh may change the status while the editor remains open.
+    // Only the user's change from the opening snapshot is an edit of the destination.
+    val originalCheckin = (state.editInitialStatus ?: state.status)?.checkin
+    val original = originalCheckin?.destination
     val changedDestination = destination != original && destination?.matchesStopover(original) != true
     return UpdateStatusRequest(
         body = state.editBody,
@@ -16,8 +19,9 @@ internal fun buildStatusEditRequest(
         destinationArrivalPlanned = destination?.arrivalPlanned.takeIf { changedDestination },
         departure = state.editDeparture.takeIf { it != initialDeparture },
         arrival = when {
-            state.editArrival != initialArrival -> state.editArrival
-            changedDestination && state.status?.checkin?.manualArrival != null -> ""
+            (state.editArrivalManuallyChanged ?: (state.editArrival != initialArrival)) -> state.editArrival
+            changedDestination && (originalCheckin?.manualArrival != null ||
+                state.status?.checkin?.manualArrival != null) -> ""
             else -> null
         }
     )

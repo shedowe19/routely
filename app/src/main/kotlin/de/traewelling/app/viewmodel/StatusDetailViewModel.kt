@@ -1,6 +1,9 @@
 package de.traewelling.app.viewmodel
 
 import android.app.Application
+import android.content.Intent
+import android.util.Log
+import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.SevStopInfo
@@ -42,8 +45,10 @@ data class StatusDetailUiState(
     val editBody: String = "",
     val editDeparture: String = "",
     val editArrival: String = "",
+    val editArrivalManuallyChanged: Boolean? = null,
     val editDestinationId: Int? = null,
     val editDestinationStop: StopStation? = null,
+    val editInitialStatus: Status? = null,
     val editVisibility: Int = 0
 )
 
@@ -247,11 +252,33 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 .onSuccess {
                     coroutineContext.ensureActive()
                     if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
-                    prefs.clearActiveTracking(statusId, session)
-                    coroutineContext.ensureActive()
-                    if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
-                    _uiState.update { it.copy(isDeleting = false) }
-                    onSuccess()
+                    completeDeletedStatus(
+                        cleanup = { prefs.clearActiveTracking(statusId, session) },
+                        completion = finished@{ localFailure ->
+                            if (view != viewGeneration || currentStatusId != statusId) return@finished
+                            _uiState.update { it.copy(isDeleting = false) }
+                            if (localFailure != null) {
+                                Log.w("StatusDetailViewModel", "Server deletion completed; local tracking cleanup failed", localFailure)
+                                val context = getApplication<Application>()
+                                val live = TripTrackingService.trackingLiveState.value
+                                if (live?.statusId == statusId && live.sessionRevision == session.revision) {
+                                    runCatching {
+                                        context.startService(Intent(context, TripTrackingService::class.java).apply {
+                                            action = TripTrackingService.ACTION_STOP
+                                            putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
+                                            putExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION, session.revision)
+                                        })
+                                    }.onFailure { Log.w("StatusDetailViewModel", "Could not request tracking stop", it) }
+                                }
+                                runCatching {
+                                    Toast.makeText(context,
+                                        "Fahrt gelöscht; lokale Begleitung konnte nicht beendet werden. Bitte Begleitung stoppen.",
+                                        Toast.LENGTH_LONG).show()
+                                }.onFailure { Log.w("StatusDetailViewModel", "Could not show cleanup warning", it) }
+                            }
+                            onSuccess()
+                        }
+                    )
                 }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
@@ -277,6 +304,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                     status.checkin?.manualArrival)?.millis?.let { millis -> Instant.ofEpochMilli(millis).toString() } ?: "",
                 editDestinationId = status.checkin?.destination?.stationId,
                 editDestinationStop = status.checkin?.destination,
+                editInitialStatus = status,
+                editArrivalManuallyChanged = false,
                 editVisibility = status.visibility ?: 0
             )
         }
@@ -298,7 +327,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun updateEditArrival(time: String) {
-        _uiState.update { it.copy(editArrival = time) }
+        _uiState.update { it.copy(editArrival = time, editArrivalManuallyChanged = time != editInitialArrival) }
     }
 
     fun updateEditDestination(stop: StopStation) {
@@ -307,15 +336,17 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         val origin = state.status?.checkin?.origin ?: return
         val originIndex = state.stopovers.indices.filter { state.stopovers[it].matchesStopover(origin) }.singleOrNull() ?: return
         if (state.stopovers.drop(originIndex + 1).none { it.matchesStopover(stop) }) return
-        val hadManualEdit = state.editArrival != editInitialArrival
-        val manualArrival = state.status?.checkin?.manualArrival.takeIf {
-            stop.matchesStopover(state.status?.checkin?.destination)
+        val hadManualEdit = state.editArrivalManuallyChanged ?: (state.editArrival != editInitialArrival)
+        val originalCheckin = (state.editInitialStatus ?: state.status)?.checkin
+        val manualArrival = originalCheckin?.manualArrival.takeIf {
+            stop.matchesStopover(originalCheckin?.destination)
         }
         val newArrival = JourneyTimeResolver.arrival(stop, null, 0, manualArrival)?.millis?.let { Instant.ofEpochMilli(it).toString() } ?: ""
         _uiState.update {
             it.copy(
                 editDestinationId = stop.stationId,
                 editDestinationStop = stop,
+                editArrivalManuallyChanged = hadManualEdit,
                 editArrival = if (hadManualEdit) it.editArrival else newArrival
             )
         }
@@ -331,7 +362,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         val state = _uiState.value
         if (!state.isOwnStatus || !state.isEditing || state.isUpdating || state.isDeleting) return
         val destination = state.editDestinationStop
-        val originalDestination = state.status?.checkin?.destination
+        val originalDestination = (state.editInitialStatus ?: state.status)?.checkin?.destination
         val destinationChanged = destination != originalDestination &&
             destination?.matchesStopover(originalDestination) != true
         if (destinationChanged && (destination?.stationId == null || destination?.arrivalPlanned.isNullOrBlank())) {

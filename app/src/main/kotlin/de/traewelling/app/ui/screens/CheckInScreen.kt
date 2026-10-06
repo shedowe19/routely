@@ -30,6 +30,7 @@ import de.traewelling.app.data.model.*
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.service.RideRecognitionPhase
+import de.traewelling.app.ui.theme.SuccessGreen
 import de.traewelling.app.viewmodel.CheckInStep
 import de.traewelling.app.viewmodel.CheckInUiState
 import de.traewelling.app.viewmodel.CheckInViewModel
@@ -50,7 +51,7 @@ fun CheckInScreen(
         CheckInStep.DEPARTURES -> "Abfahrten — ${uiState.selectedStation?.name ?: ""}"
         CheckInStep.DESTINATION -> "Ziel wählen — ${uiState.selectedDeparture?.line?.name ?: ""}"
         CheckInStep.CONFIRM -> "Details bestätigen"
-        CheckInStep.SUCCESS -> "Eingecheckt!"
+        CheckInStep.SUCCESS -> if ((uiState.checkInResult?.status?.id ?: 0) > 0) "Eingecheckt!" else "Check-in prüfen"
     }
     
     val showBack = uiState.step != CheckInStep.STATION && uiState.step != CheckInStep.SUCCESS
@@ -341,10 +342,7 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
 private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
     val lineName  = departure.line?.name ?: "?"
     val direction = departure.direction ?: "–"
-    val timeRaw   = departure.plannedWhen ?: departure.realWhen ?: ""
-    val time      = formatLocalTime(timeRaw)
-    val delayMinutes = departure.delayMinutes
-    val delayed   = delayMinutes != null && delayMinutes > 0
+    val times = departureTimePresentation(departure)
     val cancelled = departure.cancelled == true
 
     ListItem(
@@ -362,14 +360,21 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
             Column {
                 Text("→ $direction")
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(time, style = MaterialTheme.typography.bodySmall,
-                        color = if (delayed) MaterialTheme.colorScheme.error
-                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-                    if (delayed && delayMinutes != null) {
+                    Text(times.time, style = MaterialTheme.typography.bodySmall,
+                        color = when {
+                            times.delayed -> MaterialTheme.colorScheme.error
+                            times.earlier -> SuccessGreen
+                            else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
+                        })
+                    times.plannedTime?.let { planned ->
                         Spacer(Modifier.width(4.dp))
-                        Text("+${delayMinutes}min",
+                        Text("(Plan $planned)", style = MaterialTheme.typography.bodySmall)
+                    }
+                    times.deviation?.let { deviation ->
+                        Spacer(Modifier.width(4.dp))
+                        Text(deviation,
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.error)
+                            color = if (times.earlier) SuccessGreen else MaterialTheme.colorScheme.error)
                     }
                     val plat = departure.platform?.takeIf { it.isNotBlank() }
                     if (plat != null) {
@@ -462,7 +467,11 @@ private fun DestinationStep(viewModel: CheckInViewModel, uiState: CheckInUiState
 @Composable
 private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     val dep     = uiState.selectedDeparture
-    val depTime = formatLocalTime(dep?.plannedWhen ?: "")
+    val times = departureTimePresentation(dep?.copy(
+        plannedWhen = uiState.resolvedOriginStop?.departurePlanned ?: dep.plannedWhen,
+        realWhen = uiState.resolvedOriginStop?.departureReal ?: dep.realWhen
+    ))
+    val depTime = listOfNotNull(times.time, times.plannedTime?.let { "Plan $it" }, times.deviation).joinToString(" · ")
 
     Column(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().padding(16.dp)) {
@@ -500,14 +509,16 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                 )
                 Spacer(Modifier.height(16.dp))
 
-                Text("Zeiten anpassen (ISO-Format)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text("Tatsächliche Zeiten korrigieren (optional)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                Text("Leer lassen für API-/Fahrplanzeiten. Eingaben werden nach dem Check-in als manuelle Zeiten gespeichert. Nutze ISO-Format mit Zeitzone, z. B. 2026-10-06T18:05:00+02:00.",
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
                 Row(Modifier.fillMaxWidth()) {
                     OutlinedTextField(
                         value = uiState.manualDeparture,
                         enabled = !uiState.isLoading,
                         onValueChange = viewModel::updateManualDeparture,
-                        label = { Text("Abfahrt") },
+                        label = { Text("Abfahrt real") },
                         modifier = Modifier.weight(1f),
                         textStyle = MaterialTheme.typography.bodySmall
                     )
@@ -516,7 +527,7 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                         value = uiState.manualArrival,
                         enabled = !uiState.isLoading,
                         onValueChange = viewModel::updateManualArrival,
-                        label = { Text("Ankunft") },
+                        label = { Text("Ankunft real") },
                         modifier = Modifier.weight(1f),
                         textStyle = MaterialTheme.typography.bodySmall
                     )
@@ -552,15 +563,26 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
 @Composable
 private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     Column(
-        Modifier.fillMaxSize().statusBarsPadding().padding(24.dp),
+        Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(80.dp),
+        val hasConfirmedStatus = (uiState.checkInResult?.status?.id ?: 0) > 0
+        Icon(if (hasConfirmedStatus) Icons.Default.CheckCircle else Icons.Default.Info, null, modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(16.dp))
-        Text("Erfolgreich eingecheckt!",
+        Text(if (hasConfirmedStatus) "Erfolgreich eingecheckt!" else "Check-in angenommen – bitte prüfen",
             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        if (uiState.isLoading) {
+            Spacer(Modifier.height(16.dp))
+            CircularProgressIndicator(Modifier.size(28.dp))
+            Text("Fahrt wird für die Begleitung aktiviert; eingegebene Zeitkorrekturen werden gespeichert.",
+                style = MaterialTheme.typography.bodySmall)
+        }
+        uiState.completionWarning?.let { warning ->
+            Spacer(Modifier.height(16.dp))
+            Text(warning, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        }
         uiState.checkInResult?.points?.points?.let { pts ->
             if (pts > 0) {
                 Spacer(Modifier.height(8.dp))
@@ -570,7 +592,7 @@ private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
             }
         }
         Spacer(Modifier.height(32.dp))
-        Button(onClick = viewModel::reset, modifier = Modifier.fillMaxWidth()) {
+        Button(onClick = viewModel::reset, enabled = !uiState.isLoading, modifier = Modifier.fillMaxWidth()) {
             Text("Neuer Check-in")
         }
     }

@@ -12,7 +12,7 @@ Dokumentation wichtiger 3rd-Party-Bibliotheken und Dienste.
 - **JSON Parsing**: `com.google.code.gson:gson`
 - **Image Loading**: `io.coil-kt.coil3:coil-compose`, explizites `coil-network-okhttp` und `coil-network-cache-control`; zentraler Loader über `SingletonImageLoader.Factory` mit User-Agent und `CacheControlCacheStrategy`.
 - **Location Services**: `com.google.android.gms:play-services-location` (Standort für die Stationssuche und Standort-Callbacks im `TripTrackingService` sowie Opt-in-`RideRecognitionService`).
-- **Coroutines**: `org.jetbrains.kotlinx:kotlinx-coroutines-android`
+- **Coroutines**: `org.jetbrains.kotlinx:kotlinx-coroutines-android`; `kotlinx-coroutines-test` ausschließlich als Testabhängigkeit mit derselben Version 1.11.0 für kontrollierte Controller-Requestfolgen.
 
 ## Gewählter Versionsstand vom 06.10.2026
 

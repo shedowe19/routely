@@ -21,7 +21,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 1. **Bahnhofsauswahl (Start):**
    - Entweder über die Textsuche (`GET /api/v1/trains/station/autocomplete/{query}`)
    - Oder über die Ortung (`TraewellingRepository.getNearbyStations` → `GET /api/v1/stations` mit den aus dem Standort berechneten Boxgrenzen `min_lat`, `max_lat`, `min_lon`, `max_lon`)
-   - _Wichtig:_ Stationsergebnisse müssen dedupliziert werden (z.B. nach Nähe und Namen).
+   - `NearbyStationIdentity` dedupliziert ausschließlich belegte Stationsidentität: gleiche gültige interne ID oder bei fehlender ID dieselbe nichtleere UUID. Verschiedene interne IDs bleiben erhalten, auch bei ähnlichem Namen und wenigen Metern Abstand. Unbelegte Einträge werden nicht zusammengelegt.
 
 2. **Abfahrtsauswahl:**
    - Sobald ein Startbahnhof gewählt ist, werden die Abfahrten geladen (`GET /api/v1/station/{id}/departures`).
@@ -43,7 +43,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
    - Der Reisegrund wird über das API-Feld `business` gesendet. Die App verwendet `TravelReason.PRIVATE` (`0`) als Standard und erlaubt die Auswahl von `BUSINESS` (`1`) und `COMMUTE` (`2`).
    - Manuelle Verspätungs-Overrides (`manualDeparture`, `manualArrival`), die die API zurückgibt, müssen direkt ins Datenmodell gemerged werden, um UI-Flackern zu vermeiden.
 
-Abfahrten zeigen `direction` als Fahrtrichtung und nutzen `delayMinutes`, berechnet aus `when - plannedWhen`. Bei fehlender Echtzeit wird die Planzeit angezeigt. Ein Betreiber wird aus `TripDetails.operator` beziehungsweise `CheckinInfo.operator` gelesen; das veraltete `line.operator` wird nicht vorausgesetzt.
+Abfahrten zeigen `direction` als Fahrtrichtung. `DepartureTimePresentation` bevorzugt die parsebare Echtzeit, zeigt eine abweichende Planzeit daneben und kennzeichnet sowohl positive als auch negative `delayMinutes`. Plan 18:00, Echtzeit 17:57 erscheint als 17:57 mit Plan 18:00 und −3 Minuten. Bei fehlender Echtzeit wird die Planzeit angezeigt. Ein Betreiber wird aus `TripDetails.operator` beziehungsweise `CheckinInfo.operator` gelesen; das veraltete `line.operator` wird nicht vorausgesetzt.
 
 Der Check-in überträgt weiterhin numerische interne Station-IDs für `start` und `destination` und den Provider-Identifier für `tripId`. Eine Stopover-ID, IBNR oder Trip-UUID darf diese Werte nicht ersetzen.
 
@@ -56,6 +56,10 @@ Der Stationsschritt enthält die ausdrücklich aktivierbare [Fahrterkennung](./r
 ## Zeitfelder und Konflikte
 
 Für einen Halt gelten `effectiveDeparture = departureReal ?: departurePlanned` und `effectiveArrival = arrivalReal ?: arrivalPlanned`. Die Legacy-Felder `departure` und `arrival` sind keine Datenquelle mehr.
+
+`buildCheckInSubmission` hält POST-`departure` und `arrival` an den ausgewählten geplanten Besuchsmarkern fest. Manuelle Eingaben werden einschließlich Zeitzone und zeitlicher Reihenfolge vor dem Erstellen validiert. Anschließend führt `submitCheckIn` genau einen POST aus; nach erfolgreicher Erstellung folgen bei Bedarf die manuellen Istzeiten als Status-PUT. Beide Repository-Aufträge sind an denselben `AuthSession`-Snapshot gebunden.
+
+Ein fehlgeschlagener Zeit-PUT oder lokaler Speicherfehler macht den bereits erstellten Check-in nicht erneut absendbar. Die Erfolgskarte erklärt den Teilerfolg und verweist zur Bearbeitung der vorhandenen Fahrt im Profil. Auch eine akzeptierte POST-2xx-Antwort ohne verwertbare Status-ID endet mit einem Prüfhinweis statt einer zweiten POST-Schaltfläche; ohne belegte ID wird keine lokale Begleitung erfunden.
 
 Ein erfolgreicher Check-in enthält `data.status` und `data.points`. Bei HTTP 409 liest das Repository `data.conflicts`, erzeugt eine `CheckInConflictException` und nennt die betroffenen Linien, Ziele und Status-IDs. Die auslaufenden Felder `message.status_id` und `message.lineName` werden nicht verwendet. Eine leere Konfliktliste führt zu einer allgemeinen Überschneidungsmeldung.
 
@@ -87,8 +91,8 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 
 ## Offene Fragen
 
-- TODO: [Main-Review](../entwicklung/main-review-2026-10-06.md), U1/U3/D3: Manuelle Eingaben werden aktuell als Planbesuchsmarker an POST gesendet, Verfrühungen fehlen in der sichtbaren Abfahrtsauswahl, Nearby dedupliziert unterschiedliche Stations-IDs anhand gemeinsamer Namenstokens. Diese Pfade separat korrigieren.
-- TODO: Detailbetrachtung der Deduplizierungslogik bei Haltestellen, da APIs häufig Duplikate (teilweise mit fast identischen Koordinaten und Namen) liefern.
+- U1/U3/D3 des [Main-Reviews](../entwicklung/main-review-2026-10-06.md) sind durch getrennte Plan-/Istzeitaufträge, Verfrühungsanzeige und Identitätsdeduplizierung korrigiert. Regressionen verwenden kontrollierte Antworten; es gab keine schreibenden Live-API-Tests.
+- TODO: Zeitkorrektur-Teilerfolg, Erfolgskarte und nahe verschiedene Halte auf dem Gerät prüfen.
 
 ## Verwandte Seiten
 

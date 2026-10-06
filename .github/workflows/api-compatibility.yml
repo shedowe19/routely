@@ -21,6 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Test release guard without publishing
+        run: python3 -m unittest discover -s .github/tests -p 'test_release_guard.py'
+
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:

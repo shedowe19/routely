@@ -19,9 +19,18 @@ Der Room-Feedcache ist nach Feedart sowie einem SHA-256-Digest aus Server und To
 
 ## Systembackup
 
-Das Manifest aktiviert `allowBackup` ohne Ausschlussregeln. Auch die zusammengeführten Debug-/Release-Manifeste enthalten weder `fullBackupContent` noch `dataExtractionRules`. Normale DataStore-/Room-Dateien einschließlich gespeicherter Zugangsdaten und privater Caches nehmen bei aktivierter Systemsicherung grundsätzlich am Android-Backup teil. Das ist keine nachgewiesene unverschlüsselte Cloudablage.
+S1 ist in der Implementierung korrigiert: Das Manifest behält `allowBackup = true`, verweist aber ausdrücklich auf `res/xml/backup_rules.xml` über `fullBackupContent` und auf `res/xml/data_extraction_rules.xml` über `dataExtractionRules`. Damit sind sowohl Android 11 und älter als auch das getrennte Cloud- und Geräteübertragungsregelwerk ab Android 12 abgedeckt. Alle drei Regelabschnitte verwenden dieselben Ausschlüsse:
 
-TODO: Die sensitive DataStore-Datei und Datenbankdateien für Cloud- sowie Geräteübertragung über beide Android-Regelwerke ausschließen; Einstellungen bei Bedarf getrennt behandeln. Beleg und genaue Grenzen: [Main-Review](../entwicklung/main-review-2026-10-06.md), S1.
+| Backup-Domäne | Ausgeschlossener Pfad | Zweck |
+| --- | --- | --- |
+| `file` und `device_file` | `datastore/` | Gesamtes DataStore-Verzeichnis einschließlich temporärer Begleitdateien |
+| `database` und `device_database` | `.` | Gesamtes Datenbankverzeichnis einschließlich Room-Datenbank, WAL, SHM und Journals |
+
+`traewelling_prefs.preferences_pb` enthält Zugangsdaten, normale Einstellungen und den aktiven Fahrtcache gemeinsam. Deshalb werden mit diesen Regeln auch Serverwahl, App-Einstellungen, Erkennungs-Opt-in und aktive Begleitung nicht aus einem neuen Systembackup wiederhergestellt; nach Neuinstallation oder Gerätewechsel ist eine neue Anmeldung und Konfiguration erforderlich. Ebenso entfällt die Wiederherstellung privater Room-Feedcaches. Die vorhandenen lokalen Dateien auf dem aktuellen Gerät bleiben unverändert; es gibt keine Datenmigration oder neue Verschlüsselungsbibliothek. Andere nicht ausgeschlossene Dateibereiche bleiben grundsätzlich backupfähig. Eine spätere Einstellungssicherung benötigt einen getrennten, ausdrücklich geeigneten Speicher ohne Credentials.
+
+Die Regeln folgen der [Android-Dokumentation zu Auto Backup](https://developer.android.com/identity/data/autobackup). Die ausdrücklichen Geräteübertragungsregeln sind erforderlich, da `allowBackup = false` allein bei manchen Herstellern Geräteübertragung nicht verhindert. Die Korrektur macht keine Aussage über die Verschlüsselung früherer Sicherungen und widerruft keine bereits ausgestellten Token. Den historischen Ausgangsbefund dokumentiert [Main-Review](../entwicklung/main-review-2026-10-06.md), S1.
+
+TODO: Cloud-Restore und Geräteübertragung auf unterstützten Android-Versionen und einem Herstellergerät prüfen; XML-/Buildprüfung allein belegt keinen tatsächlich ausgeführten Systemrestore.
 
 ## Netzwerk-Logging
 

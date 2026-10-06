@@ -41,18 +41,18 @@ Toolchain-Grundlagen: [AGP 8.13](https://developer.android.com/build/releases/ag
 
 ## GitHub Actions CI/CD (Deployment)
 
-Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pushes auf `main`, Pull Requests und manuell. Er führt Android-Unit-Tests, vollständiges `lintDebug`, `assembleDebug` und `assembleRelease` mit JDK 17, Android-SDK 36 und Build Tools 35.0.0 aus. Damit werden vollständiges Debug-Lint und zusätzlich Release-Lint geprüft. Er benötigt keine Signierungssecrets und erstellt kein GitHub Release. Debug-APK, unsignierte Release-APK und Prüfberichte werden als Workflow-Artefakte bereitgestellt; Namen und Prüfstand beschreibt [Tests](./tests.md).
+Der Prüfworkflow `.github/workflows/api-compatibility.yml` läuft bei Pushes auf `main`, Pull Requests und manuell. Er führt zuerst die Offline-Releaseguard-Tests und danach Android-Unit-Tests, vollständiges `lintDebug`, `assembleDebug` und `assembleRelease` mit JDK 17, Android-SDK 36 und Build Tools 35.0.0 aus. Damit werden vollständiges Debug-Lint und zusätzlich Release-Lint geprüft. Er benötigt keine Signierungssecrets und erstellt kein GitHub Release. Debug-APK, unsignierte Release-APK und Prüfberichte werden als Workflow-Artefakte bereitgestellt; Namen und Prüfstand beschreibt [Tests](./tests.md).
 
 Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.github/workflows/android.yml`).
 
-- **Trigger**: Manueller Start (`workflow_dispatch`), bei dem `version_name` (z.B. `1.0.0`) und `version_code` (z.B. `1`) angegeben werden.
-- **Eingabeprüfung**: `version_name` beginnt mit einem Buchstaben oder einer Ziffer, ist höchstens 64 Zeichen lang und enthält ausschließlich Buchstaben, Ziffern, Punkt, Unterstrich oder Bindestrich. `version_code` ist eine ganze Zahl von 1 bis 2.100.000.000 ohne führende Null. Ungültige Eingaben brechen vor dem Build ab.
+- **Trigger**: Manueller Start (`workflow_dispatch`), bei dem `version_name` (z.B. `1.0.0`) und optional `version_code` angegeben werden. Leer bedeutet veröffentlichter Höchstwert + 1.
+- **Eingabeprüfung**: `version_name` beginnt mit einem Buchstaben oder einer Ziffer, ist höchstens 64 Zeichen lang und enthält ausschließlich Buchstaben, Ziffern, Punkt, Unterstrich oder Bindestrich. `version_code` ist eine ganze Zahl von 1 bis 2.100.000.000 ohne führende Null. Ein expliziter Code muss zusätzlich über dem veröffentlichten Höchstwert liegen; ungültige Eingaben und vorhandene Versionsbezeichnungen brechen vor dem Build ab.
 - **Build**: Unit-Tests laufen vor dem Release-Build: `./gradlew :app:testDebugUnitTest :app:assembleRelease` mit validierten gequoteten Versionsargumenten. Workflow-Eingaben werden über Jobvariablen übernommen, nicht direkt in Shellcode eingefügt.
 - **Signierung**: Die generierte APK wird mithilfe von `r0adkll/sign-android-release` unter Verwendung von GitHub Secrets (`SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, `KEY_PASSWORD`) signiert.
 - **APK-Dateiname**: Das signierte Release-Artefakt wird als `routely-v<version_name>.apk` veröffentlicht.
 - **Changelog**: Es wird automatisch ein Changelog aus der Git-Historie (Commits seit dem letzten Tag) generiert.
-- **Release**: Erstellt ein GitHub Release (`softprops/action-gh-release`) mit dem generierten Changelog als Body und lädt die signierte APK hoch.
-- **Artifact**: Die fertige APK wird zudem als Workflow-Artifact (`actions/upload-artifact`) bereitgestellt.
+- **Release**: Der Python-Standardbibliothek-Helfer `.github/scripts/release_guard.py` reserviert einen neuen Tag am exakten Dispatch-Commit und einen neuen Draft. Create-only Uploads betreffen ausschließlich dessen Release-ID. Erst nach Prüfung von Tag, APK-Manifest, Größe, SHA-256-Digest und Versionsmetadaten wird der Draft veröffentlicht. Parallel laufende manuelle Releases sind serialisiert. Details und Wiederanlaufgrenzen stehen unter [Deployment](./deployment.md).
+- **Artifact**: APK und `release-version.json` werden zudem als Workflow-Artifact (`actions/upload-artifact`) bereitgestellt.
 
 ## Framework-Fortschrittsanzeige
 

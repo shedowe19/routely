@@ -60,6 +60,8 @@ Der Main-Audit vom 06.10.2026 ergänzt die bestehenden Verträge für [Sitzungen
 
 ## Entscheidungen
 
+- [06.10.2026: GPS-, Mutations- und Releasezustände](./entscheidungen/2026-10-06-befundkorrekturen.md)
+
 - [Entscheidungen](./entscheidungen/README.md)
 - [ADR Template](./entscheidungen/adr-template.md)
 - [Native Bahn-/Tram-Streckenverläufe](./entscheidungen/2026-10-06-native-streckenverlaeufe.md)

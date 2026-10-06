@@ -45,6 +45,7 @@ import de.traewelling.app.service.JourneyTime
 import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.JourneyTimeSource
 import de.traewelling.app.service.TrackingSource
+import de.traewelling.app.service.trackingPlatform
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
@@ -336,6 +337,22 @@ private fun StatusDetailContent(
                 ) {
                     TripInfoCard(status, gpsTimes, nowMillis, isReplacementBus,
                         sevStops.isNotEmpty(), uiState.isLoadingSevStops)
+                }
+            }
+        }
+
+        uiState.trackingState?.let { tracking ->
+            val errors = listOfNotNull(
+                tracking.locationError?.takeIf { it.isNotBlank() }?.let { "GPS: $it" },
+                tracking.speechError?.takeIf { it.isNotBlank() }?.let { "Sprachausgabe: $it" }
+            )
+            if (errors.isNotEmpty()) {
+                item {
+                    Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        errors.forEach { Text(it, style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error) }
+                    }
                 }
             }
         }
@@ -996,9 +1013,7 @@ private fun StopoverItem(
                         }
                     }
                 }
-                val plat = stop.departurePlatformReal?.takeIf { it.isNotBlank() }
-                    ?: stop.arrivalPlatformReal?.takeIf { it.isNotBlank() }
-                    ?: stop.platform?.takeIf { it.isNotBlank() }
+                val plat = trackingPlatform(stop, isOrigin = isOrigin, isReplacementBus = isReplacementBus)
                 if (plat != null && !isReplacementBus) {
                     val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
                     Surface(

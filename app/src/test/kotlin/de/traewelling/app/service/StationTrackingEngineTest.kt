@@ -9,7 +9,11 @@ import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Synthetic positions and a fixed clock keep these tests independent of Android and the API. */
+/**
+ * Synthetic positions and a fixed clock keep these tests independent of Android and the API.
+ * Valid trajectories allow at most 100 m/s plus positional uncertainty between short samples;
+ * explicit outliers stay impossible, and gap/dwell scenarios retain their own time boundaries.
+ */
 class StationTrackingEngineTest {
     private val now = 1_791_187_200_000L
 
@@ -19,7 +23,7 @@ class StationTrackingEngineTest {
         val engine = StationTrackingEngine(listOf(stop))
 
         engine.onLocation(fix(-1_000.0, now), now)
-        val update = engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        val update = engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
 
         assertEquals(TrackingSource.GPS, update.source)
         assertEquals("destination", update.stop?.key)
@@ -33,14 +37,14 @@ class StationTrackingEngineTest {
         val engine = StationTrackingEngine(listOf(stop("next")))
 
         engine.onLocation(fix(-1_000.0, now), now)
-        val approach = engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
-        val stillApproaching = engine.onLocation(fix(-180.0, now + 2 * SECOND), now + 2 * SECOND)
+        val approach = engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
+        val stillApproaching = engine.onLocation(fix(-180.0, now + 9 * SECOND), now + 9 * SECOND)
 
         assertEquals("next", approach.announcement?.key)
         assertFalse(engine.getProgress().arrivedAtCurrent)
         assertFalse(stillApproaching.destinationReached)
 
-        engine.onLocation(fix(-80.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.onLocation(fix(-80.0, now + 10 * SECOND), now + 10 * SECOND)
         assertTrue(engine.getProgress().arrivedAtCurrent)
         assertEquals(0, engine.getProgress().nextIndex)
     }
@@ -61,8 +65,8 @@ class StationTrackingEngineTest {
         val engine = StationTrackingEngine(listOf(stop("destination", destination = true)))
 
         engine.onLocation(fix(-1_000.0, now), now)
-        val approach = engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
-        val arrival = engine.onLocation(fix(-80.0, now + 2 * SECOND), now + 2 * SECOND)
+        val approach = engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
+        val arrival = engine.onLocation(fix(-80.0, now + 10 * SECOND), now + 10 * SECOND)
 
         assertFalse(approach.destinationReached)
         assertTrue(arrival.destinationReached)
@@ -150,9 +154,9 @@ class StationTrackingEngineTest {
         val engine = StationTrackingEngine(listOf(stop("next", arrival = now + 2 * MINUTE)))
 
         engine.onLocation(fix(-1_000.0, now), now)
-        val first = engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
-        val repeated = engine.onLocation(fix(-200.0, now + 2 * SECOND), now + 2 * SECOND)
-        val fallback = engine.onTimetable(now + 33 * SECOND)
+        val first = engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
+        val repeated = engine.onLocation(fix(-200.0, now + 9 * SECOND), now + 9 * SECOND)
+        val fallback = engine.onTimetable(now + 40 * SECOND)
 
         assertEquals("next", first.announcement?.key)
         assertNull(repeated.announcement)
@@ -165,12 +169,12 @@ class StationTrackingEngineTest {
         val stops = listOf(stop("next"))
         val engine = StationTrackingEngine(stops)
         engine.onLocation(fix(-1_000.0, now), now)
-        engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
 
         val progress = Gson().fromJson(Gson().toJson(engine.getProgress()), TrackingProgress::class.java)
         val restarted = StationTrackingEngine(stops, progress)
-        val first = restarted.onLocation(fix(-400.0, now + 2 * SECOND), now + 2 * SECOND)
-        val second = restarted.onLocation(fix(-250.0, now + 3 * SECOND), now + 3 * SECOND)
+        val first = restarted.onLocation(fix(-400.0, now + 11 * SECOND), now + 11 * SECOND)
+        val second = restarted.onLocation(fix(-250.0, now + 13 * SECOND), now + 13 * SECOND)
 
         assertNull(first.announcement)
         assertNull(second.announcement)
@@ -182,15 +186,15 @@ class StationTrackingEngineTest {
         val stops = listOf(stop("first"), stop("second", positionMeters = 2_000.0, stationId = 2))
         val engine = StationTrackingEngine(stops)
         engine.onLocation(fix(-1_000.0, now), now)
-        engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
-        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+        engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
+        engine.onLocation(fix(0.0, now + 11 * SECOND), now + 11 * SECOND)
         assertTrue(engine.getProgress().arrivedAtCurrent)
 
         val restarted = StationTrackingEngine(stops, engine.getProgress())
-        restarted.onLocation(fix(500.0, now + 3 * SECOND), now + 3 * SECOND)
+        restarted.onLocation(fix(500.0, now + 14 * SECOND), now + 14 * SECOND)
         assertEquals(0, restarted.getProgress().nextIndex)
 
-        restarted.onLocation(fix(800.0, now + 4 * SECOND), now + 4 * SECOND)
+        restarted.onLocation(fix(800.0, now + 18 * SECOND), now + 18 * SECOND)
         assertEquals(1, restarted.getProgress().nextIndex)
         assertEquals("second", restarted.getProgress().nextStopKey)
     }
@@ -207,7 +211,7 @@ class StationTrackingEngineTest {
         val positions = listOf(-1_000.0, -250.0, 0.0, 500.0, 1_300.0, 1_750.0, 2_000.0, 1_500.0, 500.0, 250.0, 0.0)
 
         positions.forEachIndexed { index, position ->
-            val time = now + index * SECOND
+            val time = now + index * 10 * SECOND
             val update = engine.onLocation(fix(position, time), time)
             update.announcement?.key?.let(announcements::add)
         }
@@ -224,8 +228,8 @@ class StationTrackingEngineTest {
         slow.onLocation(fix(-1_000.0, now, speed = 1.0), now)
         fast.onLocation(fix(-1_000.0, now, speed = 40.0), now)
 
-        val slowUpdate = slow.onLocation(fix(-800.0, now + SECOND, speed = 1.0), now + SECOND)
-        val fastUpdate = fast.onLocation(fix(-800.0, now + SECOND, speed = 40.0), now + SECOND)
+        val slowUpdate = slow.onLocation(fix(-800.0, now + 5 * SECOND, speed = 1.0), now + 5 * SECOND)
+        val fastUpdate = fast.onLocation(fix(-800.0, now + 5 * SECOND, speed = 40.0), now + 5 * SECOND)
 
         assertNull(slowUpdate.announcement)
         assertEquals("next", fastUpdate.announcement?.key)
@@ -235,12 +239,12 @@ class StationTrackingEngineTest {
     fun adaptiveRadiusKeepsUsefulMinimumAndCapsVeryHighSpeeds() {
         val slow = StationTrackingEngine(listOf(stop("next")))
         slow.onLocation(fix(-400.0, now, speed = 0.0), now)
-        val near = slow.onLocation(fix(-250.0, now + SECOND, speed = 0.0), now + SECOND)
+        val near = slow.onLocation(fix(-250.0, now + 2 * SECOND, speed = 0.0), now + 2 * SECOND)
         assertEquals("next", near.announcement?.key)
 
         val fast = StationTrackingEngine(listOf(stop("next")))
         fast.onLocation(fix(-4_000.0, now, speed = 500.0), now)
-        val far = fast.onLocation(fix(-3_000.0, now + SECOND, speed = 500.0), now + SECOND)
+        val far = fast.onLocation(fix(-3_000.0, now + 10 * SECOND, speed = 500.0), now + 10 * SECOND)
         assertNull(far.announcement)
     }
 
@@ -249,14 +253,14 @@ class StationTrackingEngineTest {
         val engine = StationTrackingEngine(listOf(stop("next")), radiusMeters = 300)
         engine.onLocation(fix(-1_000.0, now, speed = 40.0), now)
 
-        val outsideFixedRadius = engine.onLocation(fix(-800.0, now + SECOND, speed = 40.0), now + SECOND)
+        val outsideFixedRadius = engine.onLocation(fix(-800.0, now + 5 * SECOND, speed = 40.0), now + 5 * SECOND)
         assertNull(outsideFixedRadius.announcement)
 
         val lowSpeedEngine = StationTrackingEngine(listOf(stop("next")), radiusMeters = 300)
         lowSpeedEngine.onLocation(fix(-1_000.0, now, speed = 1.0), now)
-        lowSpeedEngine.onLocation(fix(-800.0, now + SECOND, speed = 1.0), now + SECOND)
+        lowSpeedEngine.onLocation(fix(-800.0, now + 5 * SECOND, speed = 1.0), now + 5 * SECOND)
         lowSpeedEngine.setRadiusMeters(1000)
-        val insideNewRadius = lowSpeedEngine.onLocation(fix(-700.0, now + 2 * SECOND, speed = 1.0), now + 2 * SECOND)
+        val insideNewRadius = lowSpeedEngine.onLocation(fix(-700.0, now + 10 * SECOND, speed = 1.0), now + 10 * SECOND)
         assertEquals("next", insideNewRadius.announcement?.key)
     }
 
@@ -288,13 +292,13 @@ class StationTrackingEngineTest {
     fun gpsGapRequiresANewApproachBeforeDestinationConfirmation() {
         val engine = StationTrackingEngine(listOf(stop("destination", destination = true)))
         engine.onLocation(fix(-1_000.0, now), now)
-        engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
 
-        val afterGap = engine.onLocation(fix(-80.0, now + 32 * SECOND), now + 32 * SECOND)
+        val afterGap = engine.onLocation(fix(-80.0, now + 40 * SECOND), now + 40 * SECOND)
         assertFalse(afterGap.destinationReached)
         assertFalse(engine.getProgress().completed)
 
-        val newObservation = engine.onLocation(fix(0.0, now + 33 * SECOND), now + 33 * SECOND)
+        val newObservation = engine.onLocation(fix(0.0, now + 41 * SECOND), now + 41 * SECOND)
         assertTrue(newObservation.destinationReached)
     }
 
@@ -305,8 +309,8 @@ class StationTrackingEngineTest {
             stop("later", positionMeters = 2_000.0, stationId = 2)
         )
         val beforeRestart = StationTrackingEngine(stops)
-        beforeRestart.onLocation(fix(-1_000.0, now - 2 * SECOND), now - 2 * SECOND)
-        beforeRestart.onLocation(fix(-250.0, now - SECOND), now - SECOND)
+        beforeRestart.onLocation(fix(-1_000.0, now - 10 * SECOND), now - 10 * SECOND)
+        beforeRestart.onLocation(fix(-250.0, now - 2 * SECOND), now - 2 * SECOND)
         val progress = Gson().fromJson(Gson().toJson(beforeRestart.getProgress()), TrackingProgress::class.java)
         val engine = StationTrackingEngine(stops, progress)
 
@@ -324,9 +328,9 @@ class StationTrackingEngineTest {
             stop("destination", positionMeters = 2_000.0, stationId = 2, destination = true)
         ))
         engine.onLocation(fix(-1_000.0, now), now)
-        engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
 
-        val passed = engine.onLocation(fix(400.0, now + 2 * SECOND), now + 2 * SECOND)
+        val passed = engine.onLocation(fix(400.0, now + 15 * SECOND), now + 15 * SECOND)
 
         assertEquals("destination", passed.stop?.key)
         assertEquals(1, engine.getProgress().nextIndex)
@@ -342,11 +346,11 @@ class StationTrackingEngineTest {
         )
         val engine = StationTrackingEngine(stops)
         engine.onLocation(fix(-1_000.0, now), now)
-        engine.onLocation(fix(-500.0, now + SECOND), now + SECOND)
-        assertEquals("delayed-current", engine.onTimetable(now + 2 * SECOND).stop?.key)
+        engine.onLocation(fix(-500.0, now + 5 * SECOND), now + 5 * SECOND)
+        assertEquals("delayed-current", engine.onTimetable(now + 6 * SECOND).stop?.key)
 
         engine.setGpsEnabled(false)
-        val clockMode = engine.onTimetable(now + 3 * SECOND)
+        val clockMode = engine.onTimetable(now + 7 * SECOND)
         assertEquals(TrackingSource.TIMETABLE, clockMode.source)
         assertEquals("next", clockMode.stop?.key)
         assertEquals(1, engine.getProgress().nextIndex)
@@ -359,7 +363,7 @@ class StationTrackingEngineTest {
         assertEquals(1, engine.getProgress().nextIndex)
 
         val firstFix = engine.onLocation(fix(1_500.0, later + SECOND), later + SECOND)
-        val secondFix = engine.onLocation(fix(1_750.0, later + 2 * SECOND), later + 2 * SECOND)
+        val secondFix = engine.onLocation(fix(1_750.0, later + 6 * SECOND), later + 6 * SECOND)
         assertNull(firstFix.announcement)
         assertEquals("next", secondFix.announcement?.key)
     }
@@ -368,18 +372,18 @@ class StationTrackingEngineTest {
     fun fastDestinationPassKeepsTheTargetActiveUntilSlowArrivalIsConfirmed() {
         val engine = StationTrackingEngine(listOf(stop("destination", destination = true)))
         engine.onLocation(fix(-1_000.0, now, speed = 30.0), now)
-        engine.onLocation(fix(-250.0, now + SECOND, speed = 30.0), now + SECOND)
-        val fastNearCentre = engine.onLocation(fix(-80.0, now + 2 * SECOND, speed = 30.0), now + 2 * SECOND)
+        engine.onLocation(fix(-250.0, now + 25 * SECOND, speed = 30.0), now + 25 * SECOND)
+        val fastNearCentre = engine.onLocation(fix(-80.0, now + 31 * SECOND, speed = 30.0), now + 31 * SECOND)
         assertFalse(fastNearCentre.destinationReached)
         assertFalse(engine.getProgress().completed)
 
-        val passing = engine.onLocation(fix(400.0, now + 3 * SECOND, speed = 30.0), now + 3 * SECOND)
+        val passing = engine.onLocation(fix(400.0, now + 47 * SECOND, speed = 30.0), now + 47 * SECOND)
         assertEquals("destination", passing.stop?.key)
         assertEquals(0, engine.getProgress().nextIndex)
         assertFalse(passing.destinationReached)
 
-        engine.onLocation(fix(250.0, now + 4 * SECOND, speed = 5.0), now + 4 * SECOND)
-        val slowArrival = engine.onLocation(fix(0.0, now + 5 * SECOND, speed = 0.0), now + 5 * SECOND)
+        engine.onLocation(fix(250.0, now + 52 * SECOND, speed = 5.0), now + 52 * SECOND)
+        val slowArrival = engine.onLocation(fix(0.0, now + 61 * SECOND, speed = 0.0), now + 61 * SECOND)
         assertTrue(slowArrival.destinationReached)
         assertTrue(engine.getProgress().completed)
     }
@@ -388,11 +392,11 @@ class StationTrackingEngineTest {
     fun destinationCanBeConfirmedByDwellWhenGpsSpeedIsUnavailable() {
         val engine = StationTrackingEngine(listOf(stop("destination", destination = true)))
         engine.onLocation(fix(-1_000.0, now, speed = null), now)
-        engine.onLocation(fix(-250.0, now + SECOND, speed = null), now + SECOND)
-        val entering = engine.onLocation(fix(-80.0, now + 2 * SECOND, speed = null), now + 2 * SECOND)
+        engine.onLocation(fix(-250.0, now + 25 * SECOND, speed = null), now + 25 * SECOND)
+        val entering = engine.onLocation(fix(-80.0, now + 31 * SECOND, speed = null), now + 31 * SECOND)
         assertFalse(entering.destinationReached)
 
-        val dwelling = engine.onLocation(fix(-80.0, now + 13 * SECOND, speed = null), now + 13 * SECOND)
+        val dwelling = engine.onLocation(fix(-80.0, now + 42 * SECOND, speed = null), now + 42 * SECOND)
         assertTrue(dwelling.destinationReached)
     }
 
@@ -407,7 +411,7 @@ class StationTrackingEngineTest {
         assertEquals("origin", first.stop?.key)
         assertEquals(0, engine.getProgress().nextIndex)
 
-        val leavingOrigin = engine.onLocation(fix(800.0, now + SECOND), now + SECOND)
+        val leavingOrigin = engine.onLocation(fix(800.0, now + 4 * SECOND), now + 4 * SECOND)
         assertEquals("next", leavingOrigin.stop?.key)
         assertEquals(1, engine.getProgress().nextIndex)
         assertFalse(leavingOrigin.destinationReached)
@@ -466,7 +470,7 @@ class StationTrackingEngineTest {
         ))
         engine.onLocation(fix(800.0, now), now)
 
-        val towardOrigin = engine.onLocation(fix(500.0, now + SECOND), now + SECOND)
+        val towardOrigin = engine.onLocation(fix(500.0, now + 4 * SECOND), now + 4 * SECOND)
 
         assertEquals("origin", towardOrigin.stop?.key)
         assertEquals(0, engine.getProgress().nextIndex)
@@ -699,13 +703,13 @@ class StationTrackingEngineTest {
             stop("next", positionMeters = 2_000.0, stationId = 2)
         ))
         engine.onLocation(fix(-1_000.0, now), now)
-        engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
 
         val firstAfterGap = engine.onLocation(fix(500.0, now + 40 * SECOND), now + 40 * SECOND)
         assertEquals("passed", firstAfterGap.stop?.key)
         assertEquals(0, engine.getProgress().nextIndex)
 
-        val coherentMovement = engine.onLocation(fix(800.0, now + 41 * SECOND), now + 41 * SECOND)
+        val coherentMovement = engine.onLocation(fix(800.0, now + 44 * SECOND), now + 44 * SECOND)
         assertEquals("next", coherentMovement.stop?.key)
         assertEquals(1, engine.getProgress().nextIndex)
     }
@@ -714,15 +718,15 @@ class StationTrackingEngineTest {
     fun unsuccessfulSpeechCanBeRetriedThenAcknowledgedWithoutAnotherDuplicate() {
         val engine = StationTrackingEngine(listOf(stop("next")))
         engine.onLocation(fix(-1_000.0, now), now)
-        val first = engine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        val first = engine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
         assertEquals("next", first.announcement?.key)
 
         engine.releaseAnnouncement("next")
-        val retry = engine.onLocation(fix(-250.0, now + 2 * SECOND), now + 2 * SECOND)
+        val retry = engine.onLocation(fix(-250.0, now + 9 * SECOND), now + 9 * SECOND)
         assertEquals("next", retry.announcement?.key)
 
         engine.acknowledgeAnnouncement("next")
-        val afterAcknowledgement = engine.onLocation(fix(-200.0, now + 3 * SECOND), now + 3 * SECOND)
+        val afterAcknowledgement = engine.onLocation(fix(-200.0, now + 10 * SECOND), now + 10 * SECOND)
         assertNull(afterAcknowledgement.announcement)
         assertTrue(engine.getProgress().announcedKeys.contains("next"))
     }
@@ -821,7 +825,7 @@ class StationTrackingEngineTest {
         val offlineEngine = StationTrackingEngine(cachedStops, cachedProgress)
 
         offlineEngine.onLocation(fix(-1_000.0, now), now)
-        val update = offlineEngine.onLocation(fix(-250.0, now + SECOND), now + SECOND)
+        val update = offlineEngine.onLocation(fix(-250.0, now + 8 * SECOND), now + 8 * SECOND)
 
         assertEquals(TrackingSource.GPS, update.source)
         assertEquals("cached-next", update.announcement?.key)
@@ -967,10 +971,10 @@ class StationTrackingEngineTest {
             stop("next", positionMeters = 2_000.0, stationId = 2)
         ))
         engine.onLocation(fix(-400.0, now), now)
-        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
-        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+        engine.onLocation(fix(-80.0, now + 4 * SECOND), now + 4 * SECOND)
+        engine.onLocation(fix(0.0, now + 5 * SECOND), now + 5 * SECOND)
 
-        val next = engine.onLocation(fix(1_800.0, now + 27 * SECOND, speed = 70.0), now + 27 * SECOND)
+        val next = engine.onLocation(fix(1_800.0, now + 30 * SECOND, speed = 70.0), now + 30 * SECOND)
 
         assertEquals("next", next.stop?.key)
         assertEquals("next", next.announcement?.key)
@@ -984,12 +988,12 @@ class StationTrackingEngineTest {
             stop("close-next", positionMeters = 180.0, stationId = 2)
         ))
         engine.onLocation(fix(-300.0, now), now)
-        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
-        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+        engine.onLocation(fix(-80.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.onLocation(fix(0.0, now + 4 * SECOND), now + 4 * SECOND)
 
-        val ambiguous = engine.onLocation(fix(95.0, now + 3 * SECOND), now + 3 * SECOND)
-        val inaccurate = engine.onLocation(fix(140.0, now + 4 * SECOND, accuracy = 100.0), now + 4 * SECOND)
-        val jitter = engine.onLocation(fix(130.0, now + 5 * SECOND, accuracy = 100.0), now + 5 * SECOND)
+        val ambiguous = engine.onLocation(fix(95.0, now + 5 * SECOND), now + 5 * SECOND)
+        val inaccurate = engine.onLocation(fix(140.0, now + 6 * SECOND, accuracy = 100.0), now + 6 * SECOND)
+        val jitter = engine.onLocation(fix(130.0, now + 7 * SECOND, accuracy = 100.0), now + 7 * SECOND)
 
         assertEquals("current", ambiguous.stop?.key)
         assertEquals("current", inaccurate.stop?.key)
@@ -1004,8 +1008,8 @@ class StationTrackingEngineTest {
             stop("close-next", positionMeters = 180.0, stationId = 2)
         ))
         engine.onLocation(fix(-300.0, now), now)
-        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
-        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+        engine.onLocation(fix(-80.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.onLocation(fix(0.0, now + 4 * SECOND), now + 4 * SECOND)
 
         val oppositeDirection = engine.onLocation(fix(-160.0, now + 10 * SECOND), now + 10 * SECOND)
 
@@ -1021,8 +1025,8 @@ class StationTrackingEngineTest {
             stop("destination", positionMeters = 180.0, stationId = 2, destination = true)
         ))
         engine.onLocation(fix(-300.0, now), now)
-        engine.onLocation(fix(-80.0, now + SECOND), now + SECOND)
-        engine.onLocation(fix(0.0, now + 2 * SECOND), now + 2 * SECOND)
+        engine.onLocation(fix(-80.0, now + 3 * SECOND), now + 3 * SECOND)
+        engine.onLocation(fix(0.0, now + 4 * SECOND), now + 4 * SECOND)
 
         val fastTransition = engine.onLocation(fix(140.0, now + 12 * SECOND, speed = 12.0), now + 12 * SECOND)
         assertEquals("destination", fastTransition.announcement?.key)
@@ -1300,6 +1304,13 @@ class StationTrackingEngineTest {
         engine.onLocation(tunnelFix(5_875.0, now + 7 * SECOND), now + 7 * SECOND)
         assertEquals("bismarck", engine.getProgress().nextStopKey)
         engine.onLocation(tunnelFix(5_875.0, now + 10 * SECOND), now + 10 * SECOND)
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        // Repeated short outliers cannot replace the plausible prior position.
+        // An actual outage starts a separate, fresh three-fix re-anchor window.
+        engine.onLocation(tunnelFix(5_875.0, now + 40 * SECOND), now + 40 * SECOND)
+        engine.onLocation(tunnelFix(5_875.0, now + 43 * SECOND), now + 43 * SECOND)
+        assertEquals("bismarck", engine.getProgress().nextStopKey)
+        engine.onLocation(tunnelFix(5_875.0, now + 46 * SECOND), now + 46 * SECOND)
         assertEquals("savigny", engine.getProgress().nextStopKey)
     }
 

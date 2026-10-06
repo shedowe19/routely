@@ -202,6 +202,14 @@ class StationTrackingEngine(
         resetObservation()
     }
 
+    /** A new wall-clock basis invalidates epoch evidence, never the selected visit. */
+    @Synchronized
+    fun resetLocationClock() {
+        invalidateLocation()
+        // The production clock adapter retains its separate monotonic watermark.
+        latestAcceptedFixMillis = null
+    }
+
     /** Retry an event if the service could not actually queue its speech. */
     @Synchronized
     fun releaseAnnouncement(key: String) {
@@ -256,6 +264,15 @@ class StationTrackingEngine(
 
         val oldFix = lastReliableFix
         latestAcceptedFixMillis = fix.timeMillis
+        if (oldFix != null && fix.timeMillis - oldFix.timeMillis in 1..MAX_FIX_AGE_MILLIS &&
+            !coherentRecoveryMovement(oldFix, fix)
+        ) {
+            // Ordinary departure/arrival/speech must obey the same short-pair
+            // movement bound as re-acquisition. Keep the last supported position
+            // so an outlier cannot become the reference for the following fix.
+            recoveryCandidate = null
+            return TrackingUpdate(currentStop(), TrackingSource.TIMETABLE)
+        }
         // A gap invalidates the approach trend, not the persisted visit cursor.
         if (oldFix != null && fix.timeMillis - oldFix.timeMillis > MAX_FIX_AGE_MILLIS) {
             val candidate = currentStop()?.takeIf {

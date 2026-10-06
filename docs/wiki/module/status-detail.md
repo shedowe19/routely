@@ -13,6 +13,7 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StatusDetailScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusEditRequest.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/DeletedStatusCompletion.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
@@ -30,7 +31,7 @@ Die Timeline verwendet `StopStation.stationName` und `stationId` aus dem verscha
 
 ### Auto-Refresh
 
-Alle 30 Sekunden wird `refreshSilently()` aufgerufen für Live-Delay-Daten. Während die frische Haltantwort aussteht, bleibt der vorherige vollständige Snapshot sichtbar. Der neue Status wird mit seinen zugeordneten Stopover-Grenzen und der neuen Timeline in einem UIState-Update übernommen; ein vorübergehender Rohstatus ohne passend hydratisierte Grenzen wird nicht angezeigt. Dadurch wechseln Headerzeiten nicht allein wegen nacheinander eintreffender API-Antworten zwischen GPS und API. Der Speichern-Erfolg ordnet ebenfalls noch kompatible vorhandene Grenzen vor der Veröffentlichung zu.
+Alle 30 Sekunden ruft der Hintergrundauftrag `loadSnapshot(..., showLoading = false)` für Live-Delay-Daten auf. Während die frische Haltantwort aussteht, bleibt der vorherige vollständige Snapshot sichtbar. Der neue Status wird mit seinen zugeordneten Stopover-Grenzen und der neuen Timeline in einem UIState-Update übernommen; ein vorübergehender Rohstatus ohne passend hydratisierte Grenzen wird nicht angezeigt. Dadurch wechseln Headerzeiten nicht allein wegen nacheinander eintreffender API-Antworten zwischen GPS und API. Der Speichern-Erfolg ordnet ebenfalls noch kompatible vorhandene Grenzen vor der Veröffentlichung zu.
 
 Schlägt die Halteanfrage fehl, werden dennoch die neuen Status-/Text-/manuellen Zeitfelder übernommen. Vorhandene Stopovers bleiben nur bei derselben Status-ID und Trip-ID, kompatibler vorhandener Trip-UUID sowie eindeutig passenden gelieferten Grenzen mit unveränderten gelieferten Planzeiten verwendbar. Andernfalls wird die alte Timeline geleert und die eingehenden API-Grenzen bleiben bestehen. Beim initialen Laden wird der Haltefehler angezeigt; der stille Refresh bleibt still. Dies ist keine Anzeigeverzögerung für abgelaufene GPS-Werte.
 
@@ -74,6 +75,8 @@ Für diese Ersatzbusfahrten nennt die Ansicht zusätzlich OSRM und OpenStreetMap
 
 `buildStatusEditRequest` vergleicht die Formularzeiten mit den beim Öffnen aufgelösten Anfangswerten. Unveränderte Ankunft/Abfahrt werden im Request ausgelassen, damit eine reine Textänderung die damalige Providerzeit nicht versehentlich als manuelle Istzeit festschreibt. Eine bewusst geleerte Zeit wird als leerer String übertragen. Auch ein anderer Besuch derselben Station gilt als Zielwechsel; eine reine Echtzeitänderung desselben Besuchs nicht. Ein neues Ziel muss nach dem eindeutig zugeordneten Einstieg liegen und darf nicht gestrichen sein. Der GPS-freie Formularresolver bleibt erhalten.
 
+`startEditing` speichert außerdem den vollständigen Anfangsstatus in `editInitialStatus`. Ein offener Dialog kann weiterhin Live-Refreshs erhalten, doch Zieländerungen werden gegen den Anfangsbesuch geprüft. Wird das Ziel inzwischen serverseitig von einem anderen Client geändert, sendet eine reine Text- oder Zeitkorrektur nicht versehentlich das alte Formularziel zurück. Eine bewusste Zielwahl bleibt dagegen eine Nutzeränderung gegenüber dem Anfangsbesuch. `editArrivalManuallyChanged` erhält die explizite Ankunftseingabe auch dann, wenn sie zufällig genau der Providerzeit des neu gewählten Ziels entspricht; automatische Formularanpassungen werden nicht als eigene Zeitkorrektur ausgegeben.
+
 Bei einem neuen Ziel wird ein vorhandener, vom Nutzer unveränderter manueller Ankunfts-Override des alten Ziels ausdrücklich mit `manualArrival = ""` gelöscht. Upstream wandelt diesen leeren Wert in `null` um; bloßes Weglassen würde den alten Override behalten. Eine eigens im Formular geänderte Zielzeit bleibt dagegen erhalten. Bei Rückwahl des ursprünglichen Besuchs wird dessen ursprünglicher manueller Wert wieder angezeigt. Speichern-/Löschfehler bleiben auch bei vorhandenem Status beziehungsweise offenem Bearbeitungsdialog sichtbar; laufendes Speichern sperrt dessen Bestätigung und Schließen.
 
 ### Löschung
@@ -81,6 +84,12 @@ Bei einem neuen Ziel wird ein vorhandener, vom Nutzer unveränderter manueller A
 - `deleteStatus()`: Sendet DELETE `/api/v1/status/{id}`
 
 Nur eigene Status dürfen geändert oder gelöscht werden. Die lokale aktive Fahrt wird nach erfolgreichem Löschen zusätzlich gegen den vor dem Auftrag aufgenommenen Auth-Snapshot geprüft; eine gleich nummerierte Fahrt eines neu angemeldeten Kontos wird nicht entfernt.
+
+Das Repository invalidiert nach bestätigtem PUT/DELETE den [Feed](./feed.md) und dessen kontobezogenen Room-Rückfall. Das Detail emittiert keine zweite Mutation. Eine HTTP-2xx-Änderungsantwort ohne vertrauenswürdigen Status löst `Invalidated` und Feed-Verifikation aus; der Fehlerhinweis empfiehlt die Aktualisierung der Fahrt.
+
+`completeDeletedStatus` trennt eine bestätigte Serverlöschung vom anschließenden lokalen Tracking-Cleanup. Ein lokaler Speicherfehler lässt `isDeleting` wieder frei und führt die Erfolgsnavigation genau einmal aus. Ein Application-Toast erklärt: `Fahrt gelöscht; lokale Begleitung konnte nicht beendet werden. Bitte Begleitung stoppen.` Zusätzlich wird nur für die passende In-Memory-Livefahrt mit gleicher Status-ID und Authrevision ein identitätsgebundener `ACTION_STOP` angefordert. Ein neuer Service beziehungsweise ein unabhängiger Fahrterkennungs-Opt-in wird nicht global gestoppt. Das DELETE wird nicht heimlich wiederholt. Coroutine-Abbruch bleibt ein Abbruch und führt keine späte Navigation aus.
+
+`StatusEditRequestTest` prüft Refresh während Text-/Zeitbearbeitung und ausdrückliche Ziel-/Zeitabsicht. `DeletedStatusCompletionTest` prüft Speicherfehler, genau einmaligen Abschluss sowie Abbruch während verzögertem Cleanup mit virtueller Coroutine-Zeit; siehe [Tests](../entwicklung/tests.md).
 
 ### Timeline-Darstellung (StatusDetailScreen)
 
@@ -99,6 +108,8 @@ Die Timeline zeigt:
 - "HALT ENTFÄLLT" für gestrichene Halte
 - "STARTHALTESTELLE", "ENDSTATION" Badges
 - "DEIN EINSTIEG", "DEIN ZIEL" (goldene Premium-Badges)
+
+Gleisangaben verwenden dieselbe `trackingPlatform`-Auflösung wie Service, Ansagen und Widget: am eingecheckten Einstieg Abfahrt-Echtzeit, dann geplante Abfahrt, dann generisches `platform`; an späteren Besuchen einschließlich Ausstieg Ankunft-Echtzeit, dann geplante Ankunft, dann `platform`. Das jeweils andere Ereignis dient nicht als Ersatz. Leere Werte werden übersprungen; vorhandene Displaystrings einschließlich führender Ziffern bleiben erhalten. SEV-Busse zeigen weiterhin kein Bahngleis als Ersatzbus-Abfahrtsort.
 
 ### Gemeinsamer Besuchsfortschritt
 
@@ -133,17 +144,20 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 | `sevStops` | Map<String, SevStopInfo> | Besuchsbezogene SEV-Positionen beziehungsweise Quellenhinweise des Detailabrufs |
 | `isLoadingSevStops` | Boolean | Öffentliche Karten werden im Hintergrund gesucht |
 | `isEditing`   | Boolean           | Bearbeitungsmodus               |
+| `editInitialStatus` | Status? | Beim Öffnen gebundener Edit-Anfangsstatus |
+| `editArrivalManuallyChanged` | Boolean? | Explizite Ankunftseingabe gegenüber automatisch angepasster Zielzeit |
 | `isDeleting`  | Boolean           | Löschvorgang                    |
 | `lastUpdated` | Long              | Timestamp letzte Aktualisierung |
 
 ## Offene Fragen
 
-- TODO: [Main-Review](../entwicklung/main-review-2026-10-06.md), D1/U2/U4: Ein Textedit nach Hintergrund-Zielwechsel kann das alte Ziel zurücksenden; die Timeline bevorzugt auch am Ausstieg das Abfahrtsgleis; erfolgreiche Löschung invalidiert den Feed nicht. Diese bestätigten Befunde sind noch nicht korrigiert.
 - TODO: EditStatusDialog Layout dokumentieren
 
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)
+- [Feed](./feed.md)
+- [Main-Review](../entwicklung/main-review-2026-10-06.md)
 - [TripTracking](./trip-tracking.md)
 - [GPS-Zeiten](./gps-zeiten.md)
 - [SEV-Ersatzhaltestellen](./sev-haltestellen.md)
