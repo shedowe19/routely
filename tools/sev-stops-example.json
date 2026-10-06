@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "trip_stop_selection": "not_performed",
+  "stations": [
+    {
+      "station_slug": "essen-hbf",
+      "source_url": "https://www.bahnhof.de/essen-hbf/karte",
+      "source_sha256": "e9f74f0c34f436f707ed138237e1264e041525ea25b3f60ae7b961621b6e9427",
+      "retrieved_at": "2026-10-06T10:18:00.234939+00:00",
+      "temporary_notices": [],
+      "replacement_stops": [
+        {
+          "source_feature_id": "sev.101840",
+          "latitude": 51.45018831,
+          "longitude": 7.0101172,
+          "direction_label": null,
+          "feature_version": "27.05.2025, 09:19",
+          "level": "GROUND_FLOOR"
+        }
+      ]
+    },
+    {
+      "station_slug": "muelheim-ruhr-hbf",
+      "source_url": "https://www.bahnhof.de/muelheim-ruhr-hbf/karte",
+      "source_sha256": "0a8ab6da966f7775c1a718a8c4e72828cfc0f14630e1e56c3ea50daeda4aaf66",
+      "retrieved_at": "2026-10-06T10:18:10.141518+00:00",
+      "temporary_notices": [
+        "Temporäre Ersatzhaltestellen vom 04.09 bis 30.10.2026:"
+      ],
+      "replacement_stops": [
+        {
+          "source_feature_id": "sev.136938",
+          "latitude": 51.43222557,
+          "longitude": 6.88553272,
+          "direction_label": "Richtung Duisburg\nbis zum 09.10.2026: Richtung Oberhausen",
+          "feature_version": "09.09.2026, 08:21",
+          "level": "GROUND_FLOOR"
+        },
+        {
+          "source_feature_id": "sev.136949",
+          "latitude": 51.43175246,
+          "longitude": 6.88538831,
+          "direction_label": "Richtung Essen",
+          "feature_version": "09.09.2026, 08:21",
+          "level": "GROUND_FLOOR"
+        }
+      ]
+    },
+    {
+      "station_slug": "duisburg-hbf",
+      "source_url": "https://www.bahnhof.de/duisburg-hbf/karte",
+      "source_sha256": "929aa59d27b9c27704bc579c0451454ed0d3e7d70aceeaad1a5d1f56ebed1c19",
+      "retrieved_at": "2026-10-06T10:18:17.539634+00:00",
+      "temporary_notices": [
+        "Temporäre Ersatzhaltestellen vom 04.09 bis 30.10.2026:"
+      ],
+      "replacement_stops": [
+        {
+          "source_feature_id": "sev.135989",
+          "latitude": 51.42804102,
+          "longitude": 6.77808449,
+          "direction_label": "Richtung Essen / Oberhausen",
+          "feature_version": "20.08.2026, 12:00",
+          "level": "GROUND_FLOOR"
+        },
+        {
+          "source_feature_id": "sev.135978",
+          "latitude": 51.42987326,
+          "longitude": 6.77724749,
+          "direction_label": "Richtung Düsseldorf",
+          "feature_version": "20.08.2026, 12:00",
+          "level": "GROUND_FLOOR"
+        }
+      ]
+    }
+  ]
+}

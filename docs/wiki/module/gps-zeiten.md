@@ -18,6 +18,8 @@ Aktualisiert die angezeigten Zeiten der eigenen aktiven Fahrt anhand eines zuver
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StatusDetailScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/widget/TripWidgetProvider.kt`
+- [Werkzeug zum Abruf öffentlicher SEV-Punkte](../../../tools/extract_bahnhof_sev.py)
+- [SEV-Beispielabruf vom 06.10.2026](../../../tools/sev-stops-example.json)
 
 ## Quellenentscheidung
 
@@ -62,23 +64,52 @@ Die Erweiterung sendet weder Standortverläufe noch Prognosen an Träwelling und
 
 `StationTrackingEngine`, `TrackingStop.plannedArrivalMillis` und `plannedDepartureMillis`, die bestehende Standortfreigabe sowie parsebare ISO-Zeitfelder der API. Es wird keine zusätzliche API, Preference oder Datenbank eingeführt.
 
-## SEV: fehlender Ersatzhaltestellenabgleich
+## SEV: öffentliche Ersatzhaltestellen und fehlende App-Zuordnung
 
-Die Codeprüfung vom 06.10.2026 bestätigt: `TripTrackingService.toTrackingStops()` übernimmt `stop.station.latitude/longitude` aus der Träwelling-API. Eine SEV-Datenbank, eine alternative Einstiegsadresse und eine Zuordnung physischer Ersatzhalte existieren bisher nicht. `category = bus`, Linienname und Betreiber sind allgemeine Verkehrsmitteldaten, kein eindeutiger Beleg für einen bestimmten SEV-Halt. Die nachgereichte Aufnahme einer Busfahrt RE1 Essen Hbf → Mülheim (Ruhr) Hbf → Duisburg Hbf zeigt Namen und Fahrplanzeiten, jedoch keine tatsächlich gelieferten Koordinaten oder Location-Callbacks.
+Die Codeprüfung vom 06.10.2026 bestätigt: `TripTrackingService.toTrackingStops()` übernimmt weiterhin `stop.station.latitude/longitude` aus der Träwelling-API. Die Android-App hat bislang keine Zuordnung physischer Ersatzhalte. Das neue Abrufwerkzeug exportiert öffentliche Quellen unabhängig von der App; es verändert weder API-Daten noch Tracking-Koordinaten. `category = bus`, Linienname und Betreiber sind allgemeine Verkehrsmitteldaten, kein eindeutiger Beleg für einen bestimmten SEV-Halt. Die nachgereichte Aufnahme einer Busfahrt RE1 Essen Hbf → Mülheim (Ruhr) Hbf → Duisburg Hbf zeigt Namen und Fahrplanzeiten, jedoch keine tatsächlich gelieferten Koordinaten oder Location-Callbacks.
 
-Der offizielle Abgleich liefert folgende Ortsinformationen; sie sind Rechercheergebnisse, keine eingebauten Koordinatenkorrekturen:
+### Öffentlicher Abruf auf bahnhof.de
 
-- [DB-SEV-Lageplan Essen Hbf, Stand 22.04.2026](https://www.bahnhof.de/downloads/replacement-service-maps/1690.pdf): Ausgang Freiheit, rechts zur Kruppstraße vor DSV. Der Bahnsteig beziehungsweise die allgemeine Bahnhofkoordinate ist nicht automatisch der physische Ersatzhalt.
-- [Zuginfo NRW, Meldung 137487](https://www.zuginfo.nrw/index.html?msg=137487), Verlegung 04.09.–30.10.2026: Mülheim (Ruhr) Hbf Richtung Duisburg in der Parallelstraße oberhalb des Tourainer Rings; Richtung Essen in der Parallelstraße vor der Brücke. Der aktuelle Meldungstext wurde im Suchindex gelesen; die Live-Webansicht lieferte im Recherchewerkzeug keinen auswertbaren Text.
-- [Offizieller Verlegungsplan Duisburg Hbf](https://www.zuginfo.nrw/download/1787148404746_Duisburg_Hbf_ge_nderte_SEV_Haltestelle_Neudorfer_Str_04_09_30_10_26.pdf), 04.09.–30.10.2026: Richtung Essen/Oberhausen Neudorfer Straße auf Höhe Hausnummer 62; Richtung Düsseldorf weiterhin Kammerstraße am Osteingang. Die Ankunftsposition einer in Duisburg endenden Busfahrt ist aus der Abfahrtsrichtungsregel allein nicht bewiesen.
+Die öffentlichen Kartenseiten [Essen Hbf](https://www.bahnhof.de/essen-hbf/karte), [Mülheim (Ruhr) Hbf](https://www.bahnhof.de/muelheim-ruhr-hbf/karte) und [Duisburg Hbf](https://www.bahnhof.de/duisburg-hbf/karte) enthalten in ihren HTML-Daten GeoJSON-Features vom Typ `RAIL_REPLACEMENT_TRANSPORT`. Ein Feature mit `geometry.type = Point` enthält Koordinaten in der Reihenfolge **Längengrad, Breitengrad**, eine `sev.*`-Kennung und gegebenenfalls Richtungsbezeichnungen. Wegbeschreibungen und zeitweilige Einschränkungen stehen zusätzlich in den Kartendaten. Dafür ist kein RIS::Stations-Konto nötig. Die HTML-Struktur ist eine öffentliche Website-Ausgabe, kein zugesicherter API-Vertrag.
 
-[DB RIS::Stations](https://developers.deutschebahn.com/db-api-marketplace/apis/product/ris-stations) dokumentiert `GET /replacement-transport/stops/by-bounding-box`. Der Dienst benötigt einen genehmigten Zugang und einen abonnierten Nutzungsplan; ein maximal zweimonatiger Testzugang ist angeboten. Hier wurde die öffentliche Dokumentation geprüft, keine authentifizierte Datenbankabfrage durchgeführt. Nutzungsbedingungen, Datenlizenz und dauerhafter Zugang müssen vor einer Integration geklärt werden.
+Das Werkzeug benötigt Python 3.10 oder neuer, nutzt dessen Standardbibliothek und benötigt keine zusätzliche Android-Abhängigkeit:
+
+```bash
+python3 tools/extract_bahnhof_sev.py essen-hbf muelheim-ruhr-hbf duisburg-hbf --output /tmp/sev-stops.json
+```
+
+Der [Beispielabruf](../../../tools/sev-stops-example.json) dokumentiert am 06.10.2026 drei Stationen mit fünf Ersatzhaltepunkten. Er ist eine Momentaufnahme, kein dauerhaft gültiges Haltestellenverzeichnis. Der Abgleich mit den zugehörigen öffentlichen Lageplänen bestätigt folgende veröffentlichte Punkte:
+
+| Station | SEV-Kennung | Breitengrad | Längengrad | Zuordnung in der Quelle |
+| --- | --- | --- | --- | --- |
+| Essen Hbf | `sev.101840` | 51.45018831 | 7.0101172 | Ein Ersatzhalt an der Kruppstraße; keine getrennte Richtungsbezeichnung |
+| Mülheim (Ruhr) Hbf | `sev.136938` | 51.43222557 | 6.88553272 | Duisburg; Oberhausen zusätzlich bis 09.10.2026 |
+| Mülheim (Ruhr) Hbf | `sev.136949` | 51.43175246 | 6.88538831 | Essen |
+| Duisburg Hbf | `sev.135989` | 51.42804102 | 6.77808449 | Essen / Oberhausen |
+| Duisburg Hbf | `sev.135978` | 51.42987326 | 6.77724749 | Düsseldorf |
+
+Der Werkzeugaufruf wurde mit den drei öffentlichen Kartenseiten erfolgreich ausgeführt. Ein unabhängiger Vergleich mit gesondert geladenen HTML-Daten bestätigt alle fünf Punkte. Zusätzliche manuelle Prüfungen verwerfen fehlende beziehungsweise abweichende Stationsdaten, anders typisierte Punkte und ungültige Koordinaten. Das ist ein Extraktionsnachweis, kein Android-, GPS- oder Geräteprüflauf.
+
+In Essen liegt der veröffentlichte SEV-Punkt rund 349 Meter vom ebenfalls veröffentlichten Kartenmittelpunkt des Bahnhofs entfernt. Diese Entfernung bezieht sich auf die beiden Website-Punkte, nicht auf eine im Screenshot belegte API-Koordinate. Ein Kartenmittelpunkt ist kein Ersatzhalt und darf bei fehlendem SEV-Feature nicht als solcher exportiert werden.
+
+### Richtung, Gültigkeit und PDF-Abgleich
+
+Das Feld `properties.version` beschreibt den Bearbeitungsstand eines Features. Es ist weder der Beginn noch das Ende einer Maßnahme. Zeiträume müssen aus den zugehörigen Hinweisen und Richtungsbezeichnungen gelesen werden. Die Karten von Mülheim und Duisburg nennen temporäre Ersatzhalte vom 04.09. bis 30.10.2026; die Oberhausen-Ergänzung in Mülheim ist separat bis 09.10.2026 begrenzt. Die Richtungshinweise belegen nicht automatisch, an welchem Punkt ein in Duisburg endender Bus ankommt.
+
+Die öffentlichen Lagepläne liefern ergänzende Orts- und Wegangaben:
+
+- [DB-SEV-Lageplan Essen Hbf, Stand 22.04.2026](https://www.bahnhof.de/downloads/replacement-service-maps/1690.pdf): Der südliche Ausgang Freiheit führt zur Kruppstraße und zum Ersatzhalt bei DSV. Der QR-Code führt zur Bahnhofseite; er ist kein Koordinatennachweis. Auch der einzige PDF-Link verweist auf die Bahnhofseite. Die Dateinummer `1690` darf nicht mit einer Träwelling-Stations-ID oder IBNR gleichgesetzt werden.
+- [DB-SEV-Lageplan Mülheim (Ruhr) Hbf, Stand 09.09.2026](https://www.bahnhof.de/downloads/replacement-service-maps/4219.pdf): Die Verlegung unterscheidet die Punkte in der Parallelstraße nach Fahrtrichtung, mit Duisburg oberhalb des Tourainer Rings und Essen vor der Brücke. Die zusätzliche Oberhausen-Frist steht ebenfalls im Plan und in den aktuellen öffentlichen Kartendaten.
+- [DB-SEV-Lageplan Duisburg Hbf, Stand 04.09.2026](https://www.bahnhof.de/downloads/replacement-service-maps/1374.pdf): Für Düsseldorf ist der Halt am Osteingang vorgesehen; für Essen/Oberhausen der temporäre Punkt an der Neudorfer Straße bei Hausnummer 62.
+
+[DB RIS::Stations](https://developers.deutschebahn.com/db-api-marketplace/apis/product/ris-stations) bleibt eine alternative strukturierte Quelle mit `GET /replacement-transport/stops/by-bounding-box`. Dieser Dienst benötigt einen genehmigten Zugang und einen abonnierten Nutzungsplan; eine authentifizierte Datenbankabfrage wurde hier nicht durchgeführt. Dieser Zugang ist keine Voraussetzung für das neue öffentliche Abrufwerkzeug. Dauerhafte Nutzungsbedingungen und die Wartbarkeit des Website-Abrufs bleiben vor einem regelmäßigen App-Datenbezug zu prüfen.
 
 Eine spätere Zuordnung muss Stationskennung, konkreten Fahrtbesuch, Datum, Richtung und gegebenenfalls mehrere Kandidaten berücksichtigen. Nur eindeutig belegte physische Punkte dürfen die interne Tracking-Projektion ergänzen; API-Stations-ID, Stopover-UUID und Zeiten bleiben erhalten. Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträchtigen. Zusätzlich können Straßenumwege den bestehenden geraden Prognosekorridor verlassen; Ersatzhaltkoordinaten allein gewährleisten deshalb keine Bus-ETA. Eine Bus-Routenprojektion ist ein eigenständiger Ausbau und kein Anlass, die GPS-Gültigkeitsgrenzen pauschal zu lockern.
 
 ## Offene Fragen
 
-- TODO: Einen verfügbaren, dauerhaft nutzbaren SEV-Datenzugang und dessen Antwortschema einschließlich Kennungen, Koordinaten, Richtungs-/Gültigkeitsinformationen prüfen. Für den gemeldeten RE1 die tatsächlich von der API gelieferten Stopover-Koordinaten und die Ankunftshaltestelle in Duisburg verifizieren; keine Koordinaten aus Namen oder Hausnummern erfinden.
+- TODO: Die exportierten öffentlichen SEV-Punkte eindeutig einer erkannten Ersatzverkehrsfahrt sowie Station, Besuch, Datum und Richtung zuordnen, bevor die Android-App sie für GPS verwendet. Für den gemeldeten RE1 die tatsächlich von der API gelieferten Stopover-Koordinaten und die Ankunftshaltestelle in Duisburg verifizieren. Fehlende oder mehrdeutige Ersatzhalte dürfen keine pauschale Koordinatenkorrektur auslösen.
+- TODO: Website-Struktur, Quellenänderungen, Ablauf temporärer Verlegungen und Bedingungen eines regelmäßigen Abrufs prüfen. Der Beispielabruf vom 06.10.2026 ist kein automatischer Aktualisierungsdienst; Feature-Versionen sind keine Gültigkeitsintervalle.
 - TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand und der aktuellen UI-Vergleichszeit erneut prüfen. Die nachgereichte Bildschirmaufnahme bei eingeschaltetem Display zeigt wechselnde GPS-/API-Quellen für denselben Besuch und Folgehalte, enthält aber keinen Standort- oder Audioverlauf. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
 - TODO: Einheitliche Quellen-/Zeitdarstellung in Fahrtdetail, Widget und Samsung-Sperrbildschirm bei Display-aus-Betrieb und wiederkehrendem Signal prüfen. Reine Kotlin-Tests belegen keine reale ETA-Güte.
 
