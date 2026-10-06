@@ -73,6 +73,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
 
     /** Acceptance only prepares a manual check-in. It never publishes a status. */
     fun acceptRecognizedRide(candidate: RecognizedRide) {
+        if (_uiState.value.hasPendingSubmission) return
         val requestedSelection = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -117,6 +118,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     // ─── Step 1: Station search ───────────────────────────────────────────────
 
     fun beginLocationLookup(): Long {
+        if (_uiState.value.hasPendingSubmission) return selectionGeneration
         val request = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -140,6 +142,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun searchNearbyStations(lat: Double, lon: Double) {
+        if (_uiState.value.hasPendingSubmission) return
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -176,6 +179,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun updateStationQuery(query: String) {
+        if (_uiState.value.hasPendingSubmission) return
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -201,6 +205,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     // ─── Step 2: Load departures using station.id ─────────────────────────────
 
     fun selectStation(station: TrainStation) {
+        if (_uiState.value.hasPendingSubmission) return
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -239,6 +244,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     // ─── Step 3: User picks a departure → load full trip (stopovers) ──────────
 
     fun selectTrip(departure: DepartureTrip) {
+        if (_uiState.value.hasPendingSubmission) return
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -310,12 +316,20 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         }
     }
 
-    fun updateManualDeparture(time: String) = _uiState.update { it.copy(manualDeparture = time) }
-    fun updateManualArrival(time: String) = _uiState.update { it.copy(manualArrival = time) }
+    fun updateManualDeparture(time: String) {
+        if (!_uiState.value.hasPendingSubmission) _uiState.update { it.copy(manualDeparture = time) }
+    }
+    fun updateManualArrival(time: String) {
+        if (!_uiState.value.hasPendingSubmission) _uiState.update { it.copy(manualArrival = time) }
+    }
 
-    fun updateStatusBody(body: String) = _uiState.update { it.copy(statusBody = body) }
+    fun updateStatusBody(body: String) {
+        if (!_uiState.value.hasPendingSubmission) _uiState.update { it.copy(statusBody = body) }
+    }
 
-    fun updateTravelReason(reason: TravelReason) = _uiState.update { it.copy(travelReason = reason) }
+    fun updateTravelReason(reason: TravelReason) {
+        if (!_uiState.value.hasPendingSubmission) _uiState.update { it.copy(travelReason = reason) }
+    }
 
     // ─── Step 5: Confirm check-in ─────────────────────────────────────────────
 
@@ -389,18 +403,17 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun reset() {
-        if (_uiState.value.step == CheckInStep.SUCCESS && _uiState.value.isLoading) return
+        val resetState = resetCheckInState(_uiState.value) ?: return
         selectionGeneration++
         searchJob?.cancel()
         selectionJob?.cancel()
         checkInJob?.cancel()
-        _uiState.update { CheckInUiState(rideRecognitionEnabled = it.rideRecognitionEnabled,
-            rideRecognition = it.rideRecognition, activeRidePresent = it.activeRidePresent) }
+        _uiState.value = resetState
     }
 
     fun goBack() {
         // A submitted POST may already have created a status on the server.
-        if (_uiState.value.step == CheckInStep.CONFIRM && _uiState.value.isLoading) return
+        if (_uiState.value.hasPendingSubmission) return
         selectionGeneration++
         searchJob?.cancel()
         selectionJob?.cancel()

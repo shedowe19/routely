@@ -40,7 +40,7 @@ Der Feature-ViewModel-Store und diese Navigation sind an `AuthSession.revision` 
 
 ## Benachrichtigungsnavigation
 
-`MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Ein Request mit optionaler `authSessionRevision` wird nur in derselben aktuellen Zugangsgeneration geöffnet; ein alter Hinweis darf nach Kontowechsel nicht dieselbe numerische Status-ID des neuen Kontos öffnen. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
+`MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Ein bereits abgeschickter CONFIRM-POST beziehungsweise seine laufende SUCCESS-Zeitkorrektur wird dabei nicht zurückgesetzt. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Ein Request mit optionaler `authSessionRevision` wird nur in derselben aktuellen Zugangsgeneration geöffnet; ein alter Hinweis darf nach Kontowechsel nicht dieselbe numerische Status-ID des neuen Kontos öffnen. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
 
 ## Zustandsdarstellung
 
@@ -55,6 +55,8 @@ Header und Haltzeiten verwenden den gemeinsamen `JourneyTimeResolver` einschlie�
 Bei GPS-Fortschritt kennzeichnet StatusDetail einen tatsächlich verwendeten nativen `Träwelling-Streckenverlauf` oder ein `SEV-Straßenmodell` getrennt von der Zeitquelle. Eine frische eindeutige Railprojektion kann diesen Hinweis auch ohne GPS-ETA liefern. Nur vorgeladene, abgelaufene oder nicht sicher verwendete Formen erhalten keinen Quellenhinweis; ein leerer Quellenwert wird nicht pauschal als Haltgerade beschriftet.
 
 Die Einstellungs-Card `Begleitung bei ausgeschaltetem Display` liest den Akkuoptimierungsstatus direkt aus Android und aktualisiert ihn bei Rückkehr in die sichtbare Activity. Eine Ausnahme wird ausschließlich über einen ausdrücklichen Nutzertipp auf die Systemfreigabe angefragt. Sie ist kein gespeicherter App-Schalter; Start-/Fallbackverhalten steht unter [Settings](../module/settings.md).
+
+Detail-Compositions besitzen eigene Beobachtungsleases. Activity-Neuanlage erhält den Fachentwurf und abgeschickte Mutationen; aktueller Busyzustand sperrt Verlassen. Erfolgreiche Löschungen bereinigen die aufgenommene Fahrt getrennt vom alten Screen und navigieren nur durch die aktuelle Detail-Composition. Dropdowns und Einstellungsaktionen besitzen zugeordnete Semantiklabels; die praktische TalkBack-/Rotationprüfung bleibt offen.
 
 ## Verwandte Seiten
 

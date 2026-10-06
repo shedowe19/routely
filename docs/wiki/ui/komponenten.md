@@ -66,6 +66,10 @@ Kleines Inline-Statistik-Badge.
 fun StatPill(icon: ImageVector, text: String, color: Color)
 ```
 
+### Beschriftete Einstellungen
+
+`SettingsToggle` verbindet Titel, Beschreibung, Schalterzustand und genau eine Aktion in der gesamten Zeile (`Role.Switch`, mindestens 48 dp). Die innere Switchanzeige besitzt keinen eigenen Handler. Auswahlfelder tragen ihre Titel direkt als Textfeldlabel. Der Setup-Tokenbutton nennt abhängig vom Zustand `Token anzeigen` oder `Token verbergen` aus Stringressourcen. Dies ist eine Quell-/Semantikkorrektur; instrumentierte und TalkBack-Prüfung bleiben offen.
+
 ## Farben (TransportColors)
 
 | Kategorie           | Farbe                |

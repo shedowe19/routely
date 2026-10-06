@@ -21,8 +21,11 @@ MAX_JSON = 4 * 1024 * 1024
 MAX_METADATA = 16 * 1024
 MAX_APK = 200 * 1024 * 1024
 ASSET_NAME = "release-version.json"
+CLAIM_PREFIX = "routely-version-code/"
+MAX_REFS = 2000
 PLAN_KEYS = {"schema_version", "repository", "tag_name", "version_name", "version_code", "commit_sha"}
 METADATA_KEYS = PLAN_KEYS | {"apk_name", "apk_sha256", "apk_size"}
+CLAIM_KEYS = PLAN_KEYS | {"workflow_run_id", "workflow_run_attempt"}
 VERSION_RE = re.compile(r"[0-9A-Za-z][0-9A-Za-z._-]{0,63}\Z")
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 REPO_RE = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+\Z")
@@ -168,6 +171,70 @@ def plan(repo, name, code, sha):
             "version_name": name, "version_code": version_code(code), "commit_sha": commit_sha(sha)}
 
 
+def workflow_identity(run_id, attempt):
+    values = []
+    for value in (run_id, attempt):
+        if isinstance(value, str):
+            require(re.fullmatch(r"[1-9][0-9]{0,18}", value) is not None, "Invalid release workflow identity.")
+            value = int(value)
+        require(positive_int(value) and value <= 2**63 - 1, "Invalid release workflow identity.")
+        values.append(value)
+    return dict(workflow_run_id=values[0], workflow_run_attempt=values[1])
+
+
+def claim_tag(code):
+    return CLAIM_PREFIX + str(version_code(code))
+
+
+def matching_refs(client, prefix):
+    # This Git Database endpoint returns the complete matching array and has no
+    # pagination parameters. Bound both the transport bytes and the ref count.
+    refs = client.json("GET", f"/repos/{client.repo}/git/matching-refs/tags/" + urllib.parse.quote(prefix, safe=""))
+    require(isinstance(refs, list) and len(refs) <= MAX_REFS, "Invalid or excessive version-tag history.")
+    seen = set()
+    for ref in refs:
+        name = ref.get("ref") if isinstance(ref, dict) else None
+        require(isinstance(name, str) and name.startswith("refs/tags/" + prefix) and len(name) <= 160
+                and name not in seen, "Ambiguous version-tag history.")
+        seen.add(name)
+        obj = ref.get("object")
+        require(isinstance(obj, dict) and obj.get("type") in ("commit", "tag"), "Invalid version-tag target.")
+        commit_sha(obj.get("sha"))
+    return refs
+
+
+def version_claims(client):
+    claims, seen_tags = {}, set()
+    for ref in matching_refs(client, CLAIM_PREFIX):
+        tag = ref["ref"].removeprefix("refs/tags/")
+        code = version_code(tag.removeprefix(CLAIM_PREFIX))
+        require(tag == claim_tag(code) and ref["object"]["type"] == "tag", "Version-code claim is not a canonical annotated tag.")
+        tag_sha = ref["object"]["sha"]
+        annotated = client.json("GET", f"/repos/{client.repo}/git/tags/{tag_sha}")
+        require(isinstance(annotated, dict) and annotated.get("sha") == tag_sha and annotated.get("tag") == tag,
+                "Version-code claim tag identity changed.")
+        message = annotated.get("message")
+        require(isinstance(message, str), "Invalid version-code claim payload.")
+        try:
+            raw = message.encode("utf-8", errors="strict")
+        except UnicodeError:
+            raise GuardError("Invalid UTF-8 version-code claim payload.") from None
+        require(len(raw) <= MAX_METADATA, "Invalid version-code claim payload size.")
+        claim = decode_json(raw)
+        require(isinstance(claim, dict) and set(claim) == CLAIM_KEYS, "Invalid version-code claim schema.")
+        expected = dict(plan(client.repo, claim.get("version_name"), claim.get("version_code"), claim.get("commit_sha")),
+                        **workflow_identity(claim.get("workflow_run_id"), claim.get("workflow_run_attempt")))
+        require(all(claim[key] == value and type(claim[key]) is type(value) for key, value in expected.items())
+                and claim["version_code"] == code, "Version-code claim identity differs from its ledger tag.")
+        obj = annotated.get("object")
+        require(isinstance(obj, dict) and obj.get("type") == "commit" and obj.get("sha") == claim["commit_sha"],
+                "Version-code claim is not bound to its exact commit.")
+        require(code not in claims and claim["tag_name"] not in seen_tags, "Ambiguous version-code claims.")
+        claims[code] = claim
+        seen_tags.add(claim["tag_name"])
+    return claims
+
+
 def validate_metadata(data, repo, tag):
     require(isinstance(data, dict) and set(data) == METADATA_KEYS, "Invalid release metadata schema.")
     expected = plan(repo, data.get("version_name"), data.get("version_code"), data.get("commit_sha"))
@@ -234,7 +301,7 @@ def check_metadata_assets(client, release, expected=None):
     return metadata
 
 
-def released_floor(client, floor, legacy):
+def released_floor(client, floor, legacy, claims=None):
     legacy_floor = floor
     seen_ids, seen_tags, seen_codes = set(), set(), set()
     for page in range(1, 21):
@@ -256,6 +323,12 @@ def released_floor(client, floor, legacy):
                     continue
             metadata = check_metadata_assets(client, release)
             code = metadata["version_code"]
+            if claims is not None:
+                claimed = claims.get(code)
+                require(claimed is None or all(claimed[key] == metadata[key] for key in PLAN_KEYS),
+                        "Published release conflicts with a consumed version-code claim.")
+                matching = [item for item in claims.values() if item["tag_name"] == metadata["tag_name"]]
+                require(not matching or matching[0]["version_code"] == code, "Published release changed its claimed version code.")
             if not known_legacy or code > legacy_floor:
                 require(code not in seen_codes and code > legacy_floor, "Published version-code history is not strictly above the legacy floor/unique.")
                 seen_codes.add(code)
@@ -265,9 +338,37 @@ def released_floor(client, floor, legacy):
     raise GuardError("Release history exceeds the bounded pagination limit.")
 
 
+def durable_floor(client, floor, legacy, own_claim=None, requested_tag=None):
+    claims = version_claims(client)
+    if requested_tag is not None:
+        require(all(claim["tag_name"] != requested_tag for claim in claims.values()),
+                "Version name already has a consumed claim; choose a new version name and code.")
+    if own_claim is not None:
+        require(claims.get(own_claim["version_code"]) == own_claim, "Release workflow does not own its exact version-code claim.")
+    by_tag = {claim["tag_name"]: claim for claim in claims.values()}
+    # Before the ledger was introduced, a retained nonlegacy tag could be the
+    # only evidence of a deleted/withdrawn installed release. Never guess 13.
+    for ref in matching_refs(client, "v"):
+        tag = ref["ref"].removeprefix("refs/tags/")
+        version_name(tag[1:])
+        claimed = by_tag.get(tag)
+        if claimed is not None:
+            require(ref_commit(client, tag) == claimed["commit_sha"], "Version tag conflicts with its permanent code claim.")
+        elif tag not in legacy:
+            release = client.json("GET", f"/repos/{client.repo}/releases/tags/" + urllib.parse.quote(tag, safe=""), optional=True)
+            require(isinstance(release, dict) and release.get("tag_name") == tag and release.get("draft") is False,
+                    "Unclaimed nonlegacy version tag lacks published history; preserve or restore its issued-code evidence.")
+            check_metadata_assets(client, release)
+    floor = released_floor(client, floor, legacy, claims)
+    for claim in claims.values():
+        if claim != own_claim:
+            floor = max(floor, claim["version_code"])
+    return floor
+
+
 def choose_code(requested, floor):
     code = version_code(requested) if requested else version_code(floor + 1)
-    require(code > floor, "Version code must exceed every published code and the durable legacy floor.")
+    require(code > floor, "Version code must exceed every published/consumed code and the durable legacy floor.")
     return code
 
 
@@ -280,7 +381,30 @@ def preflight(client, floor_path, name, requested, sha):
     require(isinstance(repo, dict) and repo.get("full_name") == client.repo, "GitHub repository identity is unavailable.")
     assert_absent(client, "v" + name)
     floor, legacy = bootstrap(floor_path, client.repo)
-    return plan(client.repo, name, choose_code(requested, released_floor(client, floor, legacy)), sha)
+    return plan(client.repo, name, choose_code(requested, durable_floor(client, floor, legacy, requested_tag="v" + name)), sha)
+
+
+def claim_version(client, floor_path, selected, run_id, attempt):
+    require(isinstance(selected, dict) and set(selected) == PLAN_KEYS, "Invalid selected release plan.")
+    expected = plan(client.repo, selected.get("version_name"), selected.get("version_code"), selected.get("commit_sha"))
+    require(all(selected[key] == value and type(selected[key]) is type(value) for key, value in expected.items()),
+            "Invalid selected release plan identity.")
+    identity = workflow_identity(run_id, attempt)
+    refreshed = preflight(client, floor_path, selected["version_name"], str(selected["version_code"]), selected["commit_sha"])
+    require(refreshed == selected, "Version selection changed before its permanent claim.")
+    claim = dict(selected, **identity)
+    tag = claim_tag(selected["version_code"])
+    created = client.json("POST", f"/repos/{client.repo}/git/tags", {
+        "tag": tag, "message": json.dumps(claim, sort_keys=True, separators=(",", ":")),
+        "object": selected["commit_sha"], "type": "commit"})
+    require(isinstance(created, dict), "Version-code claim object creation failed.")
+    tag_sha = commit_sha(created.get("sha"))
+    # An atomic create-ref rejects a competing claim with the same code. Even a
+    # failed build permanently consumes this ref; it is never updated/deleted.
+    ref = client.json("POST", f"/repos/{client.repo}/git/refs", {"ref": "refs/tags/" + tag, "sha": tag_sha})
+    require(isinstance(ref, dict) and ref.get("ref") == "refs/tags/" + tag, "Version-code claim reservation failed.")
+    require(version_claims(client).get(selected["version_code"]) == claim, "Created version-code claim differs from its workflow/commit.")
+    return claim
 
 
 def apk_metadata(release_plan, apk_path, aapt):
@@ -310,10 +434,10 @@ def assert_reserved(client, release_id, metadata, draft):
     return release
 
 
-def reserve(client, floor_path, metadata, body):
+def reserve(client, floor_path, metadata, body, run_id, attempt):
     validate_metadata(metadata, client.repo, metadata.get("tag_name"))
-    selected = preflight(client, floor_path, metadata["version_name"], str(metadata["version_code"]), metadata["commit_sha"])
-    require(all(metadata[key] == value for key, value in selected.items()), "Selected version changed during the build.")
+    assert_absent(client, metadata["tag_name"])
+    assert_new_code(client, floor_path, metadata, run_id, attempt)
     # create-ref and create-release reject existing identities atomically (422).
     created = client.json("POST", f"/repos/{client.repo}/git/refs", {"ref": "refs/tags/" + metadata["tag_name"], "sha": metadata["commit_sha"]})
     require(isinstance(created, dict) and created.get("ref") == "refs/tags/" + metadata["tag_name"], "Tag reservation failed.")
@@ -327,17 +451,18 @@ def reserve(client, floor_path, metadata, body):
     return release["id"]
 
 
-def assert_new_code(client, floor_path, metadata):
+def assert_new_code(client, floor_path, metadata, run_id, attempt):
     floor, legacy = bootstrap(floor_path, client.repo)
-    choose_code(str(metadata["version_code"]), released_floor(client, floor, legacy))
+    own_claim = dict({key: metadata[key] for key in PLAN_KEYS}, **workflow_identity(run_id, attempt))
+    choose_code(str(metadata["version_code"]), durable_floor(client, floor, legacy, own_claim))
 
 
-def publish(client, release_id, metadata, apk_path, floor_path):
+def publish(client, release_id, metadata, apk_path, floor_path, run_id, attempt):
     validate_metadata(metadata, client.repo, metadata.get("tag_name"))
     require(positive_int(release_id), "Invalid reserved release identity.")
     own = assert_reserved(client, release_id, metadata, True)
     require(release_assets(own) == [], "Reserved draft already contains assets; no overwrite is permitted.")
-    assert_new_code(client, floor_path, metadata)
+    assert_new_code(client, floor_path, metadata, run_id, attempt)
     with Path(apk_path).open("rb") as source:
         apk = source.read(MAX_APK + 1)
     require(len(apk) == metadata["apk_size"] and hashlib.sha256(apk).hexdigest() == metadata["apk_sha256"], "Signed APK changed after validation.")
@@ -348,7 +473,7 @@ def publish(client, release_id, metadata, apk_path, floor_path):
     own = assert_reserved(client, release_id, metadata, True)
     require(len(release_assets(own)) == 2, "Reserved draft contains unexpected assets.")
     check_metadata_assets(client, own, metadata)
-    assert_new_code(client, floor_path, metadata)
+    assert_new_code(client, floor_path, metadata, run_id, attempt)
     client.json("PATCH", f"/repos/{client.repo}/releases/{release_id}", {"draft": False, "target_commitish": metadata["commit_sha"]})
     final = assert_reserved(client, release_id, metadata, False)
     check_metadata_assets(client, final, metadata)
@@ -375,12 +500,15 @@ def main():
     require(os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch", "Publication is allowed only for manual release dispatches.")
     head = subprocess.run(["git", "rev-parse", "HEAD"], check=True, capture_output=True, text=True).stdout.strip()
     require(head == commit_sha(sha), "Checkout differs from the dispatch commit.")
+    identity = workflow_identity(os.environ.get("GITHUB_RUN_ID", ""), os.environ.get("GITHUB_RUN_ATTEMPT", ""))
+    run_id, attempt = identity["workflow_run_id"], identity["workflow_run_attempt"]
     if args.command == "preflight":
         selected = preflight(client, args.floor, name, code, sha)
+        claim_version(client, args.floor, selected, run_id, attempt)
         write_json(args.metadata, selected)
         with open(os.environ["GITHUB_ENV"], "a", encoding="utf-8") as output:
             output.write(f"RELEASE_VERSION_NAME={selected['version_name']}\nRELEASE_VERSION_CODE={selected['version_code']}\n")
-        print(f"Release version validated: {selected['tag_name']}, code {selected['version_code']}.")
+        print(f"Release version permanently claimed: {selected['tag_name']}, code {selected['version_code']}.")
     elif args.command == "reserve":
         selected = decode_json(Path(args.metadata).read_bytes())
         require(isinstance(selected, dict) and set(selected) == PLAN_KEYS and selected == plan(client.repo, name, code, sha), "Build release plan changed.")
@@ -388,7 +516,7 @@ def main():
         metadata = apk_metadata(selected, args.apk, args.aapt)
         body = Path(args.body_file).read_text(encoding="utf-8")
         require(len(body.encode("utf-8")) <= 64 * 1024, "Release notes exceed the bounded size limit.")
-        rid = reserve(client, args.floor, metadata, body)
+        rid = reserve(client, args.floor, metadata, body, run_id, attempt)
         write_json(args.metadata, metadata)
         with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
             output.write(f"release_id={rid}\n")
@@ -397,7 +525,7 @@ def main():
         require(args.apk and args.release_id, "Publication requires its reserved draft and signed APK.")
         metadata = decode_json(Path(args.metadata).read_bytes())
         require(isinstance(metadata, dict) and all(metadata.get(key) == value for key, value in plan(client.repo, name, code, sha).items()), "Release plan changed before publication.")
-        publish(client, args.release_id, metadata, args.apk, args.floor)
+        publish(client, args.release_id, metadata, args.apk, args.floor, run_id, attempt)
         print("Release published with verified commit, APK and version metadata.")
 
 

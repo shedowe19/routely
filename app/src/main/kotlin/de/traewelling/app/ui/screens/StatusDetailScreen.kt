@@ -1,5 +1,6 @@
 package de.traewelling.app.ui.screens
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
@@ -67,12 +68,17 @@ fun StatusDetailScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
 
-    LaunchedEffect(statusId) {
-        viewModel.loadStatusDetail(statusId)
+    DisposableEffect(statusId, viewModel) {
+        val attachment = statusId.takeIf { it > 0 }?.let(viewModel::observeStatusDetail)
+        onDispose { attachment?.let(viewModel::stopObservingStatusDetail) }
     }
 
-    DisposableEffect(statusId) {
-        onDispose { viewModel.reset(statusId) }
+    val leaveDetail = {
+        if (viewModel.reset(statusId)) onBack()
+    }
+    BackHandler(enabled = !uiState.isEditing) { leaveDetail() }
+    LaunchedEffect(uiState.deletedStatusId, statusId) {
+        if (viewModel.consumeDeletedStatus(statusId)) onBack()
     }
 
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -86,7 +92,7 @@ fun StatusDetailScreen(
                 TextButton(
                     onClick = {
                         showDeleteDialog = false
-                        viewModel.deleteStatus(onSuccess = onBack)
+                        viewModel.deleteStatus()
                     },
                     colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
                 ) {
@@ -118,7 +124,7 @@ fun StatusDetailScreen(
             TraewellingTopAppBar(
                 title = "Fahrt-Details",
                 navigationIcon = {
-                    IconButton(onClick = onBack) {
+                    IconButton(onClick = leaveDetail, enabled = !uiState.isUpdating && !uiState.isDeleting) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
                     }
                 },

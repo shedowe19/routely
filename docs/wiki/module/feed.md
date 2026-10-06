@@ -46,9 +46,15 @@ Ein HTTP-2xx-PUT ohne vertrauenswürdigen Status derselben ID invalidiert den Ca
 - **TraewellingApiService**: Zum Laden neuer Feed-Seiten (`/api/v1/dashboard`).
 - **StateMessage**: Einheitliche UI für Lade-, Fehler- und Empty-States.
 
-## Offene Fragen
+### Like-Absicht und geordnete Schreibaufträge
 
-- TODO: D5/D8 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: ein alter GET kann einen erfolgreichen Like überlagern; eine alte erfolgreiche PUT-Antwort kann nach einem neueren PUT den RAM-Text zurücksetzen. GET-/Statusmutationsschutz und korrekte Room-Invalidation decken diese beiden zusätzlich reproduzierten Reihenfolgen nicht ab.
+Like/Unlike invalidiert dieselben Feedcachepartitionen und publiziert `LikeChanged` mit Authrevision und Absicht, ohne einen vollständigen Status zu erfinden. Der Controller überlagert noch offene und bestätigte Like-Absichten auch bei GETs. Erst eine nach der Bestätigung gestartete erfolgreiche Listenanfrage ersetzt eine bestätigte Absicht. Ein Fehler nimmt nur den weiterhin passenden Auftrag auf dessen zuletzt belegte Basis zurück; Feedwechsel und Löschung erzeugen keine alte Karte.
+
+PUT, DELETE, Like und Unlike verwenden 64 gemeinsame Mutexstreifen je Credentialdigest und Status-ID, auch zwischen Repositoryinstanzen. Warten ist abbrechbar; vor dem Dispatch wird die Sitzung erneut geprüft. Ein bereits abgeschickter Schreibauftrag hält seine Reihenfolge bis zur Antwort und Cache-/Eventübernahme in `NonCancellable`. Der Retrofit-Client begrenzt die HTTP-Gesamtdauer auf 60 Sekunden; lokale Nachverarbeitung ist davon getrennt. Hashkollisionen serialisieren höchstens unabhängige Aufträge und vergrößern kein Register. Damit startet ein späterer PUT erst nach der vollständig übernommenen vorherigen Antwort.
+
+Ein durch `Invalidated` erforderlicher Verifikationsabruf bleibt als Auftrag erhalten, wenn eine spätere Mutation den GET abbricht. Der Controller startet die Verifikation erneut und entfernt diese Pflicht erst bei einer passenden erfolgreichen Listenübernahme. Ein anschließender `Updated`-Event darf eine zuvor entfernte Karte daher nicht dauerhaft verschwinden lassen.
+
+## Offene Fragen
 
 
 ## Verwandte Seiten

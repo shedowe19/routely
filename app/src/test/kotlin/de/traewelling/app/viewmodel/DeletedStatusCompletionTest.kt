@@ -4,6 +4,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
@@ -57,5 +58,18 @@ class DeletedStatusCompletionTest {
         runCurrent()
         assertTrue(task.isCancelled)
         assertEquals(0, completions)
+    }
+
+    @Test fun slowCommittedCleanupProducesABoundedWarningWithoutRetryingDeletion() = runTest {
+        var cleanups = 0
+        var completions = 0
+        var warning: Exception? = null
+        completeDeletedStatus(
+            cleanup = { ++cleanups; awaitCancellation() },
+            completion = { ++completions; warning = it }, cleanupTimeoutMillis = 15
+        )
+        assertEquals(1, cleanups)
+        assertEquals(1, completions)
+        assertTrue(warning is IllegalStateException)
     }
 }

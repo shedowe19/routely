@@ -2,7 +2,7 @@
 
 ## Zweck und Prüfstand
 
-Aktueller Nachreview: Main `f406bad3ba44bf2f008eb09f1856590c7183770d`, Tree `0827b2b27b2e49df69e9321b2acfca4b0dee7119`, erneut am 06.10.2026 nach den 16 Korrekturen geprüft. Sieben Subagents und Root untersuchten verschiedene Fachbereiche und prüften überlappende Befunde unabhängig. Dieser Nachreview bestätigt zwölf zusätzliche Befunde; deren Tabelle und ausgeführte Gegenproben stehen unten. Produktivcode wurde in diesem Review nicht verändert.
+Aktueller Umsetzungsstand: Die zwölf zusätzlichen Befunde des Nachreviews von Main `f406bad3ba44bf2f008eb09f1856590c7183770d` sind auf Nutzerauftrag vollständig korrigiert. Ausgangspunkt ist Main `2121cc112a187e1f760bbe28487bb0300c91bfa9` mit dokumentiertem Nachreview. Sechs parallele Implementierer, fachfremde Gegenprüfungen und Root prüften die neuen Schutzgrenzen. Die nachstehenden historischen Befunde bleiben erhalten; der neue Korrektur- und Prüfabschnitt beschreibt den heutigen Code.
 
 Die folgenden ursprünglichen Abschnitte und die 16 Korrekturen sind historische Nachweise und bleiben als solche erhalten.
 
@@ -86,7 +86,7 @@ Der veröffentlichte [CI-Lauf 37529409222](https://github.com/shedowe19/routely/
 
 Zusätzliche kontrollierte Gegenproben verwenden den unveränderten Produktivcode: neun JUnit-Prüfungen in sieben temporären Klassen ergaben sieben gezielte Schutzassertionfehler und zwei erfolgreiche Adapterkontrollen. Drei zusätzliche Offline-Python-Prüfungen ergaben zwei Schutzassertionfehler und eine erfolgreiche Releasekontrolle. Die sieben fehlgeschlagenen Kotlin-Prüfungen scheiterten ausschließlich an den erwarteten Assertions; die zwei Kontrollen bestanden. Es gab keinen Ausführungsfehler. Die lokalen Gradle-Läufe dauerten 20 beziehungsweise 19 Sekunden. Diese zwölf Zusatzprüfungen sind weder Teil der vorhandenen 658/41-Test-Suite noch Beleg eines fehlgeschlagenen veröffentlichten CI-Laufs. Temporäre Klassen wurden anschließend entfernt. Es gab keine Live-API-Schreiboperationen, keine Signing-/Releaseoperation und keine Verwendung echter Kontotokens.
 
-### Neue bestätigte Befunde
+### Historische bestätigte Befunde des Nachreviews
 
 Zeilenangaben beziehen sich auf Main `f406bad`. P2 betrifft hier Funktions-/Datenfehler oder einen konkret administrativ ausgelösten Versionsregress; P3 betrifft weniger dringliche Anzeige-/Bedienpfade. Kein neuer P1-Abschlussfehler wurde bestätigt.
 
@@ -111,7 +111,32 @@ Die [Visibility-Enum](https://github.com/Traewelling/traewelling/blob/4d602796da
 
 Android-Verträge für D7/U7 wurden anhand [Activity-Neuanlage](https://developer.android.com/guide/topics/resources/runtime-changes), [DisposableEffect](https://developer.android.com/develop/ui/compose/side-effects) und [zugänglichen Switches](https://developer.android.com/codelabs/jetpack-compose-accessibility) gegengeprüft. Die reinen Prüfungen führen weder Rotation noch Android-Service-/FLP-/TTS-/Doze-Zustellung aus. Reale Häufigkeiten und frühere Nutzerfahrten bleiben unbewiesen.
 
-Priorität für die nächste Umsetzung: D4 und U5 verhindern unbeabsichtigte Daten-/Erstellungsfolgen; G5–G7 verbessern die belegte Reisebegleitung; D5–D7 sichern konsistente Bedienung. R4 ist vor administrativer Rücknahme neuer veröffentlichter Versionen abzusichern. D8/U6/U7 folgen als Anzeige-/Bedienkorrekturen. Dauerhafte Regressionen werden erst mit den tatsächlichen Korrekturen ergänzt.
+Die folgende Umsetzung korrigiert alle zwölf Befunde. Die historischen Quellzeilen und damaligen Schutzassertionfehler oben beschreiben ausschließlich den unveränderten Ausgangsstand.
+
+## Umsetzung aller zwölf Nachreviewbefunde und erneute Gegenprüfung
+
+| Befund | Heute eingebaute Korrektur | Dauerhafte Prüfung |
+| --- | --- | --- |
+| G5 | Kumulierte Abfahrt seit bestätigtem inneren Aufenthaltsanker; geordneter Übergang und frisches Vorwärtspaar bleiben nötig. Eindeutig gestützter Anker knapp vor dem Ursprung kann Fortschritt null verwenden. | `GpsDepartureObservationTest` |
+| G6 | Neue unbrauchbare Clockbeobachtung erreicht die Engine und unterbricht den transienten Wiederverankerungsbeleg. Alte/Replays bleiben ausgeschlossen. | `TrackingLocationRecoveryAdapterTest` |
+| G7 | Endpunktzulässigkeit nach Kandidatenvergleich auf dem gesamten Linienzug; benachbarte Kanten umgehen kein reales Ende. Kurven-/Mehrdeutigkeitsregeln bleiben erhalten. | `GpsGeometryEndpointTest` |
+| D4 | Unveränderte Sichtbarkeit im PUT weglassen; explizite Editierabsicht getrennt vom Providerrefresh. | `StatusEditRequestTest` |
+| D5 | Offene/bestätigte Like-Absicht überlagert ältere GETs und vollständige Statusevents; Like/Unlike invalidiert Room und publiziert revisionsgebundene Teilmutation. | `FeedLikeOrderingTest`, `StatusWriteOrderingTest` |
+| D6 | MarkAll bestätigt nur Start-IDs; neue Meldungen bleiben servergetreu. Erfolgreicher PUT erzwingt neuen Snapshot und sperrt alte Listen; Rollback erhält sichtbare Ungelesene. | `NotificationControllerTest` |
+| D7 | Erhaltener Fachzustand und getrennte Composition-Beobachtungsleases; Rotation verwirft weder Entwurf noch abgeschickte Mutation. Aktuelle VM-Busygrenze sperrt Verlassen vor Recomposition. | `StatusDetailPresentationTest` |
+| U5 | Gemeinsamer Schutz für CONFIRM-POST und SUCCESS-Nachkorrektur in Auswahl, Reset, Navigation und Zurück. | `CheckInNavigationGuardTest` |
+| R4 | Annotierte Create-only-Codeclaims vor Build/Signierung, exakt lauf-/versuchsgebunden. Fehlbuild und Release-Rücknahme geben Code/Name nicht frei; fehlende ältere Evidenz stoppt. | Offline-Releaseguardtests |
+| D8 | Prozessweite feste Mutexstreifen ordnen PUT/DELETE/Like/Unlike je Credential und Status durch Antwort/Cacheübernahme. Warten abbrechbar, Dispatch zeitbegrenzt weitergeführt. | `StatusWriteOrderingTest` |
+| U6 | Enginekatalog unabhängig von Syntheseinitialisierung; sichtbarer Fehler/Retry, zehn Sekunden Initfrist und Callbackgeneration. | `SettingsSpeechInitializerTest` |
+| U7 | Gelabelte gemeinsame Switchaktionen, eigenbeschriftete Dropdowns und Token-Anzeigen-/Verbergenaktion. | Quell-/Semantik-Gegenprüfung; Instrumentierung offen |
+
+Die fachfremde Gegenprüfung fand und korrigierte zusätzliche konkrete Folgefälle im selben Durchlauf: Bodyless-PUT-Verifikation darf durch spätere Mutationen nicht verloren gehen und muss Seite 1 prüfen; ein gestützter Haltanker knapp vor dem Ursprung benötigt eine konservative Ausgangsprojektion; MarkAll-Rollback muss währenddessen neu geladene ungelesene Meldungen mitzählen; Dropdownfelder brauchen ihre eigene Beschriftung; ein schneller Zurücktipp muss gegen den aktuellen VM-Zustand geprüft werden; bestätigtes DELETE muss lokale identitätsgebundene Bereinigung unabhängig vom späteren Ansichtswechsel abschließen; bereits geladene eigene Karten im Nutzerprofil müssen erfolgreiche Mutationen übernehmen und alte GETs sperren. Die Profilintegration erhält laufende Follow-Aufträge, ihren eigenen Besitzer und einen Followfehler auch über nachfolgende erfolgreiche Statusverifikation. Unveränderter Text wird beim reinen Zeit-PUT ebenfalls ausgelassen; bewusst geleerter Text bleibt eine ausdrückliche Änderung. `onCleared` invalidiert Präsentation und Ladegeneration, damit eine noch laufende bestätigte DELETE-Bereinigung nach Sitzungsende keinen veralteten UI-Hinweis auslösen kann.
+
+Die unabhängigen Sichten umfassen GPS/Geometrie, Android-Lifecycle/Audio/Notification/Widget, Daten-/API-/Cacheantworten, Editor/Navigation/Zugänglichkeit sowie Auth/Backup/Release. Keine Schutzgrenze wurde für einen Test gelockert. Eine grüne reine Suite belegt diese Codeverträge, keine echte Nutzerfahrt oder Gerätezustellung. Tatsächlich ausgeführte Tests, Lint und Buildnachweise stehen unter [Tests](./tests.md); die Abwägung steht in der [ADR Nachreview-Korrekturen](../entscheidungen/2026-10-06-nachreview-korrekturen.md).
+
+### Wiki-Abgleich im Umsetzungsdurchlauf
+
+21 bestehende Seiten wurden aktualisiert: `api/traewelling-kompatibilitaet`, `architektur/datenfluss`, `architektur/entscheidungen`, `entscheidungen/README`, `entwicklung/deployment`, `entwicklung/main-review-2026-10-06`, `entwicklung/tests`, `index`, `module/checkin`, `module/feed`, `module/gps-zeiten`, `module/notifications`, `module/profile`, `module/settings`, `module/status-detail`, `module/trip-tracking`, `module/user-profile`, `offene-fragen`, `ui/komponenten`, `ui/screens` und `ui/theme`. Neu ist die [ADR Nachreview-Korrekturen](../entscheidungen/2026-10-06-nachreview-korrekturen.md). Gründe sind die korrigierten Codeverträge, dauerhaften Regressionen und neue Versionsclaim-/Lifecycleentscheidungen. Auth-/Auth-PKCE-, Secrets-, Widget-, Fahrterkennungs-, Fortschritts-, Datenmodell-/Schema- und externe Schnittstellenseiten wurden zusätzlich sachlich gegengeprüft; dort erfordern diese Korrekturen keinen neuen Vertrag. Alle 60 Wiki-Seiten werden auf relative Links und abschließende verwandte Seiten geprüft. Praktische Geräte- und signierte Release-TODOs bleiben sichtbar getrennt.
 
 ## Sinnvolle Verbesserungen nach den Fehlerkorrekturen
 
@@ -128,7 +153,7 @@ Priorität für die nächste Umsetzung: D4 und U5 verhindern unbeabsichtigte Dat
 ## Offene Fragen
 
 - Die historischen 16 Codebefunde sind korrigiert und gezielt abgesichert. Keine Schutzgrenze wurde zugunsten alter unrealistischer Testpositionen gelockert.
-- TODO: Die zwölf zusätzlichen Befunde G5–G7, D4–D8, U5–U7 und R4 des Nachreviews von `f406bad` umsetzen und mit dauerhaften Regressionen absichern. Dieser Nachreview ändert ausschließlich Dokumentation.
+- Alle zwölf zusätzlichen Befunde G5–G7, D4–D8, U5–U7 und R4 sowie konkret bestätigte Folgefälle sind korrigiert. Die erneute Gegenprüfung ist Bestandteil dieses Umsetzungsdurchlaufs; reine und praktische Prüfgrenzen bleiben getrennt.
 - TODO: System-/Compose-/Backup-Restore-Prüfungen und ersten neuen signierten Release ergänzen; die optionalen Ausbauideen sind keine verbleibenden Codebefunde dieses Reviews.
 - TODO: Reale GPS-/ETA-Güte, Samsung-Sperrbildschirm, Display-aus-/Doze-/Audiozustellung und Ressourcenverbrauch weiterhin auf einem Gerät prüfen. Der Review liefert hierfür keine Garantie.
 

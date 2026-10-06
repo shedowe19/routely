@@ -13,8 +13,12 @@ internal fun buildStatusEditRequest(
     val original = originalCheckin?.destination
     val changedDestination = destination != original && destination?.matchesStopover(original) != true
     return UpdateStatusRequest(
-        body = state.editBody,
-        visibility = state.editVisibility,
+        body = state.editBody.takeIf { it != (state.editInitialStatus ?: state.status)?.body.orEmpty() },
+        // An unchanged opening value is not permission to restore visibility after a refresh.
+        visibility = state.editVisibility.takeIf {
+            state.editVisibilityManuallyChanged &&
+                it != ((state.editInitialStatus ?: state.status)?.visibility ?: 0)
+        },
         destination = destination?.stationId.takeIf { changedDestination },
         destinationArrivalPlanned = destination?.arrivalPlanned.takeIf { changedDestination },
         departure = state.editDeparture.takeIf { it != initialDeparture },

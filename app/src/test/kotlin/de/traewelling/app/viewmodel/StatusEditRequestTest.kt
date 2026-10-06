@@ -117,4 +117,46 @@ class StatusEditRequestTest {
             editArrival = newArrival, editArrivalManuallyChanged = true)
         assertEquals(newArrival, buildStatusEditRequest(edited, departure, newArrival).arrival)
     }
+
+    @Test fun textOnlySaveDoesNotUndoRemoteFollowerOrPrivateVisibility() {
+        for (restricted in listOf(2, 3)) {
+            val opening = status.copy(visibility = 0)
+            val edited = state.copy(editInitialStatus = opening, status = opening.copy(visibility = restricted),
+                editVisibility = 0)
+            val request = buildStatusEditRequest(edited, departure, arrival)
+            assertNull(request.visibility)
+            assertFalse(JsonParser.parseString(gson.toJson(request)).asJsonObject.has("visibility"))
+        }
+    }
+
+    @Test fun explicitVisibilityIntentUsesTheOpeningSnapshotDespiteRemoteRefresh() {
+        val opening = status.copy(visibility = 0)
+        val edited = state.copy(editInitialStatus = opening, status = opening.copy(visibility = 3),
+            editVisibility = 2, editVisibilityManuallyChanged = true)
+        assertEquals(2, buildStatusEditRequest(edited, departure, arrival).visibility)
+    }
+
+    @Test fun revertingVisibilityToItsOpeningValueDoesNotRestoreThatValueOnTheServer() {
+        val opening = status.copy(visibility = 0)
+        val edited = state.copy(editInitialStatus = opening, status = opening.copy(visibility = 3),
+            editVisibility = 0, editVisibilityManuallyChanged = true)
+        assertNull(buildStatusEditRequest(edited, departure, arrival).visibility)
+    }
+
+    @Test fun changingOnlyTheTimeDoesNotRestoreOlderTextAfterAnotherClientEditsIt() {
+        val opening = status.copy(body = "opening text")
+        val edited = state.copy(editInitialStatus = opening, status = opening.copy(body = "new server text"),
+            editBody = "opening text", editDeparture = "2026-10-05T09:00:00Z")
+        val request = buildStatusEditRequest(edited, departure, arrival)
+        assertNull(request.body)
+        assertFalse(JsonParser.parseString(gson.toJson(request)).asJsonObject.has("body"))
+        assertEquals(edited.editDeparture, request.departure)
+    }
+
+    @Test fun explicitlyClearedTextRemainsAnEmptyStringInsteadOfAnOmittedBody() {
+        val opening = status.copy(body = "opening text")
+        val request = buildStatusEditRequest(state.copy(editInitialStatus = opening, editBody = ""), departure, arrival)
+        assertEquals("", request.body)
+        assertEquals("", JsonParser.parseString(gson.toJson(request)).asJsonObject.get("body").asString)
+    }
 }

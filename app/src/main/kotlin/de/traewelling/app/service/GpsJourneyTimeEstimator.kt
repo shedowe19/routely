@@ -83,7 +83,11 @@ class GpsJourneyTimeEstimator {
         val origin: Boolean, val destination: Boolean
     )
     private data class ArrivalCandidate(val first: LocationFix, var latest: LocationFix, var count: Int = 1)
-    private data class ObservedVisit(val arrival: Long, var departure: Long? = null)
+    private data class ObservedVisit(
+        val arrival: Long,
+        var departureAnchor: LocationFix,
+        var departure: Long? = null
+    )
     private data class SegmentSample(
         val key: String, val fix: LocationFix, val fraction: Double, val segmentMeters: Double,
         val path: TrackingRouteGeometry.Path? = null, val uniqueRoadCandidate: Boolean = false
@@ -389,9 +393,20 @@ class GpsJourneyTimeEstimator {
     }
 
     private fun observeArrival(stop: TrackingStop, arrived: Boolean, fix: LocationFix, inside: Boolean): ObservedVisit? {
-        observed[stop.key]?.let { return it }
         val speed = fix.speedMetersPerSecond
         val lowSpeed = speed != null && speed.isFinite() && speed in 0.0..MAX_STATIONARY_SPEED
+        observed[stop.key]?.let { actual ->
+            // Keep a real inner-station reference throughout a supported dwell.
+            // Subsequent moving callbacks must not replace it: their small
+            // pairwise displacement may accumulate into a genuine departure.
+            val anchor = actual.departureAnchor
+            if (actual.departure == null && arrived && inside && (speed == null || lowSpeed) &&
+                distance(anchor.latitude, anchor.longitude, fix.latitude, fix.longitude) <=
+                    max(20.0, minOf(30.0, anchor.accuracyMeters, fix.accuracyMeters))) {
+                actual.departureAnchor = fix
+            }
+            return actual
+        }
         if (!inside || (speed != null && !lowSpeed)) {
             arrivals.remove(stop.key)
             return null
@@ -407,7 +422,7 @@ class GpsJourneyTimeEstimator {
             firstSpeed in 0.0..MAX_STATIONARY_SPEED && arrival.count >= 2
         val dwell = arrival.count >= 2 && fix.timeMillis - arrival.first.timeMillis >= MIN_DWELL_MILLIS
         if (arrived && (twoSlowFixes || dwell)) {
-            return ObservedVisit(arrival.first.timeMillis).also { observed[stop.key] = it }
+            return ObservedVisit(arrival.first.timeMillis, arrival.latest).also { observed[stop.key] = it }
         }
         return null
     }
@@ -492,15 +507,45 @@ class GpsJourneyTimeEstimator {
         val actual = observed[previousStop.key] ?: return
         if (actual.departure != null || previous == null || lastVisitKey != previousStop.key ||
             previousStop.plannedDepartureMillis == null || projection.fraction <= 0.0) return
-        val prior = projectSamePath(previousStop, currentStop, previous, projection) ?: return
+        val immediatePrior = projectSamePath(previousStop, currentStop, previous, projection) ?: return
+        if (projection.fraction <= immediatePrior.fraction) return
+        val anchor = actual.departureAnchor
+        val prior = departureAnchorProjection(previousStop, currentStop, anchor, projection) ?: return
         val movement = (projection.fraction - prior.fraction) * projection.length
         val fromPrevious = distance(fix.latitude, fix.longitude, previousStop.latitude!!, previousStop.longitude!!)
-        if (movement >= max(35.0, previous.accuracyMeters + fix.accuracyMeters) &&
+        if (movement >= max(35.0, anchor.accuracyMeters + fix.accuracyMeters) &&
             fromPrevious > ARRIVAL_RADIUS_METERS + fix.accuracyMeters) {
             // This is the time of a supported departure observation, not the
             // exact moment a vehicle's doors closed or its wheels first moved.
             actual.departure = fix.timeMillis
         }
+    }
+
+    private fun departureAnchorProjection(
+        from: TrackingStop, to: TrackingStop, anchor: LocationFix, current: Projection
+    ): Projection? {
+        projectSamePath(from, to, anchor, current)?.let { return it }
+        val fromLatitude = from.latitude ?: return null
+        val fromLongitude = from.longitude ?: return null
+        val toLatitude = to.latitude ?: return null
+        val toLongitude = to.longitude ?: return null
+        // The confirmed physical dwell can be just before the segment's start,
+        // as with a platform centroid. Attribute only zero outgoing chainage;
+        // never invent extrapolated movement or resolve a nearby route branch.
+        if (distance(anchor.latitude, anchor.longitude, fromLatitude, fromLongitude) +
+            anchor.accuracyMeters > ARRIVAL_RADIUS_METERS) return null
+        if (current.path != null) {
+            val result = TrackingRouteGeometry.project(current.path, anchor)
+            if (result.ambiguous || !result.beforeOrigin) return null
+        } else {
+            val scale = EARTH_RADIUS_METERS * cos(Math.toRadians((fromLatitude + toLatitude) / 2))
+            val x = Math.toRadians(toLongitude - fromLongitude) * scale
+            val y = Math.toRadians(toLatitude - fromLatitude) * EARTH_RADIUS_METERS
+            val fx = Math.toRadians(anchor.longitude - fromLongitude) * scale
+            val fy = Math.toRadians(anchor.latitude - fromLatitude) * EARTH_RADIUS_METERS
+            if (fx * x + fy * y >= 0.0) return null
+        }
+        return current.copy(fraction = 0.0, across = 0.0)
     }
 
     private fun clearLocationState() {

@@ -53,6 +53,12 @@ Wenn der Nutzer in der LazyColumn scrollt und noch mehr Status-Seiten verfügbar
 | `currentPage`     | Int          | Aktuelle Seiten-Nummer         |
 | `isFollowLoading` | Boolean      | Follow/Unfollow in Bearbeitung |
 
+### Gemeinsame Statusmutationen
+
+Android-freie Profilcontroller beobachten den revisionsgebundenen `StatusMutation`-Flow. Geänderte bereits geladene Karten werden ersetzt, gelöschte entfernt; unbekannte Karten werden nicht eingefügt. Ältere Profil-/Statusanfragen dürfen nach der Mutation keinen alten Snapshot zurückbringen. Unvollständige erfolgreiche PUT-Antworten erhalten eine aktuelle Seite-1-Verifikation. Ein Wechsel von Sitzung oder angezeigtem Nutzer bleibt eine eigene Grenze.
+
+Das eigene Profil lädt beim erneuten Einfügen der Composition weiterhin über `LaunchedEffect(Unit)`. Das Nutzerprofil überspringt eine bereits erfüllte Ladung desselben Namens; deshalb benötigt besonders die Rückkehr aus einem bearbeiteten eigenen Status dessen unmittelbare Mutationsübernahme. Statusmutationen und ein Refresh desselben Profils beenden keinen abgeschickten Follow-Auftrag; eigene Besitzer und ein gegebenenfalls nachgelagerter Abruf erhalten seinen Abschluss. Ein Followfehler bleibt auch nach erfolgreicher Kartenverifikation sichtbar, bis er ausdrücklich verworfen wird, eine neue Followaktion beginnt oder das Profil wechselt.
+
 ## Abhängigkeiten
 
 - **TraewellingRepository**: Für API-Aufrufe (getUserProfile, getUserStatuses, followUser, unfollowUser)

@@ -15,6 +15,10 @@ sealed class StatusMutation(open val sessionRevision: String, open val statusId:
     data class Deleted(override val sessionRevision: String, override val statusId: Int) :
         StatusMutation(sessionRevision, statusId)
 
+    /** Like endpoints return no full status; update only the current user's like intent. */
+    data class LikeChanged(override val sessionRevision: String, override val statusId: Int, val liked: Boolean) :
+        StatusMutation(sessionRevision, statusId)
+
     /** The PUT committed, but its response does not contain a trustworthy replacement snapshot. */
     data class Invalidated(override val sessionRevision: String, override val statusId: Int) :
         StatusMutation(sessionRevision, statusId)
@@ -23,6 +27,12 @@ sealed class StatusMutation(open val sessionRevision: String, open val statusId:
 /** Shared by repository instances. Tests can supply a private store instead. */
 internal class StatusMutationStore {
     internal val cacheMutex = Mutex()
+    // A fixed stripe set bounds memory while sharing write ordering across repository instances.
+    // Hash collisions only serialize unrelated writes; the same credentials/status always share a lock.
+    private val writeMutexes = Array(64) { Mutex() }
+
+    internal fun writeMutex(accountKey: String, statusId: Int): Mutex =
+        writeMutexes[((31 * accountKey.hashCode() + statusId) and Int.MAX_VALUE) % writeMutexes.size]
     internal var cacheRevision = 0L // Read and written only while holding cacheMutex.
     private val accountRevisions = mutableMapOf<String, Long>()
     private var epochOverflow = false

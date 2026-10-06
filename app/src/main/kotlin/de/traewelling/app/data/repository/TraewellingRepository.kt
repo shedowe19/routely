@@ -12,12 +12,14 @@ import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
 import retrofit2.Response
 import java.io.IOException
 import java.security.MessageDigest
+import kotlin.coroutines.coroutineContext
 
 class TraewellingRepository internal constructor(
     private val statusDao: StatusDao,
@@ -116,37 +118,66 @@ class TraewellingRepository internal constructor(
 
     // ─── Status Actions ───────────────────────────────────────────────────────
 
-    suspend fun likeStatus(id: Int): Result<Unit> = apiResult {
-        val r = api().likeStatus(id)
-        if (!r.isSuccessful) error("Like fehlgeschlagen (${r.code()})")
-    }
+    suspend fun likeStatus(id: Int): Result<Unit> = changeLike(id, liked = true)
 
-    suspend fun unlikeStatus(id: Int): Result<Unit> = apiResult {
-        val r = api().unlikeStatus(id)
-        if (!r.isSuccessful) error("Unlike fehlgeschlagen (${r.code()})")
-    }
+    suspend fun unlikeStatus(id: Int): Result<Unit> = changeLike(id, liked = false)
 
-    suspend fun deleteStatus(id: Int): Result<Unit> = apiResult {
+    private suspend fun changeLike(id: Int, liked: Boolean): Result<Unit> = apiResult {
         val session = authenticatedSession()
-        val r = apiFactory(session).deleteStatus(id)
-        if (!r.isSuccessful) error("Löschen fehlgeschlagen (${r.code()})")
-        completeStatusMutation(session, StatusMutation.Deleted(session.revision, id))
+        orderedStatusWrite(session, id) {
+            val r = if (liked) apiFactory(session).likeStatus(id) else apiFactory(session).unlikeStatus(id)
+            if (!r.isSuccessful) error("${if (liked) "Like" else "Unlike"} fehlgeschlagen (${r.code()})")
+            completeStatusMutation(session, StatusMutation.LikeChanged(session.revision, id, liked))
+        }
+    }
+
+    suspend fun deleteStatus(
+        id: Int,
+        expectedSession: AuthSession? = null,
+        onCommitted: suspend (AuthSession) -> Unit = {}
+    ): Result<Unit> = apiResult {
+        val session = authenticatedSession()
+        if (expectedSession != null && session != expectedSession)
+            throw CancellationException("Session changed before status deletion")
+        orderedStatusWrite(session, id) {
+            val r = apiFactory(session).deleteStatus(id)
+            if (!r.isSuccessful) error("Löschen fehlgeschlagen (${r.code()})")
+            completeStatusMutation(session, StatusMutation.Deleted(session.revision, id))
+            onCommitted(session)
+        }
     }
     
     suspend fun updateStatus(id: Int, request: UpdateStatusRequest, expectedSession: AuthSession? = null): Result<Status> = apiResult {
         val session = authenticatedSession()
         if (expectedSession != null && session != expectedSession)
             throw CancellationException("Session changed before status correction")
-        val r = apiFactory(session).updateStatus(id, request)
-        if (!r.isSuccessful) error("Änderung fehlgeschlagen (${r.code()})")
-        val status = r.body()?.data?.takeIf { it.id == id }
-        if (status == null) {
-            completeStatusMutation(session, StatusMutation.Invalidated(session.revision, id))
-            error("Änderung wurde angenommen, aber die Antwort ist unvollständig. Bitte aktualisiere die Fahrt (${r.code()}).")
+        orderedStatusWrite(session, id) {
+            val r = apiFactory(session).updateStatus(id, request)
+            if (!r.isSuccessful) error("Änderung fehlgeschlagen (${r.code()})")
+            val status = r.body()?.data?.takeIf { it.id == id }
+            if (status == null) {
+                completeStatusMutation(session, StatusMutation.Invalidated(session.revision, id))
+                error("Änderung wurde angenommen, aber die Antwort ist unvollständig. Bitte aktualisiere die Fahrt (${r.code()}).")
+            }
+            completeStatusMutation(session, StatusMutation.Updated(session.revision, status))
+            status
         }
-        completeStatusMutation(session, StatusMutation.Updated(session.revision, status))
-        status
     }
+
+    private suspend fun <T> orderedStatusWrite(session: AuthSession, id: Int, write: suspend () -> T): T =
+        mutations.writeMutex(cacheType("account", session), id).withLock {
+            // Waiting remains cancellable. Never dispatch a queued write for a replaced login.
+            coroutineContext.ensureActive()
+            requireCurrentSession(session)
+            coroutineContext.ensureActive()
+            // Once dispatched, retain ordering through the bounded HTTP response and publication.
+            // RetrofitClient has a 60-second *call* timeout; cancellation must not let a newer
+            // write overtake this server commit while its response is still in flight.
+            withContext(NonCancellable) {
+                requireCurrentSession(session)
+                write()
+            }
+        }
 
     private suspend fun completeStatusMutation(session: AuthSession, event: StatusMutation) =
         withContext(NonCancellable) {
@@ -262,7 +293,10 @@ class TraewellingRepository internal constructor(
 
     suspend fun getUserStatuses(username: String, page: Int = 1): Result<StatusListResponse> = apiResult {
         val r = api().getUserStatuses(username, page)
-        r.body() ?: error("Keine Fahrten (${r.code()})")
+        if (!r.isSuccessful) throw HttpException(r)
+        val body = r.body() ?: error("Keine Fahrten (${r.code()})")
+        body.data ?: error("Fehlende Statusliste (${r.code()})")
+        body
     }
 
     suspend fun searchUsers(query: String): Result<List<User>> = apiResult {

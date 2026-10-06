@@ -6,7 +6,7 @@ Dokumentiert Prüfung, Signierung und Veröffentlichung einer neuen Android-Vers
 
 ## GitHub Actions
 
-`.github/workflows/android.yml` baut Releases manuell per `workflow_dispatch`. Eingaben sind ein neuer `version_name` und optional `version_code`. Ein leeres Codefeld wählt den veröffentlichten Höchstwert + 1; ein expliziter Code muss größer sein. Der historisch belegte Mindeststand ist Code 13 aus dem signierten Lauf für `v1.8.7`.
+`.github/workflows/android.yml` baut Releases manuell per `workflow_dispatch`. Eingaben sind ein neuer `version_name` und optional `version_code`. Ein leeres Codefeld wählt den höchsten veröffentlichten oder dauerhaft verbrauchten Code + 1; ein expliziter Code muss größer sein. Der historisch belegte Mindeststand ist Code 13 aus dem signierten Lauf für `v1.8.7`.
 
 Der Workflow installiert Android-SDK 36 und Build Tools 35.0.0, führt Unit-Tests vor dem Release-Build aus und signiert erst danach mit GitHub Secrets. APK und `release-version.json` werden als Workflow-Artifact `release-apk` hochgeladen. Die APK heißt `routely-v<version_name>.apk`. Zulässige Eingaben und Toolchain stehen unter [Build](./build.md).
 
@@ -20,15 +20,17 @@ Nach Build und Signierung prüft `aapt` Paket-ID, Versionsname und Code der tats
 
 Die Publikation nutzt ausschließlich die reservierte Release-ID. Zwei Create-only Asset-POSTs laden APK und Metadaten hoch; ein schon vorhandenes Asset führt zum Abbruch. Der Helfer prüft Draftidentität, aufgelöste Tag-SHA, vollständigen Metadateninhalt und den von GitHub gelieferten APK-Digest. Fehlender oder falscher Digest blockiert die Veröffentlichung. Der Versionscode wird vor den Uploads und vor dem abschließenden `draft:false` erneut geprüft. Danach werden Release, Tag und Assets nochmals gelesen und verglichen.
 
-## Grenze nach administrativer Rücknahme
+## Dauerhaft verbrauchte Versionscodes
 
-R4 des [Nachreviews](./main-review-2026-10-06.md) bestätigt eine zusätzliche Betriebsgrenze: Nur der Legacy-Höchstcode 13 ist unabhängig von der Releasehistorie dauerhaft gespeichert. Künftige Codes stammen aus derzeit veröffentlichten Release-Metadaten; Drafts werden übersprungen. Wird ein schon veröffentlichter neuer Release mit Code 18 gelöscht oder wieder zum Draft, kann ein neuer Versionsname automatisch Code 14 statt mindestens 19 erhalten, selbst wenn der alte Tag bleibt und die APK bereits installiert ist. Drei Offlineproben bestätigen zwei solche Regressionen und den normalen erhaltenen Verlauf 18→19.
+Vor Build und Signierung reserviert die Preflight-CLI einen annotierten Tag `routely-version-code/<code>`. Dessen begrenzter JSON-Inhalt bindet Repository, Code, Versionsname, exakte Commit-SHA sowie `GITHUB_RUN_ID` und `GITHUB_RUN_ATTEMPT`. Das Tagobjekt allein ist keine Reservierung; erst Create-ref beansprucht den Code atomar. Die Pipeline aktualisiert oder löscht diesen Claim niemals. Reserve und Publish müssen ihren exakt passenden Claim derselben Workflowausführung nachweisen und weiterhin über allen anderen verbrauchten beziehungsweise veröffentlichten Codes liegen.
 
-TODO: Künftig ausgegebene Höchstcodes dauerhaft bewahren oder unvollständige zurückgezogene Historie blockieren. Bis zur Korrektur veröffentlichte Metadaten erhalten; bei erforderlicher Rücknahme vor weiterer Veröffentlichung den dauerhaften Floor ausdrücklich auf den bereits ausgegebenen Höchstcode erhöhen. Die automatische Pipeline entfernt keine veröffentlichten Releases. Dieser Randfall benötigt eine administrative Historienänderung und ist kein belegtes Rennen innerhalb der serialisierten regulären Veröffentlichung.
+Auch fehlgeschlagene Builds und Signierungen verbrauchen Code und Versionsname. Ein erneuter Lauf braucht einen neuen Namen und höheren Code; der Claim bleibt erhalten. Ein später gelöschter oder wieder zum Draft gemachter Release gibt seinen Code nicht frei. Die Codewahl liest alle validierten Claims zusätzlich zu Legacyfloor und veröffentlichten Assets. Bei einem nicht erfassten älteren `v*`-Tag ohne weiterhin belegte veröffentlichte Versionshistorie stoppt sie, statt einen alten Floor zu erraten. Matching-Refs werden als begrenztes vollständiges Präfixarray gelesen; Releasehistorie bleibt paginiert und begrenzt. `git describe --match 'v*'` nimmt keine Claimtags in den Changelog auf.
+
+Claims müssen dauerhaft erhalten bleiben. Create-only in diesem Helfer ist kein zusätzlich eingerichtetes GitHub-Ruleset gegen Administratorlöschung. Werden gezielt Claim und sämtliche weiteren Versionsnachweise entfernt, kann die gelöschte Historie nicht rekonstruiert werden. Die R4-Korrektur schützt Release-Rücknahme bei erhaltenem Claim und stoppt bei fehlendem eigenen Claim vor weiterer Publikation.
 
 ## Fehler nach der Reservierung
 
-Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen unveröffentlichten Draft mit Teilassets zurücklassen. Der Workflow überschreibt oder entfernt sie nicht automatisch; ein Rerun mit derselben Version wird abgewiesen. Den fehlgeschlagenen Lauf und den Draft zuerst prüfen. Danach entweder eine neue Version wählen oder ausschließlich die nachweislich unveröffentlichte Fehlreservierung manuell bereinigen. Bereits veröffentlichte Tags, Releases und Assets werden durch diesen Ablauf nicht repariert oder ersetzt. Ein Fehler bei der Abschlusskontrolle kann auch nach erfolgreichem `draft:false` auftreten; zuerst den tatsächlichen veröffentlichten Zustand prüfen.
+Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen unveröffentlichten Draft mit Teilassets zurücklassen. Der Workflow überschreibt oder entfernt sie nicht automatisch; ein Rerun mit derselben Version wird abgewiesen. Den fehlgeschlagenen Lauf und den Draft zuerst prüfen. Danach eine neue Version mit höherem Code wählen. Der verbrauchte Codeclaim wird auch bei einer nachweislich unveröffentlichten Fehlreservierung nicht bereinigt. Bereits veröffentlichte Tags, Releases und Assets werden durch diesen Ablauf nicht repariert oder ersetzt. Ein Fehler bei der Abschlusskontrolle kann auch nach erfolgreichem `draft:false` auftreten; zuerst den tatsächlichen veröffentlichten Zustand prüfen.
 
 Die neuen Schutzpfade sind mit API-Doubles getestet. In der Befundkorrektur wurde kein signierter Release ausgelöst; der erste reale manuelle Lauf bleibt ein eigener Systemnachweis.
 
@@ -40,7 +42,7 @@ Der fehlgeschlagene Release-Lauf für `1.7.0` / Code `12` führte zur expliziten
 
 ## Offene Punkte
 
-- TODO: Den ersten realen signierten Lauf nach R1–R3 prüfen; Offline-Tests und unsignierte Builds belegen keine erfolgreiche Signierung oder reale GitHub-Publikation.
+- TODO: Den ersten realen signierten Lauf nach R1–R4 prüfen; Offline-Tests und unsignierte Builds belegen keine erfolgreiche Signierung oder reale GitHub-Publikation.
 - TODO: Play-Store-Release-Prozess dokumentieren, falls ein Store-Deployment vorgesehen ist.
 
 ## Verwandte Seiten

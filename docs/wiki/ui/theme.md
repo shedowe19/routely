@@ -65,7 +65,7 @@ private val AmoledColorScheme = darkColorScheme(
 
 ## Prüfgrenze für Textakzente
 
-TODO: Kleine Primaryfarbtexte auf dunklen Grundflächen visuell und mit zugänglicher Schrift prüfen. IndigoLight auf Surface `#1E1E1E` ergibt rechnerisch 2,370:1, auf AMOLED-Schwarz 2,985:1. Das ist eine Palettenberechnung, keine Gerätebildschirmmessung. Die beschrifteten Semantiklücken U7 stehen im [Nachreview](../entwicklung/main-review-2026-10-06.md).
+TODO: Kleine Primaryfarbtexte auf dunklen Grundflächen visuell und mit zugänglicher Schrift prüfen. IndigoLight auf Surface `#1E1E1E` ergibt rechnerisch 2,370:1, auf AMOLED-Schwarz 2,985:1. Das ist eine Palettenberechnung, keine Gerätebildschirmmessung. Die Semantiklücken U7 sind gemäß [Nachreview-Korrektur](../entwicklung/main-review-2026-10-06.md) behoben; die separate Farbprüfung bleibt offen.
 
 ## Typografie
 

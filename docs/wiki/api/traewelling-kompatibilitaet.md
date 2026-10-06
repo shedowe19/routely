@@ -20,6 +20,8 @@ Bei der anschließenden Streckenverlauf-Recherche am 06.10. bestätigte ein GitH
 
 Beim Nachreview von Routely-Main `f406bad` am 06.10.2026 wurde der aktuelle Upstream-Branch erneut ausdrücklich als `4d602796da8409017314cc771b1127d169155f02` gelesen. Der vollständig geprüfte Changelog hat Blob-SHA `151ba6f1c9e012f9a665eef2f733ee1114d73015`; verwendete Retrofitpfade und Antwortressourcen wurden mit diesem aktuellen Stand verglichen. Kein neuer inkompatibler Consumervertrag wurde gefunden. Der optionale Visibility-PUT-Vertrag und der vollständige Status-Antwortsnapshot belegen jedoch zwei Client-Reihenfolgefehler D4/D8 im [Nachreview](../entwicklung/main-review-2026-10-06.md), keine neue Upstream-Endpunktänderung.
 
+Die Korrektur des Nachreviews lässt unveränderte Text-/Sichtbarkeitsfelder im PUT aus und ordnet konkurrierende Statusschreibaufträge pro Credential/Status. Diese Clientkorrekturen verändern keine Upstream-Endpunkte. Die erneute Quellprüfung während der Umsetzung bestätigt weiterhin denselben Upstream-SHA; keine schreibende Live-API-Prüfung wurde ausgeführt.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`

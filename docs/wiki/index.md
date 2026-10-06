@@ -6,7 +6,7 @@ Code ist die Quelle der Wahrheit. Das Wiki erklärt die Quelle der Wahrheit.
 
 Der Main-Audit vom 06.10.2026 ergänzt die bestehenden Verträge für [Sitzungen](./module/auth.md), [Feedcache](./module/feed.md), [GPS-Besuchsidentität](./module/gps-zeiten.md), [SEV-Zuordnung](./module/sev-haltestellen.md) und [Android-Lebenszyklus](./module/trip-tracking.md). Prüfziele und tatsächlich ausgeführte CI-Läufe bleiben unter [Tests](./entwicklung/tests.md) getrennt; offene Geräteprüfungen stehen unter [Offene Fragen](./offene-fragen.md).
 
-Der [Nachreview des korrigierten Main f406bad](./entwicklung/main-review-2026-10-06.md) bestätigt zwölf zusätzliche Befunde mit kontrollierten Gegenproben. Die historischen 16 Korrekturen bleiben erhalten; Produktivcode wurde im Nachreview nicht verändert.
+Die zwölf zusätzlichen Befunde des [Nachreviews von Main f406bad](./entwicklung/main-review-2026-10-06.md) sind vollständig korrigiert und erneut unabhängig gegengeprüft. Historische Nachweise bleiben erhalten; aktuelle Schutzverträge und ausgeführte Ergebnisse stehen bei den Modulen und unter [Tests](./entwicklung/tests.md).
 
 ## Projekt
 
@@ -62,6 +62,7 @@ Der [Nachreview des korrigierten Main f406bad](./entwicklung/main-review-2026-10
 
 ## Entscheidungen
 
+- [06.10.2026: Nachreview-Korrekturen und Versionsclaims](./entscheidungen/2026-10-06-nachreview-korrekturen.md)
 - [06.10.2026: GPS-, Mutations- und Releasezustände](./entscheidungen/2026-10-06-befundkorrekturen.md)
 
 - [Entscheidungen](./entscheidungen/README.md)

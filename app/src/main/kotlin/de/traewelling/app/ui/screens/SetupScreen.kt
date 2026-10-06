@@ -18,6 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -31,6 +32,7 @@ import de.traewelling.app.ui.theme.DeepIndigo
 import de.traewelling.app.ui.theme.TealAccent
 import de.traewelling.app.viewmodel.AuthViewModel
 import de.traewelling.app.data.api.ApiServerUrl
+import de.traewelling.app.R
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -148,7 +150,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
                             IconButton(onClick = { showToken = !showToken }) {
                                 Icon(
                                     if (showToken) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = null,
+                                    contentDescription = stringResource(if (showToken) R.string.token_hide else R.string.token_show),
                                     tint = DeepIndigo.copy(alpha = 0.5f)
                                 )
                             }

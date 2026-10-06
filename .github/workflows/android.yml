@@ -8,7 +8,7 @@ on:
         required: true
         default: "1.0.0"
       version_code:
-        description: "Version Code (optional; empty selects highest published code + 1)"
+        description: "Version Code (optional; empty selects highest consumed code + 1)"
         required: false
         default: ""
 
@@ -36,7 +36,7 @@ jobs:
       - name: Test release guards offline
         run: python3 -m unittest discover -s .github/tests -p 'test_release_guard.py'
 
-      - name: Validate new release and choose monotone version code
+      - name: Validate new release and permanently claim monotone version code
         run: |
           RELEASE_METADATA_PATH="$RUNNER_TEMP/routely-release/release-version.json"
           echo "RELEASE_METADATA_PATH=$RELEASE_METADATA_PATH" >> "$GITHUB_ENV"
@@ -88,7 +88,7 @@ jobs:
       - name: Generate Changelog
         run: |
           # Get the last tag if it exists
-          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          LAST_TAG=$(git describe --tags --match 'v*' --abbrev=0 2>/dev/null || echo "")
           if [ -z "$LAST_TAG" ]; then
             # No tags yet, get all commits
             LOG=$(git log --pretty=format:"* %s (%h)")

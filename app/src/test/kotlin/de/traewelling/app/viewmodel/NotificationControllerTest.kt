@@ -47,23 +47,79 @@ class NotificationControllerTest {
     }
 
     @Test fun markAllCoversOlderUnseenRowsButDoesNotMarkNewNotificationsRead() = runTest {
-        val api = Gateway()
+        val api = ServerGateway().apply { rows = response("a", "previously-unloaded").data.orEmpty() }
         val controller = NotificationController(backgroundScope, api, pollUnreadCount = false)
+        api.nextList = { Result.success(response("a")) }
         controller.loadNotifications(); runCurrent()
+        assertEquals(2, controller.uiState.value.unreadCount)
         val oldGet = CompletableDeferred<Result<NotificationListResponse>>()
-        api.list = { oldGet.await() }
+        api.nextList = { withContext(NonCancellable) { oldGet.await() } }
         controller.refresh(); runCurrent()
-        api.count = { Result.success(0) }
         controller.markAllAsRead(); runCurrent()
+        api.markAllReply.complete(Result.success(Unit)); runCurrent()
         oldGet.complete(Result.success(response("a", "previously-unloaded"))); runCurrent()
-        assertTrue(controller.uiState.value.notifications.all { it.readAt != null })
-        api.list = { Result.success(response("a", "previously-unloaded", "new-after-mark-all")) }
-        api.count = { Result.success(1) }
+        assertEquals(listOf("a", "previously-unloaded"), controller.uiState.value.notifications.map { it.id })
+        assertTrue(controller.uiState.value.notifications.all { it.readAt == "server-read" })
+        assertEquals(0, controller.uiState.value.unreadCount)
+        api.rows = api.rows + response("new-after-mark-all").data.orEmpty()
         controller.refresh(); runCurrent()
         val rows = controller.uiState.value.notifications.associateBy { it.id }
         assertNotNull(rows["a"]?.readAt)
         assertNotNull(rows["previously-unloaded"]?.readAt)
         assertNull(rows["new-after-mark-all"]?.readAt)
+        assertEquals(1, controller.uiState.value.unreadCount)
+    }
+
+    @Test fun aNewNotificationDuringADelayedSuccessfulMarkAllRemainsUnreadAndActionable() = runTest {
+        val api = ServerGateway()
+        val controller = NotificationController(backgroundScope, api, pollUnreadCount = false)
+        controller.loadNotifications(); runCurrent()
+        controller.markAllAsRead(); runCurrent()
+        assertEquals("server-read", api.rows.single().readAt)
+        api.rows = api.rows + response("new-after-server-commit").data.orEmpty()
+        controller.refresh(); runCurrent()
+        assertNull(controller.uiState.value.notifications.single { it.id == "new-after-server-commit" }.readAt)
+        assertEquals(1, controller.uiState.value.unreadCount)
+        api.markAllReply.complete(Result.success(Unit)); runCurrent()
+        controller.refresh(); runCurrent()
+        assertNull(controller.uiState.value.notifications.single { it.id == "new-after-server-commit" }.readAt)
+        assertEquals(1, controller.uiState.value.unreadCount)
+        controller.markAsRead("new-after-server-commit"); runCurrent()
+        assertEquals(listOf("new-after-server-commit"), api.readCalls)
+        assertEquals(0, controller.uiState.value.unreadCount)
+    }
+
+    @Test fun aGetStartedBeforeMarkAllCanStillContainANewPostCommitNotification() = runTest {
+        val api = ServerGateway()
+        val controller = NotificationController(backgroundScope, api, pollUnreadCount = false)
+        controller.loadNotifications(); runCurrent()
+        val oldGet = CompletableDeferred<Result<NotificationListResponse>>()
+        api.nextList = { withContext(NonCancellable) { oldGet.await() } }
+        controller.refresh(); runCurrent()
+        controller.markAllAsRead(); runCurrent()
+        api.rows = api.rows + response("new-after-server-commit").data.orEmpty()
+        // Request start predates the PUT, but this server snapshot does not.
+        oldGet.complete(Result.success(NotificationListResponse(api.rows, null, null))); runCurrent()
+        assertNull(controller.uiState.value.notifications.single { it.id == "new-after-server-commit" }.readAt)
+        api.markAllReply.complete(Result.success(Unit)); runCurrent()
+        assertNull(controller.uiState.value.notifications.single { it.id == "new-after-server-commit" }.readAt)
+        assertEquals(1, controller.uiState.value.unreadCount)
+    }
+
+    @Test fun anOldGetReplyAfterMarkAllCannotOverwriteTheAuthoritativeReload() = runTest {
+        val api = ServerGateway()
+        val controller = NotificationController(backgroundScope, api, pollUnreadCount = false)
+        controller.loadNotifications(); runCurrent()
+        val oldGet = CompletableDeferred<Result<NotificationListResponse>>()
+        api.nextList = { withContext(NonCancellable) { oldGet.await() } }
+        controller.refresh(); runCurrent()
+        controller.markAllAsRead(); runCurrent()
+        api.rows = api.rows + response("new-after-server-commit").data.orEmpty()
+        api.markAllReply.complete(Result.success(Unit)); runCurrent()
+        oldGet.complete(Result.success(response("a", "stale-unseen"))); runCurrent()
+        assertEquals(listOf("a", "new-after-server-commit"), controller.uiState.value.notifications.map { it.id })
+        assertNull(controller.uiState.value.notifications.last().readAt)
+        assertEquals(1, controller.uiState.value.unreadCount)
     }
 
     @Test fun failedMarkAllRestoresRowsAndBadgeAfterAPendingListRefresh() = runTest {
@@ -76,11 +132,29 @@ class NotificationControllerTest {
         controller.markAllAsRead(); runCurrent()
         api.list = { Result.success(response("a", "b")) }
         controller.refresh(); runCurrent()
-        assertTrue(controller.uiState.value.notifications.all { it.readAt != null })
+        assertNotNull(controller.uiState.value.notifications.single { it.id == "a" }.readAt)
+        assertNull(controller.uiState.value.notifications.single { it.id == "b" }.readAt)
         put.complete(Result.failure(IllegalStateException("PUT failed"))); runCurrent()
         assertEquals(5, controller.uiState.value.unreadCount)
         assertTrue(controller.uiState.value.notifications.all { it.readAt == null })
         assertNotNull(controller.uiState.value.error)
+    }
+
+    @Test fun failedMarkAllKeepsTheVisibleUnreadLowerBoundWhenTheCountRefreshAlsoFails() = runTest {
+        val api = Gateway()
+        val controller = NotificationController(backgroundScope, api, pollUnreadCount = false)
+        controller.loadNotifications(); runCurrent()
+        val put = CompletableDeferred<Result<Unit>>()
+        api.all = { put.await() }
+        api.count = { Result.failure(IllegalStateException("count unavailable")) }
+        controller.markAllAsRead(); runCurrent()
+        api.list = { Result.success(response("a", "new-during-put")) }
+        controller.refresh(); runCurrent()
+        assertNull(controller.uiState.value.notifications.single { it.id == "new-during-put" }.readAt)
+        assertEquals(1, controller.uiState.value.unreadCount)
+        put.complete(Result.failure(IllegalStateException("PUT failed"))); runCurrent()
+        assertTrue(controller.uiState.value.notifications.all { it.readAt == null })
+        assertEquals(2, controller.uiState.value.unreadCount)
     }
 
     @Test fun countRequestsAreSerializedAndAnOlderCountCannotPublishAfterANewerRequest() = runTest {
@@ -148,6 +222,29 @@ class NotificationControllerTest {
             return read(id)
         }
         override suspend fun markAllNotificationsRead() = all()
+    }
+
+    /** Explicit server commit is separate from HTTP response completion. */
+    private class ServerGateway : NotificationGateway {
+        var rows = response("a").data.orEmpty()
+        var nextList: (suspend () -> Result<NotificationListResponse>)? = null
+        val markAllReply = CompletableDeferred<Result<Unit>>()
+        val readCalls = mutableListOf<String>()
+        override suspend fun getNotifications(page: Int): Result<NotificationListResponse> {
+            val overrideResponse = nextList
+            nextList = null
+            return overrideResponse?.invoke() ?: Result.success(NotificationListResponse(rows, null, null))
+        }
+        override suspend fun getUnreadNotificationCount() = Result.success(rows.count { it.readAt == null })
+        override suspend fun markNotificationRead(id: String): Result<Unit> {
+            readCalls.add(id)
+            rows = rows.map { if (it.id == id) it.copy(readAt = "server-read") else it }
+            return Result.success(Unit)
+        }
+        override suspend fun markAllNotificationsRead(): Result<Unit> {
+            rows = rows.map { it.copy(readAt = "server-read") }
+            return markAllReply.await()
+        }
     }
 
     companion object {

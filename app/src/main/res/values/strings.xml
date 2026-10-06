@@ -1,4 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">Routely</string>
+    <string name="token_show">Token anzeigen</string>
+    <string name="token_hide">Token verbergen</string>
+    <string name="tts_initializing">Sprachausgabe wird vorbereitet …</string>
+    <string name="retry">Wiederholen</string>
 </resources>

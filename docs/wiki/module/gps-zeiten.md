@@ -181,9 +181,12 @@ Ein breites gültiges Kartenintervall überdeckt keine weitere nicht auswertbare
 
 Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträchtigen. Ersatzhaltkoordinaten allein gewährleisten keine Bus-ETA. Die zusätzliche OSRM-Straßenprojektion muss zur beobachteten Fahrt passen und darf nicht als offizieller Busfahrweg gelten; ungeeignete Geometrie fällt auf API-/Planwerte zurück.
 
-## Offene Fragen
+### Kumulative Abfahrt und physische Endpunkte
 
-- TODO: G5 und G7 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: häufige kleine Fixpaare dürfen eine kumulativ belegte Abfahrt nicht dauerhaft verlieren; eine benachbarte Polyline-Kante darf einen Fix hinter dem echten Ende nicht zu einer neuen ETA klemmen. Beide Fälle sind gegen unveränderten Main reproduziert. Eine fehlerhafte Prognose ist kein belegter physischer Zielabschluss.
+- G5/G7 sind korrigiert: Die Abfahrtsbeobachtung verwendet kumulierte Bewegung seit einem bestätigten inneren Haltaufenthalt sowie ein frisches vorwärts gerichtetes Fixpaar beim geordneten Besuchsübergang. Häufige kleine Fixpaare verlieren den Abfahrtsbeleg nicht mehr. Signalpausen, verworfene Sprünge und ungeeignete Projektionen erlauben weiterhin keine Beobachtung.
+- Die Geometrie wählt die nächstliegende Kandidatur auf dem gesamten Linienzug, einschließlich ausgeschlossener Endpunktprojektionen. Ein ungestützter physischer Endpunkt darf nicht durch die benachbarte innere Kante ersetzt werden. Kurze/verdichtete Anfangs- und Endkanten, gültige Kurven sowie bestätigte innere Ankunftszonen haben getrennte Regressionen; eine Prognose bleibt vom physischen Zielabschluss getrennt.
+
+## Offene Fragen
 
 - Die im [Main-Review](../entwicklung/main-review-2026-10-06.md) bestätigten G1-/G3-Pfade sind durch Sprungprüfung vor der physischen Mutation und den monotonen Android-Adapter mit Uhrsprung-Reset abgesichert. Reine Regressionen prüfen diese Regeln; der tatsächlich ausgeführte Prüflauf steht unter [Tests](../entwicklung/tests.md). TODO: Providerwechsel und vor-/zurückgestellte Systemzeit auf einem Gerät prüfen; synthetische Fixfolgen belegen keinen Android-Zustellungsverlauf.
 - TODO: Den Tunnelbericht Essen Hbf → Bismarckplatz → Savignystraße mit zeitlich zugeordneten Fix-/Audioaufzeichnungen auf dem Gerät prüfen: ohne GPS über mehrere Halte, erste frische Fixes am späteren Halt, Cursor, neutrale Abschnittsdiagnose, Ansagen und erneute Zeitprognose. Die bestätigte logische Wiederverankerungslücke im alten Code belegt keine aufgezeichnete Nutzer-Messfolge. Wiederkehrendes GPS darf weder Tunnel-Ankunftszeiten erfinden noch einen ungeprüften Schienenweg oder eine sofortige neue ETA behaupten.

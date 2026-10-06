@@ -6,6 +6,8 @@ Kurze Zusammenfassung technischer Entscheidungen, für die es eventuell keine ei
 
 ## Entscheidungen
 
+- **Nachreview-Korrekturen vom 06.10.2026**: Fachzustand und Composition-Beobachtung bleiben getrennt; Schreibaufträge werden je Credential/Status geordnet, MarkAll benötigt einen neuen Serversnapshot und Android-Versionen erhalten dauerhafte Create-only-Claims. Begründung und Grenzen stehen in der [ADR Nachreview-Korrekturen](../entscheidungen/2026-10-06-nachreview-korrekturen.md).
+
 - **Befundkorrekturen vom 06.10.2026**: Monotone Standortbelege, plausible Bewegung vor physischen Übergängen, reaktive begrenzte Laufzeitwiederaufnahme, Editor-Anfangsabsicht, Mutationsepochen sowie unveränderliche neue Releases werden in der [ADR GPS-, Mutations- und Releasezustände](../entscheidungen/2026-10-06-befundkorrekturen.md) zusammenhängend begründet.
 
 - **Sitzungsgrenzen im Main-Audit vom 06.10.2026**: Ein validierter manueller Login wird atomar gespeichert, Auth-/Check-in-Schreiboperationen vergleichen Server, Token und Revisionskennung in derselben DataStore-Transaktion. Feature-ViewModels und Navigation gehören zu dieser Revision, damit verspätete Antworten oder erneut gleiche Zugangsdaten nach Logout keinen alten Kontozustand übernehmen. Der Room-Feedcache verwendet getrennte Server-/Token-Digest-Partitionen und einen zusammengesetzten Primärschlüssel; temporäre Fehler erlauben ausschließlich den passenden Seite-1-Rückfall. Details: [Auth](../module/auth.md), [Feed](../module/feed.md) und [Migrationen](../daten/migrationen.md).

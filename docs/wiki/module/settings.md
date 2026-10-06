@@ -62,6 +62,11 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 
 `Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Der Start wird direkt versucht, damit eingeschränkte Paketsichtbarkeit nicht fälschlich auf eine fehlende Activity schließen lässt. Bei `ActivityNotFoundException` folgt zunächst die allgemeine App-Benachrichtigungseinstellung und danach die App-Detailseite. Auf älteren Geräten beginnt diese Rückfallfolge bei der allgemeinen Benachrichtigungseinstellung. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
 
+### TTS-Wiederanlauf und zugängliche Aktionen
+
+- U6/U7 sind korrigiert: `SettingsSpeechInitializer` lädt den installierten TTS-Servicekatalog unabhängig vom Synthesestart. Alternative Engines bleiben nach Fehler oder zehn Sekunden ohne Initantwort auswählbar; ein sichtbarer Hinweis bietet `Wiederholen`. Abschalten, Wechsel und Timeout geben die Instanz frei; eine Generation sperrt alte Callbacks. Synchron eintreffende Initcallbacks werden bis nach Konstruktorabschluss zurückgestellt. Der Sprachtest ist nur bei bereiter Engine ausführbar. Einstellungen und Tracking-Service besitzen weiterhin getrennte Instanzen.
+- `SettingsToggle` verbindet Titel, Beschreibung, Zustand und eine einzige `Role.Switch`-Aktion in einer mindestens 48 dp hohen Zeile. Der innere Switch besitzt keinen zweiten Handler. Engine-/Sprach-/Stimm- und Radiusfelder erhalten eigene Labels; der Tokenbutton benennt Anzeigen beziehungsweise Verbergen. TODO: Diese Semantik zusätzlich instrumentiert und mit TalkBack prüfen.
+
 ## Abhängigkeiten
 
 - `PreferencesManager` (DataStore)
@@ -70,8 +75,6 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 - Android `PowerManager`, Akkuoptimierungs- und App-Einstellungsintents
 
 ## Offene Fragen
-
-- TODO: U6/U7 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: nach initialem TTS-Initfehler bleibt die Engineliste leer, sodass keine funktionierende Alternative wählbar ist; Schaltern fehlt die verbundene Einstellungsbeschriftung. Settings-Initialisierung und Service-Retry sind getrennte Besitzer.
 
 - Fehlerbehandlung in PreferencesManager — offen — @dev
 - TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.

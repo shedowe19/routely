@@ -5,6 +5,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -12,30 +13,46 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.semantics
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import de.traewelling.app.ui.components.TraewellingTopAppBar
+import de.traewelling.app.R
 import de.traewelling.app.util.BatteryOptimization
 import de.traewelling.app.viewmodel.SettingsViewModel
 
 @Composable
-private fun CompanionToggle(
+private fun SettingsToggle(
     title: String,
     description: String,
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    icon: ImageVector? = null
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .heightIn(min = 48.dp)
+            .toggleable(value = checked, onValueChange = onCheckedChange, enabled = enabled, role = Role.Switch)
+            .semantics(mergeDescendants = true) {},
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        icon?.let { Icon(it, contentDescription = null, tint = MaterialTheme.colorScheme.primary) }
         Column(Modifier.weight(1f)) {
             Text(title, fontWeight = FontWeight.SemiBold)
             Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
-        Switch(checked = checked, onCheckedChange = onCheckedChange, enabled = enabled)
+        // The labelled row owns the single action and accessibility state.
+        Switch(checked = checked, onCheckedChange = null, enabled = enabled)
     }
 }
 
@@ -75,7 +92,7 @@ fun SettingsScreen(
                 Spacer(Modifier.height(8.dp))
                 Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                        CompanionToggle(
+                        SettingsToggle(
                             title = "Fahrten automatisch erkennen",
                             description = "Sucht passende Fahrten, bis du einen Check-in startest. Du bestätigst Fahrt und Ziel selbst.",
                             checked = uiState.rideRecognitionEnabled,
@@ -87,13 +104,13 @@ fun SettingsScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                         HorizontalDivider()
-                        CompanionToggle(
+                        SettingsToggle(
                             "Reiseänderungen melden",
                             "Informiert über Gleiswechsel, entfallene Halte und größere Verspätungsänderungen.",
                             uiState.tripChangeAlertsEnabled,
                             viewModel::setTripChangeAlertsEnabled
                         )
-                        CompanionToggle(
+                        SettingsToggle(
                             "Änderungen auch ansagen",
                             "Spricht wichtige Änderungen, wenn „Haltestellen ansagen“ aktiviert ist.",
                             uiState.tripChangeSpeechEnabled,
@@ -101,13 +118,13 @@ fun SettingsScreen(
                             enabled = uiState.tripChangeAlertsEnabled
                         )
                         HorizontalDivider()
-                        CompanionToggle(
+                        SettingsToggle(
                             "Live-Reisefortschritt",
                             "Zeigt nächste Station und verbleibende Halte. Auf unterstützten Geräten als Android Live Update.",
                             uiState.liveProgressEnabled,
                             viewModel::setLiveProgressEnabled
                         )
-                        CompanionToggle(
+                        SettingsToggle(
                             "Reisedetails auf dem Sperrbildschirm",
                             "Zeigt Linie, Ziel, nächsten Halt und Gleis auch auf dem gesperrten Gerät.",
                             uiState.lockScreenDetailsEnabled,
@@ -174,30 +191,20 @@ fun SettingsScreen(
                     shape = RoundedCornerShape(22.dp)
                 ) {
                     Column(Modifier.padding(16.dp)) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
-                            Icon(Icons.Default.MyLocation, null, tint = MaterialTheme.colorScheme.primary)
-                            Column(Modifier.weight(1f)) {
-                                Text("GPS verwenden", fontWeight = FontWeight.SemiBold)
-                                Text(
-                                    "Erkennt deine Annäherung an den nächsten Halt. Ohne brauchbaren Standort wird der Fahrplan verwendet.",
-                                    style = MaterialTheme.typography.bodySmall
-                                )
-                            }
-                            Switch(
-                                checked = uiState.gpsTrackingEnabled,
-                                onCheckedChange = { enabled ->
-                                    viewModel.setGpsTrackingEnabled(enabled)
-                                    if (enabled) onRequestGpsPermission()
-                                }
-                            )
-                        }
+                        SettingsToggle(
+                            title = "GPS verwenden",
+                            description = "Erkennt deine Annäherung an den nächsten Halt. Ohne brauchbaren Standort wird der Fahrplan verwendet.",
+                            checked = uiState.gpsTrackingEnabled,
+                            onCheckedChange = { enabled ->
+                                viewModel.setGpsTrackingEnabled(enabled)
+                                if (enabled) onRequestGpsPermission()
+                            },
+                            icon = Icons.Default.MyLocation
+                        )
                         if (uiState.gpsTrackingEnabled) {
                             Spacer(Modifier.height(12.dp))
-                            Text("Entfernung für die Ansage", style = MaterialTheme.typography.labelMedium)
                             SettingsDropdownMenu(
+                                label = "Entfernung für die Ansage",
                                 items = listOf(300, 500, 1000, 2000).map { it.toString() to "$it Meter" },
                                 selectedItem = uiState.announcementRadiusMeters.toString(),
                                 onItemSelected = { viewModel.setAnnouncementRadiusMeters(it.toIntOrNull() ?: 0) },
@@ -240,50 +247,41 @@ fun SettingsScreen(
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                    Icon(Icons.Default.RecordVoiceOver, null, tint = MaterialTheme.colorScheme.secondary)
-                                    Spacer(Modifier.width(10.dp))
-                                    Column {
-                                        Text(
-                                            "Haltestellen ansagen",
-                                            fontWeight = FontWeight.SemiBold,
-                                            style = MaterialTheme.typography.titleMedium
-                                        )
-                                        Text(
-                                            "Nächste Haltestelle kurz vor Ankunft vorlesen",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-                            Switch(
-                                checked = uiState.isTtsEnabled,
-                                onCheckedChange = { viewModel.toggleTts(it) }
-                            )
-                        }
+                        SettingsToggle(
+                            title = "Haltestellen ansagen",
+                            description = "Nächste Haltestelle kurz vor Ankunft vorlesen",
+                            checked = uiState.isTtsEnabled,
+                            onCheckedChange = viewModel::toggleTts,
+                            icon = Icons.Default.RecordVoiceOver
+                        )
 
                         if (uiState.isTtsEnabled) {
                             Spacer(Modifier.height(16.dp))
 
-                            Text("TTS Engine", style = MaterialTheme.typography.labelMedium)
                             SettingsDropdownMenu(
+                                label = "TTS Engine",
                                 items = uiState.availableTtsEngines.map { it.name to it.label },
                                 selectedItem = uiState.selectedTtsEngine,
                                 onItemSelected = { viewModel.selectTtsEngine(it) },
                                 defaultLabel = "System-Standard"
                             )
 
+                            if (uiState.isTtsInitializing) {
+                                Spacer(Modifier.height(8.dp))
+                                Text(stringResource(R.string.tts_initializing), style = MaterialTheme.typography.bodySmall)
+                            }
+                            uiState.ttsInitializationError?.let { error ->
+                                Spacer(Modifier.height(8.dp))
+                                Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                                TextButton(onClick = viewModel::retryTtsInitialization, enabled = !uiState.isTtsInitializing) {
+                                    Text(stringResource(R.string.retry))
+                                }
+                            }
+
                             Spacer(Modifier.height(8.dp))
 
-                            Text("Sprache", style = MaterialTheme.typography.labelMedium)
                             SettingsDropdownMenu(
+                                label = "Sprache",
                                 items = uiState.availableLanguages.map { it.toLanguageTag() to it.displayName },
                                 selectedItem = uiState.selectedTtsLanguage,
                                 onItemSelected = { viewModel.selectTtsLanguage(it) },
@@ -292,8 +290,8 @@ fun SettingsScreen(
 
                             Spacer(Modifier.height(8.dp))
 
-                            Text("Stimme", style = MaterialTheme.typography.labelMedium)
                             SettingsDropdownMenu(
+                                label = "Stimme",
                                 items = uiState.availableVoices.map { it.name to (it.name.split("-").lastOrNull() ?: it.name) },
                                 selectedItem = uiState.selectedTtsVoice,
                                 onItemSelected = { viewModel.selectTtsVoice(it) },
@@ -303,9 +301,10 @@ fun SettingsScreen(
                             Spacer(Modifier.height(16.dp))
                             Button(
                                 onClick = { viewModel.testTts() },
+                                enabled = !uiState.isTtsInitializing && uiState.ttsInitializationError == null,
                                 modifier = Modifier.fillMaxWidth()
                             ) {
-                                Icon(Icons.Default.PlayArrow, contentDescription = "Test TTS")
+                                Icon(Icons.Default.PlayArrow, contentDescription = null)
                                 Spacer(Modifier.width(8.dp))
                                 Text("Stimme testen")
                             }
@@ -458,6 +457,7 @@ private fun ThemeSelectionDropdown(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun SettingsDropdownMenu(
+    label: String,
     items: List<Pair<String, String>>,
     selectedItem: String?,
     onItemSelected: (String) -> Unit,
@@ -472,6 +472,7 @@ private fun SettingsDropdownMenu(
     ) {
         OutlinedTextField(
             value = selectedLabel,
+            label = { Text(label) },
             onValueChange = {},
             readOnly = true,
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },

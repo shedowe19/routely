@@ -20,6 +20,20 @@ internal data class TrackingLocationObservation(
 )
 
 /**
+ * Every new provider observation reaches the visit engine, including unusable
+ * accuracy. Dropping those samples would join recovery evidence across a gap.
+ * Replays and samples rejected by the monotonic clock add no new evidence.
+ */
+internal fun dispatchTrackingLocationObservation(
+    observation: TrackingLocationObservation,
+    engine: StationTrackingEngine,
+    nowMillis: Long
+): TrackingUpdate? {
+    if (!observation.isNew) return null
+    return observation.fix?.let { engine.onLocation(it, nowMillis) }
+}
+
+/**
  * Generation-local adapter: order/age use the provider's monotonic clock, while
  * event times use the current human clock. Location.time is deliberately absent.
  */

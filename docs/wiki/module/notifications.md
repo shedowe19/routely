@@ -41,7 +41,9 @@ Ein Mutex serialisiert Zähleranfragen. Zusätzlich tragen sie eine eigene Reque
 
 Unbekannte oder bereits gelesene IDs verringern den Badge nicht. Pro Meldung ist höchstens ein Leseauftrag offen; `markAllAsRead` und einzelne Leseaufträge überschneiden sich nicht. Neue Listenantworten erhalten noch offene optimistische Lesemarkierungen. Nach erfolgreichem Leseauftrag bleibt die konkrete ID zusätzlich bestätigt überlagert, auch nachdem `pendingReads` entfernt wurde. Erst ein danach gestarteter GET mit serverseitigem `readAt` beendet diese zusätzliche Überlagerung. Ein früher begonnener GET kann eine erfolgreich gelesene Meldung damit nicht erneut als ungelesen anzeigen.
 
-Ein erfolgreiches `markAllAsRead` setzt eine gemeinsame Revisionsgrenze. Noch ausstehende ältere Listen werden auch für zuvor nicht geladene IDs als gelesen übernommen. Neu auftauchende IDs aus erst danach begonnenen GETs bleiben dagegen ungelesen. Bei API-Fehler werden die weiterhin passende vorläufige Markierung und ihr eigener Zähleranteil zurückgenommen; konkurrierende Markierungen bleiben erhalten. Bei fehlgeschlagenem `markAllAsRead` wird der frühere Zähler ebenfalls wiederhergestellt, auch wenn die anschließende Zähleranfrage fehlschlägt.
+`markAllAsRead` überlagert und bestätigt ausschließlich die beim Start bekannten IDs. Ein während des offenen PUT geladener neuer Eintrag kann nach dem Servercommit entstanden sein und bleibt entsprechend der Serverantwort ungelesen. Der Startzeitpunkt eines GET belegt nicht den Zeitpunkt seines Serversnapshots. Nach erfolgreichem PUT startet genau eine aktuelle erste Seite und beendet beziehungsweise sperrt ältere Listenaufträge; zuvor nicht geladene Einträge werden aus diesem neuen Serverstand übernommen, ohne globale Gelesen-Markierung.
+
+Bei API-Fehler werden nur die eigenen vorläufigen Markierungen zurückgenommen. Der Badge erhält den bisherigen Zähler und mindestens die jetzt sichtbaren ungelesenen Einträge, einschließlich neuer Meldungen während des PUT, auch wenn der anschließende Count-GET fehlschlägt.
 
 `NotificationControllerTest` prüft mit virtueller Coroutine-Zeit und gezielt zurückgehaltenen API-Antworten verspätete GETs nach erfolgreichem Lesen, neue Meldungen nach `markAllAsRead`, Rollback neben einem anderen laufenden Leseauftrag, Zählerserialisierung und abgebrochene Refreshs. `NotificationReadStateTest` ergänzt die lokalen Mapping-/Rollbackregeln. Es werden keine Zeit-Sleeps verwendet; siehe [Tests](../entwicklung/tests.md).
 
@@ -74,8 +76,6 @@ Ein erfolgreiches `markAllAsRead` setzt eine gemeinsame Revisionsgrenze. Noch au
 - **StateMessage**: Einheitliche UI für Lade-, Fehler- und Empty-States
 
 ## Offene Fragen
-
-- TODO: D6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: neue Meldungen nach serverseitigem MarkAll-Commit können während der verzögerten PUT-Antwort geladen und anschließend unbeabsichtigt dauerhaft gelesen bestätigt werden. Ein weiterer frischer GET reproduziert den Widerspruch zwischen Liste und serverseitigem Ungelesenzähler.
 
 - TODO: Meldungen mit auflösbaren Zielinformationen zum zugehörigen Profil oder Status navigieren lassen.
 

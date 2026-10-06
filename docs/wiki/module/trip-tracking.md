@@ -247,9 +247,9 @@ Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS
 - [Location-Zeitbasis](https://developer.android.com/reference/android/location/Location#getTime())
 - [TTS-Initialisierung und Enginewahl](https://developer.android.com/reference/android/speech/tts/TextToSpeech)
 
-## Nachreview von Main f406bad
+## Ungenaue Fixes bei Wiederverankerung
 
-- TODO: G6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: der Service filtert frische Fixes mit Genauigkeit über 100 Metern vor der Engine-Auswertung heraus. Ein transienter Wiederverankerungsbeleg kann dadurch zwei präzise Fixes vor und einen nach einem 150-Meter-Fix verbinden. Reine Adapter-/Enginekontrollen bestätigen diesen Pfad; Android-Service-/FLP-Verhalten wurde nicht ausgeführt.
+G6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) ist korrigiert: Jede vom monotonen Clockadapter als neu gelieferte Standortbeobachtung erreicht die Stationsengine, auch bei unbrauchbarer Genauigkeit. Diese Beobachtung unterbricht den transienten Wiederverankerungsbeleg; sie erzeugt keine GPS-Zeitprognose. Alte, zu alte und wiederholte Providerwerte bleiben am Clockadapter ausgeschlossen. Reine Regressionen prüfen 80/150 Meter sowie NaN/unendliche Genauigkeit und die Wiederaufnahme mit einer neuen vollständigen Fixfolge. Android-Service-/FLP-Zustellung wurde damit nicht ausgeführt.
 
 ## Verwandte Seiten
 

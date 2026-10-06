@@ -284,6 +284,24 @@ Alle sieben temporären Kotlin-Klassen wurden danach entfernt. Ein erneuter loka
 
 TODO: Rotation/Editorerhalt, Notification-Navigation während POST, Settings-TTS-Initialfehler und TalkBack-/Semantiklabels zusätzlich instrumentiert prüfen. Die Codeverträge beweisen die jeweiligen Pfade, keine tatsächlich ausgeführte Geräteprüfung.
 
+## Dauerhafte Korrekturen des zwölfteiligen Nachreviews
+
+Der endgültige, nach Abschluss aller produktiven Änderungen neu kompilierte Code besteht **726 Android-Unit-Tests in 56 Klassen**, mit 0 Fehlschlägen, Fehlern und übersprungenen Tests. Die JUnit-XML-Dateien wurden unabhängig gezählt. Gegenüber Main `2121cc1` sind 68 dauerhafte Regressionen ergänzt. Alle **56 Offline-Python-Releaseguardtests** bestehen ebenfalls; vorher waren es 41. Es gab keine schreibenden Träwelling-Liveanfragen, keine Verwendung echter Kontotokens und keinen signierten Release.
+
+| Bereich | Zusätzliche Regressionen | Kontrollierte Grenzen |
+| --- | --- | --- |
+| GPS-Abfahrt und Linienendpunkte | 13 | Häufige Fixe, Verfrühung, fehlende Geschwindigkeit, Lücke/Sprung, gestützter Ursprung, Kurven/Mehrdeutigkeit, verdichtete Endkanten |
+| Clock-/Recoveryadapter und Settings-TTS | 10 | Unbrauchbare neue vs. alte Fixes, vollständige neue Recoveryfolge, unabhängiger Enginekatalog, Fehler/Retry/Timeout, alte und synchrone Callbacks |
+| Editierabsicht, Detailzustand, Check-in und Cleanup | 14 | Unveränderte Sichtbarkeit/Text, ausdrückliches Leeren, Composition-Leases, Busygrenze, verzögerter POST/PUT, lokale Bereinigungsfrist |
+| Meldungen | 4 | Servercommit vor verspäteter PUT-Antwort, neue Rows, GET-Start ohne Snapshotbeleg, Rollback trotz Countfehler |
+| Feed-, Repository- und Profilreihenfolge | 27 | Alte Likes/GETs, Cross-Repository-Schreibsperre, wartender/abgeschickter Abbruch, Roomepoch, Bodyless-Verifikation auf Seite 1, Follow-/Profil-/Sessiongrenzen und sichtbarer Fehler |
+
+Der vollständige frische lokale Lauf mit `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-build-cache` aus bereinigtem `app/build` bestand nach 3 Minuten 28 Sekunden (108 Tasks, 107 ausgeführt). Nach der abschließenden `onCleared`-Absicherung wurden Produktivcode und Tests mit `-Pkotlin.incremental=false` erneut kompiliert und dieselben vier Aufgaben erfolgreich ausgeführt: 2 Minuten 32 Sekunden, 108 Tasks, 26 ausgeführt und 82 unveränderte Aufgaben aktuell. Die 41 veränderten Produktiv-/Test-/Konfigurationsdateien blieben während dieses letzten Laufs per SHA-256 identisch. JUnit bestätigt weiterhin 726 Tests/56 Klassen ohne Fehler, Fehlschläge oder übersprungene Tests. Debug-Lint hat 0 Fehler und 42 Warnungen; zwei erreichbare Maven-Versionshinweise erklären den Unterschied zum früheren lokalen 40-Warnungen-Stand. Release-Vital-Lint, Debug-APK und unsignierte Release-APK sind erfolgreich. Beide zusammengeführten Manifeste enthalten weiterhin die Backup-/Transferausschlüsse.
+
+Vorbereitende Läufe mit veralteten Inkrementalartefakten, einem korrigierten Testtypfehler beziehungsweise einer während der Gegenprüfung ergänzten Profilregression vor deren Neucompilierung werden nicht als Endnachweis gewertet. Alle endgültigen Regressionen prüfen die tatsächlichen Produktionsgrenzen; UI-Semantik wurde zusätzlich am Quellvertrag geprüft, nicht durch einen fingierten Gerätetest. Der Main-Nachweis wird in der [API-Compatibility-CI](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml) und dem [Wiki-Sync-Workflow](https://github.com/shedowe19/routely/actions) gegen den veröffentlichten Commit kontrolliert.
+
+Die unabhängige Gegenprüfung umfasst GPS/Geometrie, Android-Service/Audio/Notification/Widget, API-/Daten-/Cacheconsumer, UI/Editor/Navigation/Zugänglichkeit sowie Auth/Backup/Release. Währenddessen bestätigte Folgefehler wurden vor dem Endstand korrigiert. Umsetzung und Prüfgrenzen stehen im [Main-Review](./main-review-2026-10-06.md) und in der [ADR Nachreview-Korrekturen](../entscheidungen/2026-10-06-nachreview-korrekturen.md).
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.

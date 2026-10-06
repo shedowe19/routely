@@ -34,6 +34,7 @@ data class StatusDetailUiState(
     val error: String? = null,
     val lastUpdated: Long = 0,
     val isDeleting: Boolean = false,
+    val deletedStatusId: Int? = null,
     val isOwnStatus: Boolean = false,
     val trackingState: TrackingLiveState? = null,
     val sevStops: Map<String, SevStopInfo> = emptyMap(),
@@ -49,7 +50,8 @@ data class StatusDetailUiState(
     val editDestinationId: Int? = null,
     val editDestinationStop: StopStation? = null,
     val editInitialStatus: Status? = null,
-    val editVisibility: Int = 0
+    val editVisibility: Int = 0,
+    val editVisibilityManuallyChanged: Boolean = false
 )
 
 class StatusDetailViewModel(application: Application) : AndroidViewModel(application) {
@@ -57,15 +59,16 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     private val prefs = PreferencesManager(application)
     private val repo  = TraewellingRepository(application, prefs)
 
-    private val _uiState = MutableStateFlow(StatusDetailUiState())
+    private val presentation = StatusDetailPresentation()
+    private val _uiState = presentation.state
     val uiState: StateFlow<StatusDetailUiState> = _uiState.asStateFlow()
 
     private var autoRefreshJob: Job? = null
-    private var currentStatusId: Int? = null
+    private val currentStatusId: Int? get() = presentation.statusId
     private var loadJob: Job? = null
     private var mutationJob: Job? = null
     private var loadGeneration = 0L
-    private var viewGeneration = 0L
+    private val viewGeneration: Long get() = presentation.generation
     private var editInitialDeparture = ""
     private var editInitialArrival = ""
     private var sevEnrichmentJob: Job? = null
@@ -94,15 +97,29 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun loadStatusDetail(statusId: Int) {
-        if (statusId <= 0) return
-        if (currentStatusId != statusId) {
-            ++viewGeneration
+    /** A screen owns only its observation lease, never the retained draft or submitted write. */
+    fun observeStatusDetail(statusId: Int): StatusDetailAttachment {
+        val attachment = presentation.attach(statusId)
+        if (attachment.changedStatus) {
             mutationJob?.cancel()
             cancelSevEnrichment()
-            _uiState.value = StatusDetailUiState()
-        } else if (_uiState.value.isUpdating || _uiState.value.isDeleting) return
-        currentStatusId = statusId
+        }
+        loadStatusDetail(statusId)
+        return attachment
+    }
+
+    fun stopObservingStatusDetail(attachment: StatusDetailAttachment) {
+        if (!presentation.detach(attachment)) return
+        ++loadGeneration
+        loadJob?.cancel()
+        autoRefreshJob?.cancel()
+        cancelSevEnrichment()
+        _uiState.update { it.copy(isLoading = false, isLoadingSevStops = false) }
+    }
+
+    private fun loadStatusDetail(statusId: Int) {
+        if (currentStatusId != statusId || !presentation.isObserved ||
+            _uiState.value.isUpdating || _uiState.value.isDeleting || _uiState.value.deletedStatusId != null) return
         autoRefreshJob?.cancel()
         loadJob?.cancel()
         val request = ++loadGeneration
@@ -115,6 +132,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     private fun startAutoRefresh(statusId: Int) {
         autoRefreshJob?.cancel()
+        if (!presentation.isObserved || currentStatusId != statusId) return
         autoRefreshJob = viewModelScope.launch {
             while (isActive) {
                 delay(30_000)
@@ -156,7 +174,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     /** Public map requests run after the API snapshot is visible and never block its refresh. */
     private fun enrichSevStops(status: Status, stops: List<StopStation>) {
-        if (currentStatusId != status.id) return
+        if (currentStatusId != status.id || !presentation.isObserved) return
         val publishedStatus = _uiState.value.status?.takeIf { it.id == status.id } ?: return
         val checkin = publishedStatus.checkin
         if (checkin == null || stops.isEmpty() || !SevStopResolver.isReplacementBus(checkin)) {
@@ -236,7 +254,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         currentStatusId?.let { loadStatusDetail(it) }
     }
 
-    fun deleteStatus(onSuccess: () -> Unit) {
+    fun deleteStatus() {
         val statusId = currentStatusId ?: return
         if (!_uiState.value.isOwnStatus || _uiState.value.isDeleting || _uiState.value.isUpdating) return
         val view = viewGeneration
@@ -248,37 +266,39 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             val session = prefs.getAuthSession()
             coroutineContext.ensureActive()
             if (view != viewGeneration || currentStatusId != statusId) return@launch
-            repo.deleteStatus(statusId)
-                .onSuccess {
-                    coroutineContext.ensureActive()
-                    if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
-                    completeDeletedStatus(
-                        cleanup = { prefs.clearActiveTracking(statusId, session) },
-                        completion = finished@{ localFailure ->
-                            if (view != viewGeneration || currentStatusId != statusId) return@finished
-                            _uiState.update { it.copy(isDeleting = false) }
-                            if (localFailure != null) {
-                                Log.w("StatusDetailViewModel", "Server deletion completed; local tracking cleanup failed", localFailure)
-                                val context = getApplication<Application>()
-                                val live = TripTrackingService.trackingLiveState.value
-                                if (live?.statusId == statusId && live.sessionRevision == session.revision) {
-                                    runCatching {
-                                        context.startService(Intent(context, TripTrackingService::class.java).apply {
-                                            action = TripTrackingService.ACTION_STOP
-                                            putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
-                                            putExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION, session.revision)
-                                        })
-                                    }.onFailure { Log.w("StatusDetailViewModel", "Could not request tracking stop", it) }
-                                }
+            repo.deleteStatus(statusId, expectedSession = session, onCommitted = { committedSession ->
+                completeDeletedStatus(
+                    cleanup = { prefs.clearActiveTracking(statusId, committedSession) },
+                    completion = { localFailure ->
+                        if (localFailure != null) {
+                            Log.w("StatusDetailViewModel", "Server deletion completed; local tracking cleanup failed", localFailure)
+                            val context = getApplication<Application>()
+                            val live = TripTrackingService.trackingLiveState.value
+                            val matchingTracking = live?.statusId == statusId && live.sessionRevision == committedSession.revision
+                            if (matchingTracking) {
+                                runCatching {
+                                    context.startService(Intent(context, TripTrackingService::class.java).apply {
+                                        action = TripTrackingService.ACTION_STOP
+                                        putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
+                                        putExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION, committedSession.revision)
+                                    })
+                                }.onFailure { Log.w("StatusDetailViewModel", "Could not request tracking stop", it) }
+                            }
+                            if (matchingTracking || view == viewGeneration && currentStatusId == statusId) {
                                 runCatching {
                                     Toast.makeText(context,
                                         "Fahrt gelöscht; lokale Begleitung konnte nicht beendet werden. Bitte Begleitung stoppen.",
                                         Toast.LENGTH_LONG).show()
                                 }.onFailure { Log.w("StatusDetailViewModel", "Could not show cleanup warning", it) }
                             }
-                            onSuccess()
                         }
-                    )
+                    }
+                )
+            })
+                .onSuccess {
+                    coroutineContext.ensureActive()
+                    if (view != viewGeneration || currentStatusId != statusId) return@onSuccess
+                    _uiState.update { it.copy(isDeleting = false, deletedStatusId = statusId) }
                 }
                 .onFailure { e ->
                     if (e is CancellationException) throw e
@@ -306,7 +326,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 editDestinationStop = status.checkin?.destination,
                 editInitialStatus = status,
                 editArrivalManuallyChanged = false,
-                editVisibility = status.visibility ?: 0
+                editVisibility = status.visibility ?: 0,
+                editVisibilityManuallyChanged = false
             )
         }
         editInitialDeparture = _uiState.value.editDeparture
@@ -354,7 +375,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun updateEditVisibility(visibility: Int) {
-        _uiState.update { it.copy(editVisibility = visibility) }
+        if (_uiState.value.isUpdating || visibility !in 0..5) return
+        _uiState.update { it.copy(editVisibility = visibility, editVisibilityManuallyChanged = true) }
     }
 
     fun saveStatusEdit() {
@@ -424,19 +446,25 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         }
     }
 
-    fun reset(statusId: Int? = null) {
-        if (statusId != null && currentStatusId != statusId) return
-        ++viewGeneration
+    fun reset(statusId: Int? = null): Boolean {
+        if (!presentation.leave(statusId)) return false
         ++loadGeneration
         loadJob?.cancel()
         mutationJob?.cancel()
         autoRefreshJob?.cancel()
         cancelSevEnrichment()
-        currentStatusId = null
-        _uiState.value = StatusDetailUiState()
+        return true
+    }
+
+    /** Consume deletion with the current navigation owner, including after Activity recreation. */
+    fun consumeDeletedStatus(statusId: Int): Boolean {
+        if (currentStatusId != statusId || _uiState.value.deletedStatusId != statusId) return false
+        return reset(statusId)
     }
 
     override fun onCleared() {
+        presentation.clear()
+        ++loadGeneration
         super.onCleared()
         autoRefreshJob?.cancel()
         cancelSevEnrichment()

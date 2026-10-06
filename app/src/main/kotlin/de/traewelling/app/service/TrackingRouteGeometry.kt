@@ -13,7 +13,12 @@ internal object TrackingRouteGeometry {
     data class Path(val points: List<RoutePoint>, val lengths: List<Double>, val length: Double)
     data class Segment(val source: GpsGeometrySource, val paths: List<Path>)
     data class Projection(val fraction: Double, val length: Double, val path: Path, val across: Double)
-    data class Result(val projection: Projection?, val ambiguous: Boolean = false)
+    data class Result(val projection: Projection?, val ambiguous: Boolean = false, val beforeOrigin: Boolean = false)
+    private data class Candidate(
+        val projection: Projection,
+        val supportedEndpoint: Boolean,
+        val beforeOrigin: Boolean
+    )
 
     fun prepare(geometry: RouteGeometry?, from: TrackingStop, to: TrackingStop,
                 source: GpsGeometrySource, nowMillis: Long): Segment? {
@@ -49,7 +54,7 @@ internal object TrackingRouteGeometry {
     /** Nearby, nonadjacent branches must agree in chainage; nearest alone can jump through loops. */
     fun project(path: Path, fix: LocationFix, arrivalEndpoint: Boolean = false): Result {
         var cumulative = 0.0
-        val candidates = mutableListOf<Projection>()
+        val candidates = mutableListOf<Candidate>()
         val corridor = max(100.0, fix.accuracyMeters * 2)
         val end = path.points.last()
         val supportedEnd = arrivalEndpoint && distance(RoutePoint(fix.latitude, fix.longitude), end) +
@@ -67,19 +72,30 @@ internal object TrackingRouteGeometry {
             val along = (fx * x + fy * y) / (length * length)
             val clamped = along.coerceIn(0.0, 1.0)
             val across = hypot(fx - clamped * x, fy - clamped * y)
-            if (!(index == 0 && along < 0.0) &&
-                !(index == path.lengths.lastIndex && along > 1.0 && !supportedEnd) && across <= corridor) {
-                candidates += Projection((cumulative + clamped * length) / path.length, path.length, path, across)
+            if (across <= corridor) {
+                val supportedEndpoint = !(index == 0 && along < 0.0) &&
+                    !(index == path.lengths.lastIndex && along > 1.0 && !supportedEnd)
+                candidates += Candidate(Projection((cumulative + clamped * length) / path.length,
+                    path.length, path, across), supportedEndpoint, index == 0 && along < 0.0)
             }
             cumulative += length
         }
         if (candidates.isEmpty()) return Result(null)
-        val nearest = candidates.minBy { it.across }
-        val plausible = candidates.filter { it.across <= nearest.across + max(10.0, fix.accuracyMeters * 2) }
-        if (plausible.any { abs(it.fraction - nearest.fraction) * path.length > max(50.0, fix.accuracyMeters * 2) }) {
+        // Select against the complete physical path before discarding endpoint
+        // extrapolation. Otherwise a short final edge can be discarded while
+        // the preceding edge clamps the same beyond-end fix to an inner vertex.
+        val nearest = candidates.minWith(compareBy<Candidate> { it.projection.across }
+            .thenBy { it.supportedEndpoint })
+        val projection = nearest.projection
+        val plausible = candidates.filter {
+            it.projection.across <= projection.across + max(10.0, fix.accuracyMeters * 2)
+        }
+        if (plausible.any { abs(it.projection.fraction - projection.fraction) * path.length >
+                max(50.0, fix.accuracyMeters * 2) }) {
             return Result(null, ambiguous = true)
         }
-        return Result(nearest)
+        if (!nearest.supportedEndpoint) return Result(null, beforeOrigin = nearest.beforeOrigin)
+        return Result(projection)
     }
 
     fun distance(a: RoutePoint, b: RoutePoint): Double = hypot(

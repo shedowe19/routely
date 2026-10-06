@@ -1112,11 +1112,16 @@ class TripTrackingService : Service() {
                         for (location in locations) {
                             if (!isCurrentTracking(callbackStatusId, callbackGeneration) || completionStatusId != null) break
                             val observation = observeLocation(location)
-                            if (!observation.isNew) continue
-                            val fix = observation.fix ?: continue
+                            if (!observation.isNew || observation.fix == null) continue
                             if (!isFreshLocation(location)) {
                                 latestLocation = null
                                 gpsJourneyTimes.invalidateLocation()
+                                // Accuracy failures still break a transient recovery proof.
+                                // Only the clock adapter may discard an old/replayed sample.
+                                engine?.let { currentEngine ->
+                                    dispatchTrackingLocationObservation(observation, currentEngine, System.currentTimeMillis())
+                                        ?.let { applyUpdate(it, callbackStatusId, callbackGeneration) }
+                                }
                                 continue
                             }
                             locationError = null
@@ -1124,7 +1129,8 @@ class TripTrackingService : Service() {
                             revalidateSevStops(System.currentTimeMillis())
                             syncTransitRoutes(System.currentTimeMillis())
                             val currentEngine = engine ?: continue
-                            val update = currentEngine.onLocation(fix, System.currentTimeMillis())
+                            val update = dispatchTrackingLocationObservation(observation, currentEngine, System.currentTimeMillis())
+                                ?: continue
                             applyUpdate(update, callbackStatusId, callbackGeneration)
                             val stop = update.stop
                             val distance = if (stop?.latitude != null && stop.longitude != null) {

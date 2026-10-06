@@ -42,8 +42,8 @@ internal class NotificationController(
     private var countRevision = 0L
     private val pendingReads = mutableSetOf<String>()
     private var markingAll = false
+    private val pendingAllReads = mutableSetOf<String>()
     private val confirmedReads = mutableMapOf<String, Long>()
-    private var confirmedAllRevision = -1L
     private var countRequest = 0L
     private val countMutex = Mutex()
 
@@ -79,11 +79,8 @@ internal class NotificationController(
                         if (notification.readAt != null && confirmed != null && readRevision > confirmed) {
                             confirmedReads.remove(id)
                         }
-                        if (readRevision <= confirmedAllRevision && notification.readAt == null) {
-                            confirmedReads[id] = confirmedAllRevision
-                        }
-                        if (notification.readAt == null && (markingAll || id in pendingReads ||
-                            id in confirmedReads || readRevision <= confirmedAllRevision)) {
+                        if (notification.readAt == null && (id in pendingAllReads || id in pendingReads ||
+                            id in confirmedReads)) {
                             notification.copy(readAt = "now")
                         } else notification
                     }
@@ -99,6 +96,9 @@ internal class NotificationController(
                             isLoading       = false,
                             isRefreshing    = false,
                             notifications   = newNotifications.distinctBy { notification -> notification.id },
+                            unreadCount     = if (markingAll) maxOf(it.unreadCount,
+                                newNotifications.distinctBy { notification -> notification.id }.count { notification -> notification.readAt == null }
+                            ) else it.unreadCount,
                             hasMore         = hasMore,
                             currentPage     = (meta?.currentPage ?: page) + 1,
                             error           = null
@@ -152,21 +152,23 @@ internal class NotificationController(
 
     fun markAllAsRead() {
         if (markingAll || pendingReads.isNotEmpty() || _uiState.value.unreadCount == 0) return
+        val previous = _uiState.value
+        // A later list can contain notifications created after the server commits this PUT.
+        // Its request start is not evidence of its server snapshot, so only known IDs qualify.
+        pendingAllReads.addAll(previous.notifications.mapNotNull { it.id })
         markingAll = true
         ++countRevision
-        val previous = _uiState.value
         _uiState.update { state -> state.copy(
             notifications = state.notifications.map { it.copy(readAt = it.readAt ?: "now") }, unreadCount = 0
         ) }
         scope.launch {
+            var succeeded = false
             try {
                 val result = gateway.markAllNotificationsRead()
                 coroutineContext.ensureActive()
                 result.onSuccess {
-                    confirmedAllRevision = countRevision
-                    _uiState.value.notifications.forEach { notification ->
-                        notification.id?.let { confirmedReads[it] = countRevision }
-                    }
+                    succeeded = true
+                    pendingAllReads.forEach { id -> confirmedReads[id] = countRevision }
                 }
                 result.onFailure { e ->
                     _uiState.update { state -> rollbackAllNotificationsReadLocally(state, previous).copy(
@@ -175,9 +177,15 @@ internal class NotificationController(
                 }
             } finally {
                 markingAll = false
+                pendingAllReads.clear()
                 ++countRevision
             }
-            refreshUnreadCount()
+            if (succeeded) {
+                // Previously unseen rows require a post-PUT server snapshot, not a blanket
+                // read overlay. Starting this reload also cancels/fences every older list.
+                _uiState.update { it.copy(isLoading = false, isRefreshing = false) }
+                loadNotifications(refresh = true)
+            } else refreshUnreadCount()
         }
     }
 
@@ -215,8 +223,10 @@ internal fun rollbackNotificationReadLocally(state: NotificationUiState, id: Str
 
 internal fun rollbackAllNotificationsReadLocally(state: NotificationUiState, previous: NotificationUiState): NotificationUiState {
     val readTimes = previous.notifications.associate { it.id to it.readAt }
+    val restored = state.notifications.map { if (it.readAt == "now") it.copy(readAt = readTimes[it.id]) else it }
     return state.copy(
-        notifications = state.notifications.map { if (it.readAt == "now") it.copy(readAt = readTimes[it.id]) else it },
-        unreadCount = previous.unreadCount
+        notifications = restored,
+        // Preserve the old total, but never underreport new unread rows received during the PUT.
+        unreadCount = maxOf(previous.unreadCount, restored.count { it.readAt == null })
     )
 }

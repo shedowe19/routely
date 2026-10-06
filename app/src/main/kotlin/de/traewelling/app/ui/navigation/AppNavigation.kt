@@ -63,6 +63,7 @@ fun MainNavigation(
             navController.navigate("statusDetail/$statusId") { launchSingleTop = true }
             onNavigationRequestConsumed(request.token)
         } else if (request.showCheckIn) {
+            // A rejected reset keeps an already submitted POST/correction alive. Show its flow.
             checkInViewModel.reset()
             if (!navController.popBackStack(Screen.Main.route, false)) {
                 navController.navigate(Screen.Main.route) { launchSingleTop = true }

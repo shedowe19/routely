@@ -22,7 +22,7 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 
 ### Lade-Prozess
 
-1. `loadStatusDetail(statusId)` lädt Status-Details und behält `manualDeparture` und `manualArrival` von CheckinInfo für die getrennte Anzeigenauflösung.
+1. `observeStatusDetail(statusId)` bindet eine Composition-Lease; der interne Ladeauftrag lädt Status-Details und behält `manualDeparture` und `manualArrival` von CheckinInfo für die getrennte Anzeigenauflösung.
 2. Lädt Stopovers via `repo.getStopovers(tripId)`.
 3. Veröffentlicht Status, eindeutig zugeordnete Ein-/Ausstiegshalte, Timeline und Aktualisierungszeitpunkt gemeinsam. Ohne Trip wird die Timeline geleert.
 4. Prüft via `checkIfOwnStatus()` ob eigener Status (für Bearbeiten/Löschen-Buttons).
@@ -37,7 +37,7 @@ Schlägt die Halteanfrage fehl, werden dennoch die neuen Status-/Text-/manuellen
 
 Antworten auf Status-, Halte- und Nutzeranfragen werden nur übernommen, wenn weiterhin dieselbe Status-ID angezeigt wird. Späte Antworten einer zuvor geöffneten Fahrt überschreiben dadurch nicht die neue Ansicht.
 
-Lade- und Ansichtsgenerationen trennen zusätzlich mehrere Refreshs derselben Status-ID. Während Speichern oder Löschen sind Auto-Refresh und alte Ladeaufträge ausgesetzt; gegenseitige beziehungsweise doppelte Mutationen werden abgelehnt. Reset und Fahrtwechsel beenden auch den laufenden Mutationsauftrag. Ein gescheiterter Schreibauftrag kann den Auto-Refresh der weiterhin passenden Ansicht wieder starten.
+Lade- und Ansichtsgenerationen trennen zusätzlich mehrere Refreshs derselben Status-ID. Während Speichern oder Löschen sind Auto-Refresh und alte Ladeaufträge ausgesetzt; gegenseitige beziehungsweise doppelte Mutationen werden abgelehnt. Echter Fahrtwechsel und angenommenes Verlassen beenden den UI-Mutationsauftrag; eine bereits abgeschickte Repositorymutation hält ihren Commit-/Cacheabschluss getrennt weiter. Composition-Dispose erhält dagegen Entwurf und laufende Mutation. Ein gescheiterter Schreibauftrag kann den Auto-Refresh der weiterhin passenden Ansicht wieder starten.
 
 ### GPS-Zeiten und API-Rückfall
 
@@ -75,7 +75,7 @@ Für diese Ersatzbusfahrten nennt die Ansicht zusätzlich OSRM und OpenStreetMap
 
 `buildStatusEditRequest` vergleicht die Formularzeiten mit den beim Öffnen aufgelösten Anfangswerten. Unveränderte Ankunft/Abfahrt werden im Request ausgelassen, damit eine reine Textänderung die damalige Providerzeit nicht versehentlich als manuelle Istzeit festschreibt. Eine bewusst geleerte Zeit wird als leerer String übertragen. Auch ein anderer Besuch derselben Station gilt als Zielwechsel; eine reine Echtzeitänderung desselben Besuchs nicht. Ein neues Ziel muss nach dem eindeutig zugeordneten Einstieg liegen und darf nicht gestrichen sein. Der GPS-freie Formularresolver bleibt erhalten.
 
-`startEditing` speichert außerdem den vollständigen Anfangsstatus in `editInitialStatus`. Ein offener Dialog kann weiterhin Live-Refreshs erhalten, doch Zieländerungen werden gegen den Anfangsbesuch geprüft. Wird das Ziel inzwischen serverseitig von einem anderen Client geändert, sendet eine reine Text- oder Zeitkorrektur nicht versehentlich das alte Formularziel zurück. Eine bewusste Zielwahl bleibt dagegen eine Nutzeränderung gegenüber dem Anfangsbesuch. `editArrivalManuallyChanged` erhält die explizite Ankunftseingabe auch dann, wenn sie zufällig genau der Providerzeit des neu gewählten Ziels entspricht; automatische Formularanpassungen werden nicht als eigene Zeitkorrektur ausgegeben.
+`startEditing` speichert außerdem den vollständigen Anfangsstatus in `editInitialStatus`. Unveränderter Text und unveränderte Sichtbarkeit werden ausgelassen; eine reine Zeitänderung überschreibt damit keinen inzwischen remote geänderten Text. Bewusstes Leeren überträgt weiterhin den leeren String. Ein offener Dialog kann weiterhin Live-Refreshs erhalten, doch Zieländerungen werden gegen den Anfangsbesuch geprüft. Wird das Ziel inzwischen serverseitig von einem anderen Client geändert, sendet eine reine Text- oder Zeitkorrektur nicht versehentlich das alte Formularziel zurück. Eine bewusste Zielwahl bleibt dagegen eine Nutzeränderung gegenüber dem Anfangsbesuch. `editArrivalManuallyChanged` erhält die explizite Ankunftseingabe auch dann, wenn sie zufällig genau der Providerzeit des neu gewählten Ziels entspricht; automatische Formularanpassungen werden nicht als eigene Zeitkorrektur ausgegeben.
 
 Bei einem neuen Ziel wird ein vorhandener, vom Nutzer unveränderter manueller Ankunfts-Override des alten Ziels ausdrücklich mit `manualArrival = ""` gelöscht. Upstream wandelt diesen leeren Wert in `null` um; bloßes Weglassen würde den alten Override behalten. Eine eigens im Formular geänderte Zielzeit bleibt dagegen erhalten. Bei Rückwahl des ursprünglichen Besuchs wird dessen ursprünglicher manueller Wert wieder angezeigt. Speichern-/Löschfehler bleiben auch bei vorhandenem Status beziehungsweise offenem Bearbeitungsdialog sichtbar; laufendes Speichern sperrt dessen Bestätigung und Schließen.
 
@@ -87,7 +87,7 @@ Nur eigene Status dürfen geändert oder gelöscht werden. Die lokale aktive Fah
 
 Das Repository invalidiert nach bestätigtem PUT/DELETE den [Feed](./feed.md) und dessen kontobezogenen Room-Rückfall. Das Detail emittiert keine zweite Mutation. Eine HTTP-2xx-Änderungsantwort ohne vertrauenswürdigen Status löst `Invalidated` und Feed-Verifikation aus; der Fehlerhinweis empfiehlt die Aktualisierung der Fahrt.
 
-`completeDeletedStatus` trennt eine bestätigte Serverlöschung vom anschließenden lokalen Tracking-Cleanup. Ein lokaler Speicherfehler lässt `isDeleting` wieder frei und führt die Erfolgsnavigation genau einmal aus. Ein Application-Toast erklärt: `Fahrt gelöscht; lokale Begleitung konnte nicht beendet werden. Bitte Begleitung stoppen.` Zusätzlich wird nur für die passende In-Memory-Livefahrt mit gleicher Status-ID und Authrevision ein identitätsgebundener `ACTION_STOP` angefordert. Ein neuer Service beziehungsweise ein unabhängiger Fahrterkennungs-Opt-in wird nicht global gestoppt. Das DELETE wird nicht heimlich wiederholt. Coroutine-Abbruch bleibt ein Abbruch und führt keine späte Navigation aus.
+`completeDeletedStatus` trennt eine bestätigte Serverlöschung vom anschließenden lokalen Tracking-Cleanup. Ein lokaler Speicherfehler lässt `isDeleting` wieder frei und führt die Erfolgsnavigation genau einmal aus. Ein Application-Toast erklärt: `Fahrt gelöscht; lokale Begleitung konnte nicht beendet werden. Bitte Begleitung stoppen.` Zusätzlich wird nur für die passende In-Memory-Livefahrt mit gleicher Status-ID und Authrevision ein identitätsgebundener `ACTION_STOP` angefordert. Ein neuer Service beziehungsweise ein unabhängiger Fahrterkennungs-Opt-in wird nicht global gestoppt. Das DELETE wird nicht heimlich wiederholt. Coroutine-Abbruch bleibt für die UI ein Abbruch und führt keine späte Navigation aus. Die bestätigte Serverlöschung führt ihre aufgenommenen lokalen Bereinigungsaufträge aber innerhalb des Repository-Callbacks `onCommitted` weiter, auch wenn der alte Screenauftrag beendet wurde. Der Callback prüft die erfasste Status-/Sitzungsidentität; die Speicherbereinigung hat eine 15-Sekunden-Frist. Timeout wird als lokaler Teilerfolg behandelt, nicht als wiederholbarer DELETE.
 
 `StatusEditRequestTest` prüft Refresh während Text-/Zeitbearbeitung und ausdrückliche Ziel-/Zeitabsicht. `DeletedStatusCompletionTest` prüft Speicherfehler, genau einmaligen Abschluss sowie Abbruch während verzögertem Cleanup mit virtueller Coroutine-Zeit; siehe [Tests](../entwicklung/tests.md).
 
@@ -149,9 +149,12 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 | `isDeleting`  | Boolean           | Löschvorgang                    |
 | `lastUpdated` | Long              | Timestamp letzte Aktualisierung |
 
-## Offene Fragen
+### Erhaltener Fachzustand bei Activity-Neuanlage
 
-- TODO: D4/D7 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) beheben: reine Textänderung sendet derzeit eine unveränderte alte Sichtbarkeit mit; jeder Composition-Dispose verwirft Editorzustand und beendet eine Mutation, auch bei Activity-Neuanlage. Die korrigierte Anfangsbindung von Ziel und manueller Zeit deckt diese beiden Pfade nicht ab.
+- D4/D7 sind korrigiert: Unveränderte Sichtbarkeit wird im PUT ausgelassen; nur ausdrücklich geänderte Formularabsicht gegenüber dem Anfangsstatus erlaubt dieses Feld. Eine reine Textänderung kann eine zwischenzeitliche private Einschränkung nicht mit dem alten öffentlichen Wert überschreiben.
+- `StatusDetailPresentation` bindet Fachzustand und Entwurf an die Sitzung und Status-ID; jede Composition erhält eine getrennte Beobachtungslease. Dispose beendet lediglich eigene Lese-/Refresh-/SEV-Aufträge, erhält Entwurf und abgeschickte Mutation. Eine alte Dispose-Lease kann eine neu angehängte Ansicht nicht beenden. Echter Statuswechsel, ausdrücklich angenommenes Verlassen und Sitzungsende bleiben getrennte Resetgrenzen. `onCleared` invalidiert zusätzlich Präsentation und Ladegeneration; ein noch laufender bestätigter DELETE-Callback bereinigt weiterhin nur seine erfasste Fahrt, darf aber keinen Hinweis mehr für die beendete Ansicht anzeigen. Laufende Speichern-/Löschaufträge sperren das Verlassen; eine bestätigte Löschung wird durch die aktuell angehängte Composition genau einmal für deren Navigation übernommen.
+
+## Offene Fragen
 
 - TODO: EditStatusDialog Layout dokumentieren
 

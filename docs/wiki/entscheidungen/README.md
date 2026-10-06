@@ -6,6 +6,7 @@
 
 ## Liste der Entscheidungen
 
+- [06.10.2026: Nachreview-Korrekturen und Versionsclaims](./2026-10-06-nachreview-korrekturen.md)
 - [06.10.2026: GPS-, Mutations- und Releasezustände](./2026-10-06-befundkorrekturen.md)
 
 - [28.04.2026: App-Umbenennung zu Routely](./2026-04-28-app-rename-routely.md)

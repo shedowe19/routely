@@ -52,6 +52,12 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 
 TTS-Zustand liegt im `SettingsViewModel`, nicht im `ProfileUiState`.
 
+### Gemeinsame Statusmutationen
+
+Android-freie Profilcontroller beobachten den revisionsgebundenen `StatusMutation`-Flow. Geänderte bereits geladene Karten werden ersetzt, gelöschte entfernt; unbekannte Karten werden nicht eingefügt. Ältere Profil-/Statusanfragen dürfen nach der Mutation keinen alten Snapshot zurückbringen. Unvollständige erfolgreiche PUT-Antworten erhalten eine aktuelle Seite-1-Verifikation. Ein Wechsel von Sitzung oder angezeigtem Nutzer bleibt eine eigene Grenze.
+
+Das eigene Profil lädt beim erneuten Einfügen der Composition weiterhin über `LaunchedEffect(Unit)`. Das Nutzerprofil überspringt eine bereits erfüllte Ladung desselben Namens; deshalb benötigt besonders die Rückkehr aus einem bearbeiteten eigenen Status dessen unmittelbare Mutationsübernahme. Statusmutationen beenden keinen abgeschickten Follow-Auftrag; eigene Besitzer und ein gegebenenfalls nachgelagerter Abruf erhalten seinen Abschluss.
+
 ## Abhängigkeiten
 
 - **TraewellingRepository**: getCurrentUser, getStatistics, getUserStatuses
