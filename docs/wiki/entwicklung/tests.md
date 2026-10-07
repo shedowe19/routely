@@ -331,6 +331,20 @@ Der erste kompilierte 788-Test-Lauf hatte einen Fehlschlag in einer bestehenden 
 
 System-/Gesten-Zurück auf API 26–30, echte Android-Prozess-/Speicher-/Restoreabläufe, Doze/OEM/TTS, TalkBack und GPS-Güte bleiben praktisch zu prüfen. JVM-Tests behaupten keine solche Zustellung. Aktuelle Verträge, zusätzlicher Randfallabgleich und Wiki-Pflege stehen im [Umsetzungs-/Vollscanbericht](./main-review-2026-10-06.md#umsetzung-der-acht-befunde-und-erneuter-vollscan).
 
+## SEV-Korrektur vom 07.10.2026
+
+Der Screenshot der Rückfahrt Duisburg → Mülheim → Essen um 06:58 führte zu einer erneuten Quellen- und Codeprüfung. Die öffentliche Mülheimer Karte enthält ein allgemeines Maßnahmenintervall und eine zusätzliche Oberhausen-Frist, die bisher fälschlich alle Richtungen sperrte. Die eng begrenzte Korrektur berücksichtigt den vollständig übereinstimmenden Zusatzsatz und das datierte Punktlabel. Stationsmittelpunkte und unbekannte Richtungen bleiben ausgeschlossen.
+
+27 neue dauerhafte Regressionen ergänzen den vorherigen 788-Test-Stand:
+
+- `SevDirectionalValidityTest`: acht Fälle einschließlich Parser → Resolver → beide öffentliche Straßen-Endpunktpaare, Essen/Duisburg vor und nach Sonderfristende, Oberhausen mit aktuellem und künftigem Besuchsdatum sowie allgemeine, widersprüchliche oder ungültige Einschränkungen.
+- `RoadRouteRepositoryTest`: zwölf neue Fälle zu Transport-Recovery, Fehlertypen, providerweiter Wartefrist, bereits wartenden Requests, realem öffentlichen OSRM-Antwortfixture, Quellenherkunft und Cache-Erneuerung nach Systemuhränderungen.
+- `RoadRouteSelectionTest`: sieben neue Fälle zur Unterscheidung unbestätigter physischer SEV-Endpunkte von fehlendem Straßenweg; Besuchsidentität, Cursor, Streichungen, Verkehrsmittel und vorrangige GPS-Gründe bleiben geprüft.
+
+Der erste vollständige Prüflauf scheiterte beim Kompilieren einer neuen Testfixture, die für OkHttp 5 eine nicht unterstützte null-ResponseBody setzte. Die korrigierte Fixture verwendet einen tatsächlich leeren Antwortkörper und erhält die Negativprüfung. Der finale vollständige Gradle-Lauf am 07.10.2026 bestand in 2 min 22 s: **815 Tests in 63 Klassen**, keine Fehlschläge, Fehler oder übersprungenen Tests; vollständiges Debug-Lint mit **0 Fehlern / 42 Warnungen**, Debug-APK und unsignierte Release-APK einschließlich Release-Lint. Die unveränderten Python-Releaseguards bestanden separat **56 Tests**. Der Lauf verwendete nach der Testkorrektur bereits erzeugte unveränderte Produktionsaufgaben aus dem zuvor sauberen Neuaufbau; 194 Quell-/Test-/Gradle-Dateien wurden gegen eingefrorene SHA256-Werte geprüft. Keine physische Geräteausführung oder signierte Veröffentlichung.
+
+Die unabhängige Prüfung des betroffenen Resolver-/Routing-/Service-/UI-Diffs fand keinen weiteren bestätigten Defekt. Reale GPS-Fixfolgen, aktueller Busweg und Prognosegüte auf dem Gerät sind dadurch weiterhin nicht belegt. Ohne bestätigte SEV-Endpunkte, geeignete Straßengeometrie und hinreichende lokale Bewegung gilt der bestehende API-/Plan-Rückfall. Verträge: [SEV-Haltestellen](../module/sev-haltestellen.md), [GPS-Zeiten](../module/gps-zeiten.md) und [Externe Schnittstellen](../api/externe-schnittstellen.md).
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.

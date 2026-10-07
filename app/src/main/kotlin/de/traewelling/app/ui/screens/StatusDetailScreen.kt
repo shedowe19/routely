@@ -1250,6 +1250,8 @@ private fun gpsTimeUnavailableMessage(reason: GpsTimeUnavailableReason): String 
             "Für die Zeitprognose fehlen passende Streckendaten."
         GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE ->
             "Für die GPS-Prognose ist noch keine passende Straßenroute verfügbar."
+        GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED ->
+            "Für die GPS-Prognose fehlen noch eindeutig bestätigte SEV-Haltpositionen."
         GpsTimeUnavailableReason.AMBIGUOUS_ROUTE ->
             "Der GPS-Fortschritt ist auf den möglichen Fahrwegen noch nicht eindeutig."
         GpsTimeUnavailableReason.WAITING_AT_ORIGIN ->

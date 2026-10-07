@@ -85,7 +85,7 @@ object SevStopResolver {
                 val eventDate = listOf(stop.departurePlanned, stop.arrivalPlanned).firstNotNullOfOrNull { value ->
                     value?.let { runCatching { Instant.parse(it).atZone(berlin).toLocalDate() }.getOrNull() }
                 } ?: today
-                val validity = mapValidity(map.notes, today, eventDate)
+                val validity = mapValidity(map.notes, map.points, today, eventDate)
                 if (validity != null) {
                     put(key, unknown(validity))
                     return@forEachIndexed
@@ -118,18 +118,37 @@ object SevStopResolver {
         RegexOption.IGNORE_CASE
     )
 
-    private fun mapValidity(notes: List<String>, today: LocalDate, eventDate: LocalDate): String? {
+    private val extraDirectionNotice = Regex(
+        "(?:^|(?<=[.!?]))\\s*bis\\s+(?:zum\\s+)?(\\d{1,2}\\.\\d{1,2}\\.\\d{4})(?!\\d)" +
+            "\\s+fährt\\s+ebenfalls\\s+Ersatzverkehr\\s+Richtung\\s+([\\p{L}][\\p{L}\\p{M} -]*)\\.(?=\\s|$)",
+        RegexOption.IGNORE_CASE
+    )
+
+    private fun mapValidity(notes: List<String>, points: List<SevPoint>, today: LocalDate, eventDate: LocalDate): String? {
         val ranges = mutableListOf<DateRange>()
+        val pointDirections = points.distinct().map { directions(it.label) }
         for (note in notes) {
-            val matches = dateRange.findAll(note).toList()
+            // A dated extra service direction is not the validity of every
+            // stop on the map. Only remove a recognised whole sentence if
+            // exactly one point explicitly carries that same directional
+            // deadline. The direction selector still checks both dates.
+            val mapNotice = extraDirectionNotice.replace(note) { match ->
+                val until = parseGermanDate(match.groupValues[1])
+                val place = places(match.groupValues[2]).singleOrNull()
+                val confirmed = until != null && place != null && pointDirections.count { rules ->
+                    rules.any { it.place == place && it.until == until }
+                } == 1
+                if (confirmed) "" else match.value
+            }
+            val matches = dateRange.findAll(mapNotice).toList()
             val unmatchedBound = Regex(
                 "\\b(?:ab(?:\\s+dem)?|bis(?:\\s+zum)?|vom|von)\\s+\\d{1,2}\\.\\d{1,2}(?:\\.\\d{4})?",
                 RegexOption.IGNORE_CASE
-            ).containsMatchIn(dateRange.replace(note, ""))
+            ).containsMatchIn(dateRange.replace(mapNotice, ""))
             // A broad known interval cannot prove that another ab/bis
             // restriction applies to the same point or may be ignored.
             if (unmatchedBound || (matches.isEmpty() &&
-                    Regex("tempor[aä]r|vor[uü]bergehend", RegexOption.IGNORE_CASE).containsMatchIn(note))) {
+                    Regex("tempor[aä]r|vor[uü]bergehend", RegexOption.IGNORE_CASE).containsMatchIn(mapNotice))) {
                 return "Die Gültigkeit der vorübergehenden Ersatzhaltestellen ist nicht eindeutig angegeben."
             }
             for (match in matches) {

@@ -10,6 +10,8 @@ Die zwölf zusätzlichen Befunde des [Nachreviews von Main f406bad](./entwicklun
 
 Die acht zusätzlichen Befunde des [weiteren Nachreviews](./entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) sind am 07.10.2026 vollständig korrigiert: aktive Ziel-/Fahrtrevision, GPS-Fortschritt/Istabfahrt, Feed-/Followantworten und Check-in-Zurücknavigation. Sechs unabhängige Sichten und Root haben den vollständigen Stand nach der Umsetzung erneut geprüft; bestätigte zusätzliche Grenzfälle wurden im selben Durchlauf geschlossen. Dauerhafte Regressionen und Prüfgrenzen stehen unter [Tests](./entwicklung/tests.md), Entscheidungen in der [ADR aktive Fahrt und Beobachtungen](./entscheidungen/2026-10-07-aktive-fahrt-und-beobachtungen.md).
 
+Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer Richtung Essen durch eine zusätzliche Oberhausen-Frist. Kurzzeitige Straßenabruf-Fehler, Systemuhränderungen und fehlende bestätigte SEV-Endpunkte sind unter [SEV-Haltestellen](./module/sev-haltestellen.md), [GPS-Zeiten](./module/gps-zeiten.md) und [Tests](./entwicklung/tests.md) beschrieben.
+
 ## Projekt
 
 - [Übersicht](./projekt/ueberblick.md)

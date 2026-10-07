@@ -50,6 +50,33 @@ internal object RoadRouteSelection {
         else listOfNotNull(outgoing, outgoing?.let { current -> pairs.singleOrNull { it.fromKey == current.toKey } })
     }
 
+    /** Distinguishes a missing physical stop basis from a missing requested road path. */
+    fun unavailableReason(
+        reason: GpsTimeUnavailableReason?,
+        checkin: CheckinInfo,
+        stops: List<StopStation>,
+        trackingKeys: List<String>,
+        sevStops: Map<String, SevStopInfo>,
+        progress: TrackingProgress
+    ): GpsTimeUnavailableReason? {
+        if (reason != GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE ||
+            !SevStopResolver.isReplacementBus(checkin) || progress.completed ||
+            stops.size != trackingKeys.size || trackingKeys.any(String::isBlank) ||
+            trackingKeys.distinct().size != trackingKeys.size
+        ) return reason
+        val currentIndex = progress.nextStopKey?.let { key ->
+            trackingKeys.indices.filter { trackingKeys[it] == key }.singleOrNull()
+        } ?: return reason
+        if (currentIndex != progress.nextIndex || stops[currentIndex].cancelled == true) return reason
+        val visits = stops.indices.filter { stops[it].cancelled != true }
+        if (visits.map { SevStopResolver.visitKey(stops[it]) }.distinct().size != visits.size) return reason
+        val previousIndex = (currentIndex - 1 downTo 0).firstOrNull { stops[it].cancelled != true }
+            ?: return reason
+        return if (verifiedPoint(stops[previousIndex], sevStops) == null ||
+            verifiedPoint(stops[currentIndex], sevStops) == null
+        ) GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED else reason
+    }
+
     fun usable(request: RoadSegmentRequest, geometry: RoadRouteGeometry, nowMillis: Long): Boolean =
         request.from == geometry.from && request.to == geometry.to && geometry.fetchedAtMillis > 0 &&
             nowMillis - geometry.fetchedAtMillis in 0..MAX_GEOMETRY_AGE_MILLIS &&

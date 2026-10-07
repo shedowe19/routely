@@ -97,6 +97,106 @@ class RoadRouteSelectionTest {
         assertFalse(RoadRouteSelection.usable(request, geometry(request).copy(alternatives = listOf(listOf(request.from, RoutePoint(95.0, 7.0)))), now))
     }
 
+    @Test fun duisburgMuelheimEssenExplainsUnconfirmedStopBeforeAnyRoadRequest() {
+        val route = listOf("Duisburg Hbf", "Mülheim (Ruhr) Hbf", "Essen Hbf").mapIndexed { index, name ->
+            stop("visit-$index", index + 1).let { it.copy(station = it.station!!.copy(name = name)) }
+        }
+        val routeKeys = route.map { it.uuid!! }
+        val trip = checkin().copy(origin = route.first(), destination = route.last())
+        val points = mapOf("visit-0" to info(51.01), "visit-1" to info(null), "visit-2" to info(51.03))
+        val cursor = TrackingProgress(nextIndex = 1, nextStopKey = "visit-1", gpsEstablished = true)
+        assertTrue(RoadRouteSelection.allPairs(trip, route, routeKeys, points).isEmpty())
+        assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED,
+            RoadRouteSelection.unavailableReason(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+                trip, route, routeKeys, points, cursor))
+
+        val confirmed = points + ("visit-1" to info(51.02))
+        assertEquals(listOf("visit-0" to "visit-1", "visit-1" to "visit-2"),
+            RoadRouteSelection.allPairs(trip, route, routeKeys, confirmed).map { it.fromKey to it.toKey })
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            RoadRouteSelection.unavailableReason(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+                trip, route, routeKeys, confirmed, cursor))
+    }
+
+    @Test fun missingEitherIncomingEndpointExplainsMissingSevBasis() {
+        for (missing in listOf("a", "b")) {
+            assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED,
+                reason(points = verified - missing))
+        }
+        assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED,
+            reason(points = verified + ("b" to info(Double.NaN))))
+        assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED,
+            reason(points = verified + ("b" to verified.getValue("b").copy(longitude = null))))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE, reason())
+    }
+
+    @Test fun anotherVisitsPointCannotHideAnUnconfirmedIncomingEndpoint() {
+        val otherVisitOnly = (verified - "b") + ("b-other-visit" to verified.getValue("b"))
+        assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED, reason(points = otherVisitOnly))
+    }
+
+    @Test fun explanationUsesPreviousNonCancelledVisitWithoutSkippingAnUnconfirmedServedVisit() {
+        val route = stops.map { if (it.uuid == "b") it.copy(cancelled = true) else it }
+        val cursor = TrackingProgress(nextIndex = 2, nextStopKey = "c", gpsEstablished = true)
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(route = route, points = verified - "b", progress = cursor))
+        assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED,
+            reason(route = route, points = verified - "a", progress = cursor))
+        assertEquals(GpsTimeUnavailableReason.REPLACEMENT_STOP_UNCONFIRMED,
+            reason(points = verified - "b", progress = cursor))
+    }
+
+    @Test fun ambiguousOrWrongCursorAndCancelledCurrentVisitKeepTheOriginalReason() {
+        for (cursor in listOf(
+            TrackingProgress(nextIndex = 0, nextStopKey = "b"),
+            TrackingProgress(nextIndex = 99, nextStopKey = "b"),
+            TrackingProgress(nextIndex = 1, nextStopKey = "unknown"),
+            TrackingProgress(nextIndex = 1, nextStopKey = null),
+            TrackingProgress(nextIndex = 1, nextStopKey = "b", completed = true)
+        )) {
+            assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+                reason(points = emptyMap(), progress = cursor))
+        }
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(route = stops.map { if (it.uuid == "b") it.copy(cancelled = true) else it }, points = emptyMap()))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(trackingKeys = listOf("a", "b", "b", "d"), points = emptyMap()))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(trackingKeys = keys.dropLast(1), points = emptyMap()))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(trackingKeys = listOf("a", "b", "", "d"), points = emptyMap()))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(route = stops.map { if (it.uuid == "c") it.copy(uuid = "a") else it }, points = emptyMap()))
+    }
+
+    @Test fun originWithoutIncomingLegAndOtherVehicleModesKeepTheOriginalReason() {
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(points = emptyMap(), progress = TrackingProgress(nextIndex = 0, nextStopKey = "a")))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(trip = checkin().copy(category = "regional", mode = "train"), points = emptyMap()))
+        assertEquals(GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+            reason(trip = checkin().copy(lineName = "SB 1"), points = emptyMap()))
+    }
+
+    @Test fun otherGpsRejectionReasonsAndAnAvailableForecastAreNotOverridden() {
+        for (underlying in GpsTimeUnavailableReason.entries.filter {
+            it != GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE
+        }) {
+            assertEquals(underlying, reason(underlying = underlying, points = emptyMap()))
+        }
+        assertNull(reason(underlying = null, points = emptyMap()))
+    }
+
+    private fun reason(
+        underlying: GpsTimeUnavailableReason? = GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE,
+        trip: CheckinInfo = checkin(),
+        route: List<StopStation> = stops,
+        trackingKeys: List<String> = keys,
+        points: Map<String, SevStopInfo> = verified,
+        progress: TrackingProgress = TrackingProgress(nextIndex = 1, nextStopKey = "b", gpsEstablished = true)
+    ): GpsTimeUnavailableReason? =
+        RoadRouteSelection.unavailableReason(underlying, trip, route, trackingKeys, points, progress)
+
     private fun pairs(checkin: CheckinInfo = checkin(), route: List<StopStation> = stops,
                       points: Map<String, SevStopInfo> = verified): List<RoadSegmentRequest> =
         RoadRouteSelection.allPairs(checkin, route, keys, points)

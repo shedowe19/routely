@@ -1331,7 +1331,10 @@ class TripTrackingService : Service() {
             source = update.source,
             gpsTimes = gpsTimes,
             sevStops = cachedSevStops,
-            gpsTimeUnavailableReason = gpsJourneyTimes.unavailableReason(),
+            gpsTimeUnavailableReason = RoadRouteSelection.unavailableReason(
+                gpsJourneyTimes.unavailableReason(), checkin, cachedStops,
+                cachedStops.mapIndexed { index, stop -> stopKey(stop, index) }, cachedSevStops, progress
+            ),
             sessionRevision = session.revision,
             gpsGeometrySource = gpsJourneyTimes.geometrySource() ?: engine?.geometrySource(),
             locationError = locationError,
