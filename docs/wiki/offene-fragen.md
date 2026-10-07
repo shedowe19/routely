@@ -37,7 +37,7 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 
 ## Flutter-Geräteabnahme
 
-- TODO: Den vollständigen Migrationscommit in GitHub CI auf allen sechs Plattformzielen prüfen. Der lokale Androidbuild scheitert vor Compilation am Netzwerkzugriff auf die Gradle-Distribution; iOS/macOS/Windows-Builds sind in dieser Linux-Sitzung nicht belegt. Der [Prüfstand](./entwicklung/flutter.md#prüfstand-vom-07102026) enthält die Abgrenzung.
+- Die Android-Freigabe nach den beiden Lintkorrekturen richtet sich nach den aktuellen commitgebundenen Tests, Lint- und APK-Jobs in [PR 38](https://github.com/shedowe19/routely/pull/38). Historische Ergebnisse und Prüfgrenzen stehen unter [Prüfstand](./entwicklung/flutter.md#prüfstand-vom-07102026); die lokale Netzwerkbeschränkung bleibt davon getrennt. Eigentümer-Signierung und Geräteabnahme sind weiter offen.
 
 - TODO: Signierte iOS-App einschließlich App-Group/Widget und Live Activity auf einem echten iPhone prüfen.
 - TODO: Android-Upgrade mit bisherigem Eigentümerschlüssel und einmaligem Datenimport testen.

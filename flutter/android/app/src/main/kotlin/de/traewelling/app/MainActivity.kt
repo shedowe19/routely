@@ -93,7 +93,26 @@ class MainActivity : FlutterActivity() {
             @Deprecated("Android location compatibility") override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) {}
         }
         oneLocationListener = listener
-        providers.forEach { runCatching { manager.requestLocationUpdates(it, 0L, 0f, listener, mainLooper) } }
+        var subscribed = false
+        for (provider in providers) {
+            try {
+                manager.requestLocationUpdates(provider, 0L, 0f, listener, mainLooper)
+                subscribed = true
+            } catch (_: SecurityException) {
+                // Permission can be revoked between the visible preflight and
+                // this registration. Retire any earlier provider as well.
+                cancelOneLocation()
+                result.error("location_permission", "Bitte Standortfreigabe erteilen.", null)
+                return
+            } catch (_: IllegalArgumentException) {
+                // A provider may disappear after the enabled-provider check.
+            }
+        }
+        if (!subscribed) {
+            cancelOneLocation()
+            result.error("location_unavailable", "Keine Standortquelle verfügbar.", null)
+            return
+        }
         TrackingHost.main.postDelayed({
             if (oneLocationListener === listener) {
                 val callback = locationResult

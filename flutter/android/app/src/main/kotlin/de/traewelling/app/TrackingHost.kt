@@ -400,6 +400,11 @@ class TrackingService : Service(), LocationListener {
                 e.dartExecutor.executeDartEntrypoint(DartExecutor.DartEntrypoint(io.flutter.FlutterInjector.instance().flutterLoader().findAppBundlePath(), "trackingMain"))
             }
             if (gps) startLocation()
+            if (next["mode"] == "recognition" && !gpsActive) {
+                TrackingHost.finishStart(identity, false)
+                TrackingHost.stop(identity)
+                return START_NOT_STICKY
+            }
             permissionWatch.run()
             TrackingHost.finishStart(identity, true)
             TrackingHost.emit("configuration", TrackingHost.current())
@@ -416,10 +421,24 @@ class TrackingService : Service(), LocationListener {
         locationManager = manager
         var subscribed = false
         for (provider in listOf(LocationManager.GPS_PROVIDER, LocationManager.NETWORK_PROVIDER)) {
-            if (manager.isProviderEnabled(provider)) runCatching { manager.requestLocationUpdates(provider, 3000L, 5f, this, Looper.getMainLooper()); subscribed = true }
+            try {
+                if (manager.isProviderEnabled(provider)) {
+                    manager.requestLocationUpdates(provider, 3000L, 5f, this, Looper.getMainLooper())
+                    subscribed = true
+                }
+            } catch (_: SecurityException) {
+                // Revocation may race with startForeground and the permission
+                // preflight. Remove partial subscriptions before falling back.
+                runCatching { manager.removeUpdates(this) }
+                gpsActive = false
+                TrackingHost.eventError("location_permission", "Standortfreigabe ist nicht mehr verfügbar.")
+                return
+            } catch (_: IllegalArgumentException) {
+                // A provider may disappear after the enabled-provider check.
+            }
         }
         gpsActive = subscribed
-        if (!subscribed) TrackingHost.eventError("location_unavailable", "Keine Standortquelle verfügbar; Fahrplanangaben werden verwendet.")
+        if (!subscribed) TrackingHost.eventError("location_unavailable", "Keine Standortquelle verfügbar.")
     }
     override fun onLocationChanged(location: Location) { if (location.elapsedRealtimeNanos >= startedAtNanos) { TrackingHost.emit("locationAvailability", identity + mapOf("available" to true), background = true); TrackingHost.location(location, identity) } }
     override fun onProviderDisabled(provider: String) { TrackingHost.emit("locationAvailability", identity + mapOf("available" to locationEnabled()), background = true) }

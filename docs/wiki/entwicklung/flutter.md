@@ -51,21 +51,27 @@ Die erzeugte APK unter `flutter/build/app/outputs/flutter-apk/` wird mit dem Eig
 
 ## Prüfstand vom 07.10.2026
 
-Die vorhandenen lokalen Logs stammen aus der wiederaufgenommenen Migrationssitzung. Änderungen nach einem Lauf benötigen erneute Prüfung; eine Workflowdatei allein belegt keinen ausgeführten GitHub-CI-Lauf.
+Die lokalen Abschlussprüfungen betreffen den Migrations-Codecommit `c1f1d80a04fcddadcbbfa300766a5de1a5aefb59`. Der erste [Flutter-CI-Lauf 37608461710](https://github.com/shedowe19/routely/actions/runs/37608461710) prüfte dessen synthetischen PR-Merge `a3426aec8cbf3648cb691882abf35fd8b0a99394` mit dem unveränderten Main-Stand `8ecd87b1727d7a95d6fb09d40bb8541ece0c4695`. Dieser historische Lauf ist mit einem Android-Lintfehler abgeschlossen; die übrigen Plattformjobs waren erfolgreich.
 
 | Bereich | Nachweis und Grenze |
 | --- | --- |
 | Werkzeugkette | Flutter 3.47.6 und Dart 3.13.5 lokal ausgeführt |
-| Dart und Flutter | Formatprüfung und `flutter analyze --no-pub --fatal-infos` ohne Befunde; vollständiger Lauf `flutter test --no-pub --coverage --reporter expanded`: 334 Tests erfolgreich. Abhängigkeiten mit `pub get --offline --enforce-lockfile` geprüft. Analytics waren für diese lokalen Prüfungen vollständig unterdrückt. |
-| Releaseguard | 56 Offline-Regressionen nach Ergänzung der Signaturprüfungs-Reihenfolge erfolgreich; keine Signierung oder Veröffentlichung ausgelöst |
-| Web | Regulärer JavaScript-Releasebuild nach den Abschlusskorrekturen erfolgreich (36,2 Sekunden); `flutter_tts` meldet im optionalen WebAssembly-Dry-Run Inkompatibilitäten. Ein WebAssembly-Build wird nicht behauptet. |
-| Android | Der lokale APK-Build erreicht wegen `Network is unreachable` beim Gradle-Wrapper-Download keine Compilation. Native Tests, Lint, Debug- und Release-APK sind dadurch lokal nicht belegt. |
-| iOS und macOS | Xcode-/Widget-Target und CI-Schritte sind vorhanden; Linux kann deren nativen Build oder signierte Installation nicht ausführen. Ein erfolgreicher Apple-CI-Lauf steht aus. |
-| Windows und Linux | Buildziele und CI-Jobs sind eingerichtet; ein erfolgreicher nativer Build ist bislang nicht belegt. |
-| Native Quellprüfung | iOS-Xcode-Objektbeziehungen, Widget-Embed-Phase, geteiltes Activity-Schema sowie XML/Plist/Entitlements sind offline geprüft. Sechs Android-TrackingContract-Tests sind im Quellstand vorhanden, einschließlich Fix-Frische; sie sind lokal noch nicht ausgeführt. Dies ersetzt keine native Compilation. |
+| Dart und Flutter | Lokale Formatprüfung, Analyse, Lockfileprüfung und 334 Flutter-Tests erfolgreich. CI bestätigt Lockfileauflösung, Analyse ohne Befunde, alle 334 Tests und den Coverage-Upload. |
+| Releaseguard | 56 Offline-Regressionen lokal und in CI erfolgreich; keine Eigentümer-Signierung oder Veröffentlichung ausgelöst |
+| Web | JavaScript-Releasebuild lokal und in CI erfolgreich, Web-Artefakt hochgeladen. Der optionale WebAssembly-Dry-Run meldet weiterhin `flutter_tts`-Inkompatibilitäten; ein WebAssembly-Build ist nicht belegt. |
+| Android lokal | Der lokale APK-Build erreicht wegen `Network is unreachable` beim Gradle-Wrapper-Download keine Compilation. Native Tests, Lint und APKs sind dadurch lokal nicht belegt. |
+| Android in erster CI | Debug-APK erfolgreich gebaut und hochgeladen; `TrackingContractTest` mit sechs Tests, null Fehlern und null übersprungenen Tests erfolgreich. `lintDebug` scheitert an zwei `MissingPermission`-Fehlern in `MainActivity.kt:96` und `TrackingHost.kt:419`. Unsigned Release-Build und dessen Prüfung/Upload wurden deshalb übersprungen. |
+| iOS und macOS | Apple-Job erfolgreich: unsigned iOS-App kompiliert, eingebettetes Widget-Binary, Bundle-IDs und übereinstimmende App-/Widget-Versionen geprüft; unsigned iOS- und macOS-Artefakte hochgeladen. Dies ist keine signierte iPhone-Installation oder notarisiertes macOS-Release. |
+| Windows und Linux | Native Release-Builds und vollständige Artefaktuploads in CI erfolgreich. Gerätespezifische Standort-, Speicher- und Sprachdienste benötigen weiterhin praktische Prüfung. |
+| Erhaltener Kotlin-Stand | [API Compatibility 37608461624](https://github.com/shedowe19/routely/actions/runs/37608461624) erfolgreich: Unit-Tests, vollständiges Debug-Lint, Debug-/Release-Build und Artefaktuploads. Diese Ergebnisse gehören zur Kotlin-Referenz, nicht zu zusätzlichen Flutter-Tests. |
+| Native Quellprüfung | iOS-Xcode-Objektbeziehungen, Widget-Embed-Phase, geteiltes Activity-Schema sowie XML/Plist/Entitlements sind offline geprüft. Native Apple-Compilation ist zusätzlich durch den oben genannten Apple-Job belegt. |
 | Gerätebetrieb | Echte Fahrten, Display-aus-Betrieb, iPhone-Widgets/Live Activity und signiertes Android-Upgrade bleiben praktische Abnahme. |
 
-TODO: Den ersten vollständigen GitHub-CI-Lauf für den veröffentlichten Migrationscommit mit Lauf-URL und tatsächlichen Ergebnissen ergänzen.
+Die nachfolgende Android-Quellkorrektur behandelt `SecurityException` ausdrücklich an beiden Standortregistrierungen; `IllegalArgumentException` deckt währenddessen verschwundene Provider ab. Teilregistrierungen werden freigegeben. Die einmalige Suche meldet fehlende Freigabe beziehungsweise fehlenden Provider; normale Begleitung kann auf den Fahrplan zurückfallen. Fahrterkennung braucht mindestens eine tatsächlich registrierte Quelle und wird andernfalls abgelehnt/beendet. Der erste fehlgeschlagene Lauf belegt diesen späteren Fix noch nicht.
+
+Der aktuelle Korrektur- und Prüfstatus steht in [PR 38](https://github.com/shedowe19/routely/pull/38) und bei [Flutter Cross-Platform](https://github.com/shedowe19/routely/actions/workflows/flutter.yml). Für die erhaltene Kotlin-Referenz gilt [API Compatibility](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml). Spätere Ergebnisse dürfen nur dem jeweils tatsächlich geprüften Commit zugeordnet werden.
+
+Die Android-Freigabe setzt einen erfolgreichen neuen Lauf mit nativen Tests, vollständigem Lint, Debug- und unsigned Release-Build voraus; maßgeblich sind die commitgebundenen Checks und Artefakte des verlinkten Pull Requests. Eigentümer-Signierung und reale Geräteabnahme bleiben getrennte offene Nachweise.
 
 ## Verwandte Seiten
 

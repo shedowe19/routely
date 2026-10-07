@@ -105,7 +105,7 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 
 Wenn ein Check-in nach HTTP-2xx bereits angenommen sein kann, aber Antwortbody, Nachkorrektur oder Folgeabruf scheitern, darf der Erstellungs-POST nicht erneut gesendet werden. `AcceptedMutationException` unterscheidet diese Unsicherheit auch bei Body-Timeout, Verbindungsabbruch und überschrittener Antwortgröße von einer eindeutig abgelehnten Mutation. Der bestätigte beziehungsweise unklare Erfolg bleibt an die ursprüngliche Sitzung/Auswahl gebunden.
 
-Die native Flutter-Näheresuche wartet auf einen frischen Standort statt ungeprüft einen Providercache zu übernehmen. Android verwendet monotone Fixzeit mit maximal 30 Sekunden Alter; iOS prüft 0 bis 30 Sekunden Alter und verwirft zukünftige Fixes. Eine neue Android-Vertragsregression deckt veraltete und zukünftige Cachewerte ab; die native Testausführung steht wegen des lokalen Buildblocks noch aus.
+Die native Flutter-Näheresuche wartet auf einen frischen Standort statt ungeprüft einen Providercache zu übernehmen. Android verwendet monotone Fixzeit mit maximal 30 Sekunden Alter; iOS prüft 0 bis 30 Sekunden Alter und verwirft zukünftige Fixes. Eine neue Android-Vertragsregression deckt veraltete und zukünftige Cachewerte ab; sie wurde zusammen mit den fünf weiteren Tracking-Vertragsregressionen im ersten GitHub-CI-Lauf erfolgreich ausgeführt. Der [Flutter-Prüfstand](../entwicklung/flutter.md#prüfstand-vom-07102026) trennt diesen Nachweis vom danach gescheiterten Lint und der nachfolgenden Berechtigungsrennen-Korrektur.
 
 ## Verwandte Seiten
 

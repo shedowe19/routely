@@ -48,7 +48,7 @@ Im Ordner `res/layout/` befindet sich `trip_widget.xml` mit folgenden Views:
 
 ## Flutter-Umsetzung
 
-`flutter/android/` enthält ein Android-AppWidget; `flutter/ios/` enthält ein WidgetKit-Erweiterungs-Target mit Embed-Phase, ActivityKit und App-Group. Der Apple-CI-Job prüft bei erfolgreichem Build das kompilierte Extension-Binary und übereinstimmende App-/Widget-Versionen; ein solcher Lauf steht noch aus. Datenschutz und veraltete Anzeigen werden anhand des nativen Snapshots berücksichtigt. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+`flutter/android/` enthält ein Android-AppWidget; `flutter/ios/` enthält ein WidgetKit-Erweiterungs-Target mit Embed-Phase, ActivityKit und App-Group. Der erste Apple-CI-Job vom 07.10.2026 hat das kompilierte Extension-Binary und übereinstimmende App-/Widget-Versionen erfolgreich geprüft; der genaue Commit und Lauf stehen unter [Flutter-Prüfstand](../entwicklung/flutter.md#prüfstand-vom-07102026). Signierte Installation und echte Widget-/Live-Activity-Laufzeit bleiben Geräteprüfungen. Datenschutz und veraltete Anzeigen werden anhand des nativen Snapshots berücksichtigt. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
 
 ## Verwandte Seiten
 
