@@ -4,7 +4,11 @@
 
 Dokumentiert den Build-Prozess und Deployment (CI/CD).
 
-## Gradle Tasks
+## Aktuelle Flutter-Builds
+
+Die gemeinsame App wird im Unterordner `flutter/` mit Flutter 3.47.6 gebaut. [Flutter-Entwicklung](./flutter.md) enthält die Plattformbefehle und den aktuellen Prüfstand. Die folgenden rootbezogenen Gradleaufgaben und Katalogversionen gelten für die erhaltene Kotlin-Referenz unter `app/`.
+
+## Gradle Tasks der Kotlin-Referenz
 
 - `./gradlew assembleDebug` - Debug-Build erstellen
 - `./gradlew assembleRelease` - Release-Build erstellen
@@ -47,9 +51,10 @@ Der Release- und Deployment-Prozess ist über GitHub Actions automatisiert (`.gi
 
 - **Trigger**: Manueller Start (`workflow_dispatch`), bei dem `version_name` (z.B. `1.0.0`) und optional `version_code` angegeben werden. Leer bedeutet veröffentlichter Höchstwert + 1.
 - **Eingabeprüfung**: `version_name` beginnt mit einem Buchstaben oder einer Ziffer, ist höchstens 64 Zeichen lang und enthält ausschließlich Buchstaben, Ziffern, Punkt, Unterstrich oder Bindestrich. `version_code` ist eine ganze Zahl von 1 bis 2.100.000.000 ohne führende Null. Ein expliziter Code muss zusätzlich über dem veröffentlichten Höchstwert liegen; ungültige Eingaben und vorhandene Versionsbezeichnungen brechen vor dem Build ab.
-- **Build**: Unit-Tests laufen vor dem Release-Build: `./gradlew :app:testDebugUnitTest :app:assembleRelease` mit validierten gequoteten Versionsargumenten. Workflow-Eingaben werden über Jobvariablen übernommen, nicht direkt in Shellcode eingefügt.
-- **Signierung**: Die generierte APK wird mithilfe von `r0adkll/sign-android-release` unter Verwendung von GitHub Secrets (`SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, `KEY_PASSWORD`) signiert.
+- **Build**: Der aktuelle manuelle Workflow baut die Flutter-App unter `flutter/`. `flutter analyze --fatal-infos` und `flutter test` laufen vor `flutter build apk --release --no-pub --build-name "$RELEASE_VERSION_NAME" --build-number "$RELEASE_VERSION_CODE"`. Anschließend prüfen `android/gradlew :app:testDebugUnitTest :app:lintDebug` die nativen Verträge und Debug-Lint vor der Signierung. Workflow-Eingaben werden als validierte Jobvariablen mit gequoteten Argumenten übernommen, nicht direkt in Shellcode eingefügt. Die Gradle-Befehle für `:app:assembleRelease` oben beziehen sich auf den erhaltenen Kotlin-Ausgangsstand.
+- **Signierung**: Die generierte APK wird mithilfe von `r0adkll/sign-android-release` unter Verwendung von GitHub Secrets (`SIGNING_KEY`, `ALIAS`, `KEY_STORE_PASSWORD`, `KEY_PASSWORD`) signiert. `apksigner verify` prüft die erzeugte Signatur vor Umbenennung und Release-Reservierung.
 - **APK-Dateiname**: Das signierte Release-Artefakt wird als `routely-v<version_name>.apk` veröffentlicht.
+- **APK-Buildpfad**: Die Flutter-APK stammt aus `flutter/build/app/outputs/flutter-apk/`; Signierung und Manifestprüfung verwenden genau dieses Artefakt.
 - **Changelog**: Es wird automatisch ein Changelog aus der Git-Historie (Commits seit dem letzten Tag) generiert.
 - **Release**: Der Python-Standardbibliothek-Helfer `.github/scripts/release_guard.py` reserviert einen neuen Tag am exakten Dispatch-Commit und einen neuen Draft. Create-only Uploads betreffen ausschließlich dessen Release-ID. Erst nach Prüfung von Tag, APK-Manifest, Größe, SHA-256-Digest und Versionsmetadaten wird der Draft veröffentlicht. Parallel laufende manuelle Releases sind serialisiert. Details und Wiederanlaufgrenzen stehen unter [Deployment](./deployment.md).
 - **Artifact**: APK und `release-version.json` werden zudem als Workflow-Artifact (`actions/upload-artifact`) bereitgestellt.
@@ -67,6 +72,12 @@ Der manuelle Build für Version `1.7.0` / Version-Code `12` scheiterte mit `Inva
 Die ursprüngliche Korrektur verlangte explizit `libs.androidx.fragment` mit Version `1.7.1`, bereits in der damaligen SDK-34-Konfiguration. Der aktuelle Versionskatalog verlangt `1.9.1`; die direkte Abhängigkeit und die Mindestanforderung 1.3.0 bleiben damit berücksichtigt. Die Lint-Prüfung bleibt aktiv, und der Prüfworkflow baut auch die Release-Variante.
 
 Ein erfolgreicher vorheriger Debug-Build ist kein Nachweis für Release-Lint oder Signierung. Den Prüfstatus des jeweiligen Commits liefert [API Compatibility auf GitHub Actions](https://github.com/shedowe19/routely/actions/workflows/api-compatibility.yml); der manuelle signierte Release-Lauf wird separat ausgeführt.
+
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
+Der Android-Teil der Flutter-App verwendet den vollständig versionierten offiziellen Gradle-9.3.1-Wrapper mit passenden Startskripten und JAR. `distributionSha256Sum` prüft die `gradle-9.3.1-all.zip`-Distribution gegen `17f277867f6914d61b1aa02efab1ba7bb439ad652ca485cd8ca6842fccec6e43`; der Wrapper-JAR wurde gegen `b3a875ddc1f044746e1b1a55f645584505f4a10438c1afea9f15e92a7c42ec13` aus den [offiziellen Gradle-Prüfsummen](https://gradle.org/release-checksums/) verifiziert. Die Flutter-Template-Ignore-Regeln für die Wrapper-Dateien sind entfernt, damit ein frischer Checkout denselben Wrapper enthält. Der plattformübergreifende Workflow läuft für `main`-Pushes, Pull Requests und manuell; ein Migrationbranch-Push startet keinen zusätzlichen Doppelbuild.
 
 ## Verwandte Seiten
 

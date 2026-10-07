@@ -1,0 +1,37 @@
+name: routely
+description: Routely Reisebegleitung für Android, iOS und weitere Flutter-Plattformen.
+publish_to: none
+version: 2.0.0+14
+
+environment:
+  sdk: '>=3.9.0 <4.0.0'
+  flutter: '>=3.47.6'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  http: ^1.6.0
+  crypto: ^3.0.7
+  flutter_secure_storage: ^11.2.0
+  shared_preferences: ^2.5.6
+  path_provider: ^2.1.5
+  url_launcher: ^6.3.2
+  geolocator: ^14.1.1
+  flutter_tts: ^4.2.5
+  timezone: ^0.11.0
+  unorm_dart: ^0.3.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  integration_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/routely.png

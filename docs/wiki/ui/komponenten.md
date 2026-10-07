@@ -84,6 +84,12 @@ fun StatPill(icon: ImageVector, text: String, color: Color)
 | Bus                 | #A5107F (Purple)     |
 | Ferry               | #009FE3 (Water Blue) |
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
+Die Flutter-`StatusCard` in `flutter/lib/shared/widgets.dart` zeigt auf Feed- und Profilkarten auch das vom Server gelieferte Erstellungsdatum beziehungsweise Alter der Fahrt beim Nutzernamen. Dies übernimmt die Orientierung der bisherigen Kotlin-Karte; Datum und relativer Text beziehen sich auf `createdAt`.
+
 ## Verwandte Seiten
 
 - [Screens](./screens.md)

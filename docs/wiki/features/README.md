@@ -45,6 +45,10 @@ Codebasierte Übersicht des vorhandenen Funktionsumfangs, Stand 06.10.2026. Erre
 - Display-aus-Begleitung benötigt weiterhin Android-Freigaben und geeignete Hersteller-/TTS-Einstellungen. CPU-WakeLock und gewährte Akku-Ausnahme garantieren keinen Weiterbetrieb nach Nutzer-Force-Stop und keine festen GPS-/Netzwerkintervalle. Die [Geräteprüfung](../entwicklung/tests.md) bleibt offen.
 - SEV-Erkennung deckt Bus-RE/RB-Kandidaten ab, keine beliebigen Ersatzverkehrslinien. Öffentliche Karten können fehlen oder ihre HTML-Struktur ändern. Ein zeitlich und räumlich gültiger Ersatzhalt benötigt gegebenenfalls einen eindeutigen Richtungsbeleg; ohne diesen bleibt die Position unbestätigt. Die zusätzliche OSRM-Pkw-Geometrie ist ein möglicher Straßenweg, keine offizielle Busroute oder garantierte ETA. Fehlende, unpassende oder mehrdeutige Wege erhalten den Zeitquellenrückfall; Geometrien bleiben im RAM und müssen nach Neustart erneut verfügbar werden.
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Projekt Überblick](../projekt/ueberblick.md)

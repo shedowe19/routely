@@ -99,6 +99,14 @@ Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselb
 - U1/U3/D3 des [Main-Reviews](../entwicklung/main-review-2026-10-06.md) sind durch getrennte Plan-/Istzeitaufträge, Verfrühungsanzeige und Identitätsdeduplizierung korrigiert. Regressionen verwenden kontrollierte Antworten; es gab keine schreibenden Live-API-Tests.
 - TODO: Zeitkorrektur-Teilerfolg, Erfolgskarte und nahe verschiedene Halte auf dem Gerät prüfen.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/checkin/` erhält die geplanten Besuchsmarker für POST, separate manuelle PUT-Korrektur, Konflikte und Punkte. Angenommene Erstellung mit unbekannter ID oder späterem Teilfehler darf keinen zweiten POST auslösen. Sichtbare Zurück-/Tabnavigation bleibt während einer Mutation gesperrt. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
+Wenn ein Check-in nach HTTP-2xx bereits angenommen sein kann, aber Antwortbody, Nachkorrektur oder Folgeabruf scheitern, darf der Erstellungs-POST nicht erneut gesendet werden. `AcceptedMutationException` unterscheidet diese Unsicherheit auch bei Body-Timeout, Verbindungsabbruch und überschrittener Antwortgröße von einer eindeutig abgelehnten Mutation. Der bestätigte beziehungsweise unklare Erfolg bleibt an die ursprüngliche Sitzung/Auswahl gebunden.
+
+Die native Flutter-Näheresuche wartet auf einen frischen Standort statt ungeprüft einen Providercache zu übernehmen. Android verwendet monotone Fixzeit mit maximal 30 Sekunden Alter; iOS prüft 0 bis 30 Sekunden Alter und verwirft zukünftige Fixes. Eine neue Android-Vertragsregression deckt veraltete und zukünftige Cachewerte ab; die native Testausführung steht wegen des lokalen Buildblocks noch aus.
+
 ## Verwandte Seiten
 
 - [API Überblick](../api/ueberblick.md)

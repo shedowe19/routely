@@ -25,12 +25,14 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 - [Module](./architektur/module.md)
 - [Entscheidungen](./architektur/entscheidungen.md)
 - [Externe Abhängigkeiten](./architektur/externe-abhaengigkeiten.md)
+- [Flutter-Architektur und Funktionsvergleich](./architektur/flutter-migration.md)
 
 ## Entwicklung
 
 - [Setup](./entwicklung/setup.md)
 - [Lokale Entwicklung](./entwicklung/lokale-entwicklung.md)
 - [Tests](./entwicklung/tests.md)
+- [Flutter-Entwicklung und aktueller Prüfstand](./entwicklung/flutter.md)
 - [Erneuter Main-Review nach der Streckenmigration](./entwicklung/main-review-2026-10-06.md)
 - [Build](./entwicklung/build.md)
 - [Deployment](./entwicklung/deployment.md)
@@ -65,6 +67,8 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 - [PreferencesManager](./konfiguration/preferences-manager.md)
 
 ## Entscheidungen
+
+- [07.10.2026: Flutter-Migration](./entscheidungen/2026-10-07-flutter-migration.md)
 
 - [07.10.2026: GPS-Prognose auf gemeinsamem SEV-Restweg](./entscheidungen/2026-10-07-sev-gemeinsamer-restweg.md)
 - [06.10.2026: Nachreview-Korrekturen und Versionsclaims](./entscheidungen/2026-10-06-nachreview-korrekturen.md)
@@ -106,6 +110,10 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 - [Widget](./module/widget.md)
 - [Settings](./module/settings.md)
 - [Points-System](./features/points-enabled.md)
+
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](./architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](./entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
 
 ## Verwandte Seiten
 

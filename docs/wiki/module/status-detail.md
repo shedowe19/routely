@@ -162,6 +162,12 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 - TODO: EditStatusDialog Layout dokumentieren
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/detail/` veröffentlicht vollständig geladene Status-/Stopover-Snapshots. Der Editor trennt Öffnungswerte, neue Providerdaten und ausdrückliche Benutzeränderungen. Aktive GPS-Daten brauchen passende Konto-/Statusidentität. Erfolgreiche DELETEs bleiben nach native Cleanup-Fehlern erfolgreich. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
+Die Flutter-API markiert eine möglicherweise bereits angenommene Bearbeitung nach HTTP-2xx mit fehlerhaftem, zu großem oder unterbrochenem Antwortbody als `AcceptedMutationException`. Eine fehlende Antwort ist dann keine sichere Ablehnung und rechtfertigt kein erneutes Senden derselben Änderung. Regressionen prüfen den Body-Timeout und Verbindungsabbruch sowohl für Erstellen als auch Bearbeiten.
+
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)

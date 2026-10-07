@@ -46,6 +46,10 @@ Jede neue Eingabe beendet den bisherigen Suchauftrag, leert alte Treffer und erh
 
 - Keine spezifischen aktuell.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/users/` schützt die Suche durch Anfragegenerationen und kontogebundene Controller. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [UserProfile](./user-profile.md)

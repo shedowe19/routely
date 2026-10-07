@@ -70,6 +70,10 @@ Der [Änderungsmonitor](../module/trip-changes.md) vergleicht nur frische erfolg
 
 `TripProgressModel` berechnet aus eingegrenzter Haltfolge und gemeinsamem Cursor die Haltezahl. `TripProgressNotificationBuilder` wählt Framework-ProgressStyle oder kompatible Standardanzeige. Interne Notification-Intents mit `open_status_id` oder `open_recognition` werden über `NavigationRequest` sowohl beim Start als auch in einer laufenden Activity verarbeitet.
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Architektur Überblick](./ueberblick.md)

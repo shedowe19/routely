@@ -256,6 +256,12 @@ Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS
 
 G6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) ist korrigiert: Jede vom monotonen Clockadapter als neu gelieferte Standortbeobachtung erreicht die Stationsengine, auch bei unbrauchbarer Genauigkeit. Diese Beobachtung unterbricht den transienten Wiederverankerungsbeleg; sie erzeugt keine GPS-Zeitprognose. Alte, zu alte und wiederholte Providerwerte bleiben am Clockadapter ausgeschlossen. Reine Regressionen prüfen 80/150 Meter sowie NaN/unendliche Genauigkeit und die Wiederaufnahme mit einer neuen vollständigen Fixfolge. Android-Service-/FLP-Zustellung wurde damit nicht ausgeführt.
 
+## Flutter-Umsetzung
+
+`flutter/lib/runtime/` orchestriert die gemeinsame Reiseberechnung. Android/iOS starten eine eigene native Hintergrund-Engine; nur sie verarbeitet Fixes. Browser/Desktop pausieren ihre Vordergrundbegleitung im Hintergrund. Native Befehle sind an Sitzung, Status und Generation gebunden. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
+Ein Startfehler aus dem nativen Kanal kann auch nach teilweisem Dienststart eintreffen. Der Flutter-Laufzeitadapter räumt dann nur die eigene Startgeneration auf und setzt die alte Auswahl nur zurück, wenn Sitzung und Startoperation noch passen. Ein neuer Start oder Logout darf durch einen verspäteten Abschluss nicht zurückgesetzt werden. Ein bestätigter Start bleibt bei einem Fehler seines initialen Anzeige-Snapshots aktiv; die Oberfläche zeigt den erneuten Ladeversuch an. Regressionen prüfen Startfehler, Logout während verzögertem Start und Snapshotfehler nach bestätigtem Start.
+
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)

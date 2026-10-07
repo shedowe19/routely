@@ -8,15 +8,15 @@ Dokumentiert Prüfung, Signierung und Veröffentlichung einer neuen Android-Vers
 
 `.github/workflows/android.yml` baut Releases manuell per `workflow_dispatch`. Eingaben sind ein neuer `version_name` und optional `version_code`. Ein leeres Codefeld wählt den höchsten veröffentlichten oder dauerhaft verbrauchten Code + 1; ein expliziter Code muss größer sein. Der historisch belegte Mindeststand ist Code 13 aus dem signierten Lauf für `v1.8.7`.
 
-Der Workflow installiert Android-SDK 36 und Build Tools 35.0.0, führt Unit-Tests vor dem Release-Build aus und signiert erst danach mit GitHub Secrets. APK und `release-version.json` werden als Workflow-Artifact `release-apk` hochgeladen. Die APK heißt `routely-v<version_name>.apk`. Zulässige Eingaben und Toolchain stehen unter [Build](./build.md).
+Der Workflow installiert Android-SDK 36 und Build Tools 35.0.0, führt Flutter-Tests vor dem Release-Build und anschließend native Vertragstests sowie Debug-Lint aus und signiert erst danach mit GitHub Secrets. APK und `release-version.json` werden als Workflow-Artifact `release-apk` hochgeladen. Die APK heißt `routely-v<version_name>.apk`. Zulässige Eingaben und Toolchain stehen unter [Build](./build.md).
 
 ## Unveränderliche neue Veröffentlichung
 
-`.github/scripts/release_guard.py` verwendet ausschließlich Python-Standardbibliotheken. Beide Workflows führen seine Offline-Tests aus. Die globale Concurrency-Gruppe des manuellen Releaseworkflows serialisiert alle Branches und bricht einen laufenden Release nicht ab. Der Checkout ist ausdrücklich `${{ github.sha }}`; der Helfer vergleicht auch die tatsächliche lokale HEAD-SHA.
+`.github/scripts/release_guard.py` verwendet ausschließlich Python-Standardbibliotheken. Der manuelle Releaseworkflow sowie die Kotlin- und Flutter-Prüfworkflows führen seine Offline-Tests aus. Die globale Concurrency-Gruppe des manuellen Releaseworkflows serialisiert alle Branches und bricht einen laufenden Release nicht ab. Der Checkout ist ausdrücklich `${{ github.sha }}`; der Helfer vergleicht auch die tatsächliche lokale HEAD-SHA.
 
 Vor dem Build werden vorhandene Tags oder Releases mit derselben Bezeichnung abgewiesen. `.github/release-version-floor.json` bindet die 35 bekannten historischen Releases an Tag und Release-ID und bewahrt deren belegten Höchstcode. Alle weiteren veröffentlichten Releases müssen gültige Metadaten enthalten. Die begrenzte, paginierte Historienprüfung wählt einen strikt höheren eindeutigen Code; unbekannte, widersprüchliche oder unvollständige Historie führt zum Abbruch. Authentifizierte API- und Uploadanfragen bleiben bei den GitHub-HTTPS-Origins; eine Metadaten-CDN-Weiterleitung erhält keine Authentifizierung.
 
-Nach Build und Signierung prüft `aapt` Paket-ID, Versionsname und Code der tatsächlichen APK. Metadaten speichern exakte Commit-SHA, Tag, APK-Namen, Größe und SHA-256. Unmittelbar vor der Reservierung werden Version und Historie erneut geprüft. Eine atomare Create-ref-Anfrage reserviert den neuen Tag an der gebauten SHA, eine Create-release-Anfrage den neuen Draft. Keine Update-/Force-/Delete-Operation ersetzt eine bestehende Version.
+Nach Build und Signierung muss `apksigner verify` die Signatur akzeptieren. Danach prüft `aapt` Paket-ID, Versionsname und Code der tatsächlichen APK. Metadaten speichern exakte Commit-SHA, Tag, APK-Namen, Größe und SHA-256. Unmittelbar vor der Reservierung werden Version und Historie erneut geprüft. Eine atomare Create-ref-Anfrage reserviert den neuen Tag an der gebauten SHA, eine Create-release-Anfrage den neuen Draft. Keine Update-/Force-/Delete-Operation ersetzt eine bestehende Version.
 
 Die Publikation nutzt ausschließlich die reservierte Release-ID. Zwei Create-only Asset-POSTs laden APK und Metadaten hoch; ein schon vorhandenes Asset führt zum Abbruch. Der Helfer prüft Draftidentität, aufgelöste Tag-SHA, vollständigen Metadateninhalt und den von GitHub gelieferten APK-Digest. Fehlender oder falscher Digest blockiert die Veröffentlichung. Der Versionscode wird vor den Uploads und vor dem abschließenden `draft:false` erneut geprüft. Danach werden Release, Tag und Assets nochmals gelesen und verglichen.
 
@@ -44,6 +44,12 @@ Der fehlgeschlagene Release-Lauf für `1.7.0` / Code `12` führte zur expliziten
 
 - TODO: Den ersten realen signierten Lauf nach R1–R4 prüfen; Offline-Tests und unsignierte Builds belegen keine erfolgreiche Signierung oder reale GitHub-Publikation.
 - TODO: Play-Store-Release-Prozess dokumentieren, falls ein Store-Deployment vorgesehen ist.
+
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
+Der aktuelle Flutter-Prüfworkflow erzeugt eigene, klar benannte Artefakte mit `routely-flutter-`-Präfix. Die oben genannten Artefakte aus `api-compatibility.yml` gehören ausschließlich zum erhaltenen Kotlin-Ausgangsstand. Erfolgreiche native Builds und erste Eigentümer-Signierung sind getrennte Nachweise; der [Flutter-Prüfstand](./flutter.md#prüfstand-vom-07102026) hält die offenen Ergebnisse fest.
 
 ## Verwandte Seiten
 

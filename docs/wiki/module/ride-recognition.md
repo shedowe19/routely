@@ -53,6 +53,14 @@ Die Berechnung verwendet einen lokalen Korridor zwischen zwei Stationskoordinate
 - TODO: Erkennung auf realen Bus-/Bahnfahrten, parallelen Linien, Kurven und nach Standortunterbrechungen prüfen.
 - TODO: GPS- und API-Verbrauch während längerer aktivierter Suche auf einem Gerät messen. Synthetische Engine-Tests belegen weder Android-Freigaben noch reale Erkennungsgüte.
 
+## Flutter-Umsetzung
+
+`flutter/lib/recognition/` übernimmt begrenzte Discovery und lokale Bewegungsvorschläge. Präziser Standort und die Übermittlung für nahe Stationen werden ausdrücklich aktiviert. Vorschläge werden vor Auswahl erneut anhand frischer Abfahrten/Tripdaten geprüft; kein automatischer Check-in. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
+Auf iOS fordert der native Adapter für die Fahrterkennung ausdrücklich die Always-Freigabe an. Ein Upgrade von When-in-use wartet auf die tatsächliche Systementscheidung; nach einer ohne Callback vertagten Entscheidung gibt ein 30-Sekunden-Limit den aktuellen Freigabestand zurück. Ohne präzisen Standort und echte Hintergrundfreigabe bleibt die Erkennung deaktiviert und zeigt den entsprechenden Hinweis. Diese Quellkorrektur beweist keine iPhone-Laufzeitzuverlässigkeit.
+
+Der Flutter-Erkennungsworker bestätigt verspätete Konfigurationsereignisse anhand des aktuellen sicheren Datensatzes und nativen Besitzers. Bei Sitzungs-/Consententzug und ungültigem initialem Bootstrap beendet er ausschließlich seine Identität durch einen terminalen `publish`-Snapshot (`recognitionOwnerEnded`) und wartet auf die Freigabe. Der native Hintergrundkanal erlaubt keinen normalen sichtbaren `stopTracking`-Aufruf; ein solcher Abbruch darf deshalb nicht als bereinigter Dienst behauptet werden. Neue Besitzer bleiben unangetastet.
+
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)

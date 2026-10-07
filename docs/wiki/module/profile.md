@@ -67,6 +67,10 @@ Das eigene Profil lädt beim erneuten Einfügen der Composition weiterhin über 
 
 - Fehler beim Aktualisieren bleiben auch mit vorhandenen Profilinhalten sichtbar. Die deaktivierte Herz-Aktion ist eine bewusst angezeigte Funktionsgrenze, kein leerer Klickhandler.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/profile/` übernimmt Verlauf, Statistiken und Einstellungen; geteilte Komponenten passen sich Textgröße und Breite an. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

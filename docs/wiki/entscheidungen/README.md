@@ -18,6 +18,10 @@
 
 Weitere kleinere Architektur-Entscheidungen sind in [Architektur Entscheidungen](../architektur/entscheidungen.md) dokumentiert.
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Architektur Entscheidungen](../architektur/entscheidungen.md)

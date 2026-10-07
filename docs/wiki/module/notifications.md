@@ -79,6 +79,10 @@ Bei API-Fehler werden nur die eigenen vorläufigen Markierungen zurückgenommen.
 
 - TODO: Meldungen mit auflösbaren Zielinformationen zum zugehörigen Profil oder Status navigieren lassen.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/notifications/` übernimmt Zähler, Pagination und Einzel-/Alle-gelesen mit Anfrage-/Sitzungs-/Mutationsschutz. Links werden auf interne Status-/Profilnavigation beim gewählten HTTPS-Server begrenzt; dazu gehören die vom Backend verwendeten Profilpfade `/@username`. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [API Überblick](../api/ueberblick.md)

@@ -46,6 +46,10 @@ Im Ordner `res/layout/` befindet sich `trip_widget.xml` mit folgenden Views:
 
 - TODO: Quellenwechsel und negative Zeitabweichungen bei großer Schrift sowie nach GPS-Ausfall auf einem Gerät prüfen.
 
+## Flutter-Umsetzung
+
+`flutter/android/` enthält ein Android-AppWidget; `flutter/ios/` enthält ein WidgetKit-Erweiterungs-Target mit Embed-Phase, ActivityKit und App-Group. Der Apple-CI-Job prüft bei erfolgreichem Build das kompilierte Extension-Binary und übereinstimmende App-/Widget-Versionen; ein solcher Lauf steht noch aus. Datenschutz und veraltete Anzeigen werden anhand des nativen Snapshots berücksichtigt. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

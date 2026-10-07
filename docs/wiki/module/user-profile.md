@@ -70,6 +70,10 @@ Das eigene Profil lädt beim erneuten Einfügen der Composition weiterhin über 
 - D11 ist korrigiert: Profil-GETs tragen die Beziehungsrevision ihres Starts. Eine anschließend bestätigte Follow-/Unfollow-/Privatanfrage überlagert nur deren alte Beziehungsfelder; andere frisch geladene Profilfelder bleiben erhalten. Erst ein nach der Bestätigung gestarteter GET ist für die Beziehung wieder maßgeblich. Profil-/Sitzungswechsel verwerfen die alte Absicht; Fehler und notwendige Statusverifikation behalten ihre eigenen Grenzen. Regression: `UserProfileFollowOrderingTest`.
 - Fehler bleiben auch mit vorhandenem Profil sichtbar. Bei einem Paginationfehler pausiert automatisches Nachladen, statt ohne Nutzereingriff denselben fehlgeschlagenen Auftrag zu wiederholen.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/users/` übernimmt fremde Profile, Historie und Folgen/Anfrage. Verspätete Antworten bleiben an die geöffnete Identität gebunden. Das explizite Backendfeld `userInvisibleToMe` entfernt bereits geladene und offline angezeigte Fahrten sofort und unterbindet Historien-, Cache- und Paginationabrufe. Ein gewöhnlicher Ladefehler ohne diesen belegten Sperrzustand darf passende vorhandene Daten behalten. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [Feed](./feed.md)

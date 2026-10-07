@@ -80,6 +80,12 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 - TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.
 - TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/settings/` erhält alle vier Themes, GPS/Erkennung, Ansageradius, installierte Stimmen, Änderungs- und Sperrbildschirmoptionen. Batterie-/Berechtigungseinstellungen werden live vom nativen Host abgefragt. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
+Die Flutter-Android-Akku- und Mitteilungseinstellungen melden `opened: false`, wenn das System die angefragte Einstellungsansicht nicht öffnen kann. Ein fehlgeschlagener `startActivity` darf weder als erfolgreicher Einstellungswechsel erscheinen noch die App abstürzen lassen.
+
 ## Verwandte Seiten
 
 - [Theme Konfiguration](../ui/theme.md)

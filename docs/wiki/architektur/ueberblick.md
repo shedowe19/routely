@@ -13,6 +13,10 @@ Die App folgt dem Model-View-ViewModel (MVVM) Muster:
 - **Data Layer**: Repositories (`data/repository`) abstrahieren die Datenquellen (Network via Retrofit, Local via Room/Preferences).
 - **Model**: DTOs und Datenbank-Entitäten (`data/model`, `data/local`).
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Datenfluss](./datenfluss.md)

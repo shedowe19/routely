@@ -67,6 +67,10 @@ Der Button `Android-Anzeigeeinstellungen` öffnet ab API 36 `Settings.ACTION_APP
 - [Notification.ProgressStyle](https://developer.android.com/reference/android/app/Notification.ProgressStyle)
 - [Notification-Referenz und Promotion-Extra](https://developer.android.com/reference/android/app/Notification)
 
+## Flutter-Umsetzung
+
+`flutter/lib/tracking/trip_progress.dart` übernimmt eindeutige besuchsgebundene Fortschrittsberechnung. Native Sperrbildschirm-Anzeigen ergänzen Android-Live-Progress und iOS-Live-Activity; signierte Apple-Geräteprüfungen bleiben separat. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

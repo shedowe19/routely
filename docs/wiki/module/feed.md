@@ -58,6 +58,10 @@ Ein durch `Invalidated` erforderlicher Verifikationsabruf bleibt als Auftrag erh
 
 - D10 ist korrigiert: Ein durch Statusmutation oder lokalen Likeabschluss unterbrochener Abruf behält Tab, Seite und Ersetzungs-/Refreshabsicht. Die aktuelle benötigte Ladung wird neu gestartet; alte Antworten bleiben generationsgebunden ausgeschlossen. Das gilt auch für Updated/Deleted während einer ersten Globaltabladung oder Pagination. Eine unvollständige PUT-Antwort fordert weiterhin vorrangig aktuelle Seite 1. Bestätigte Likeabsicht bleibt gegen verzögerte Vollstatusantworten geschützt, bis eine nach Bestätigung gestartete Ladung wieder maßgeblich ist. Regressionen: `FeedTabSwitchLikeTest` und `FeedControllerTest`.
 
+## Flutter-Umsetzung
+
+`flutter/lib/features/feed/` übernimmt Pagination, bestätigte Likes und kontogebundenen Offlinecache. Mutations- und Anfragegenerationen verhindern verspätete Überschreibungen. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [Datenbank](../daten/datenbank.md)

@@ -1,0 +1,299 @@
+name: Flutter Cross-Platform
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: flutter-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  FLUTTER_VERSION: "3.47.6"
+
+jobs:
+  verify:
+    name: Analyze and test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Test release guards without signing or publishing
+        working-directory: .
+        run: python3 -m unittest discover -s .github/tests -p 'test_release_guard.py'
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Analyze all Dart sources
+        run: flutter analyze --fatal-infos
+      - name: Run unit and widget regressions
+        run: flutter test --coverage --reporter expanded
+      - name: Upload coverage
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-coverage
+          path: flutter/coverage/lcov.info
+          if-no-files-found: error
+
+  android:
+    name: Android debug and unsigned release
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          java-version: "17"
+          distribution: temurin
+          cache: gradle
+          cache-dependency-path: |
+            flutter/android/**/*.gradle.kts
+            flutter/android/gradle/wrapper/gradle-wrapper.properties
+            flutter/pubspec.lock
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+      - name: Install Android 36 build dependencies
+        run: sdkmanager "platforms;android-36" "build-tools;35.0.0"
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build debug APK for device testing
+        run: flutter build apk --debug --no-pub
+      - name: Upload debug APK
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-android-debug-apk
+          path: flutter/build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
+      - name: Test native contracts and run full Android lint
+        working-directory: flutter/android
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
+      - name: Build unsigned release APK
+        # The repository has no key.properties. Owner signing belongs to the
+        # separate, manually dispatched and version-guarded release workflow.
+        run: flutter build apk --release --no-pub
+      - name: Verify release identity and absence of a signer
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging build/app/outputs/flutter-apk/app-release.apk > "$RUNNER_TEMP/flutter-apk-manifest.txt"
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+          manifest = Path(os.environ["RUNNER_TEMP"], "flutter-apk-manifest.txt").read_text()
+          packages = re.findall(r"^package: name='([^']+)'", manifest, re.MULTILINE)
+          assert packages == ["de.traewelling.app"], packages
+          PY
+          if "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify build/app/outputs/flutter-apk/app-release.apk; then
+            echo "CI must not publish a signed release APK." >&2
+            exit 1
+          fi
+      - name: Upload unsigned release APK
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-android-release-unsigned-apk
+          path: flutter/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+      - name: Upload native test and lint reports
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-android-reports
+          path: |
+            flutter/build/app/test-results
+            flutter/build/app/reports
+          if-no-files-found: warn
+
+  web:
+    name: Web release
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build web app
+        run: flutter build web --release --no-pub
+      - name: Upload web bundle without deploying it
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-web-release
+          path: flutter/build/web
+          if-no-files-found: error
+
+  apple:
+    name: iOS with Widget extension and macOS, unsigned
+    needs: verify
+    runs-on: macos-15
+    timeout-minutes: 50
+    env:
+      # Xcode 26.3 is part of the documented macos-15 image. No development
+      # team, certificate, provisioning profile or Apple account is required.
+      DEVELOPER_DIR: /Applications/Xcode_26.3.app/Contents/Developer
+      FLUTTER_XCODE_CODE_SIGNING_ALLOWED: "NO"
+      FLUTTER_XCODE_CODE_SIGNING_REQUIRED: "NO"
+      FLUTTER_XCODE_CODE_SIGN_IDENTITY: ""
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Record Apple toolchain
+        run: xcodebuild -version
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build unsigned iOS app and embedded Widget extension
+        run: flutter build ios --release --no-codesign --no-pub
+      - name: Verify compiled and embedded Widget extension
+        run: |
+          python3 - <<'PY'
+          import plistlib
+          from pathlib import Path
+          app = Path("build/ios/iphoneos/Runner.app")
+          extension = app / "PlugIns/RoutelyWidget.appex"
+          with (app / "Info.plist").open("rb") as stream:
+              app_info = plistlib.load(stream)
+          with (extension / "Info.plist").open("rb") as stream:
+              extension_info = plistlib.load(stream)
+          assert app_info["CFBundleIdentifier"] == "de.traewelling.app"
+          assert extension_info["CFBundleIdentifier"] == "de.traewelling.app.widget"
+          assert extension_info["NSExtension"]["NSExtensionPointIdentifier"] == "com.apple.widgetkit-extension"
+          assert (extension / extension_info["CFBundleExecutable"]).is_file()
+          assert app_info["CFBundleVersion"] == extension_info["CFBundleVersion"]
+          assert app_info["CFBundleShortVersionString"] == extension_info["CFBundleShortVersionString"]
+          PY
+          ditto -c -k --keepParent build/ios/iphoneos/Runner.app "$RUNNER_TEMP/routely-ios-release-unsigned.zip"
+      - name: Upload unsigned iOS build, not an installable signed IPA
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-ios-release-unsigned
+          path: ${{ runner.temp }}/routely-ios-release-unsigned.zip
+          if-no-files-found: error
+      - name: Build unsigned macOS app
+        run: flutter build macos --release --no-pub
+      - name: Archive macOS build without signing or notarization
+        run: ditto -c -k --keepParent build/macos/Build/Products/Release/Routely.app "$RUNNER_TEMP/routely-macos-release-unsigned.zip"
+      - name: Upload unsigned macOS build
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-macos-release-unsigned
+          path: ${{ runner.temp }}/routely-macos-release-unsigned.zip
+          if-no-files-found: error
+
+  windows:
+    name: Windows release, unsigned
+    needs: verify
+    runs-on: windows-2025
+    timeout-minutes: 35
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build unsigned Windows app
+        run: flutter build windows --release --no-pub
+      - name: Archive complete executable and plugin bundle
+        shell: pwsh
+        run: Compress-Archive -Path build/windows/x64/runner/Release/* -DestinationPath "$env:RUNNER_TEMP/routely-windows-release-unsigned.zip"
+      - name: Upload unsigned Windows build
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-windows-release-unsigned
+          path: ${{ runner.temp }}/routely-windows-release-unsigned.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux release
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: flutter
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Install native GTK and secure-storage build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y clang cmake ninja-build pkg-config libgtk-3-dev libsecret-1-dev liblzma-dev libstdc++-12-dev
+      - name: Set up pinned Flutter
+        uses: subosito/flutter-action@1a449444c387b1966244ae4d4f8c696479add0b2 # v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+      - name: Resolve locked dependencies
+        run: flutter pub get --enforce-lockfile
+      - name: Build Linux app
+        run: flutter build linux --release --no-pub
+      - name: Archive complete executable and plugin bundle
+        run: tar -czf "$RUNNER_TEMP/routely-linux-release.tar.gz" -C build/linux/x64/release bundle
+      - name: Upload Linux build
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: routely-flutter-linux-release
+          path: ${{ runner.temp }}/routely-linux-release.tar.gz
+          if-no-files-found: error

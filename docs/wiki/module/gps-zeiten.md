@@ -205,6 +205,10 @@ Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträch
 - TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand und der aktuellen UI-Vergleichszeit erneut prüfen. Die nachgereichte Bildschirmaufnahme bei eingeschaltetem Display zeigt wechselnde GPS-/API-Quellen für denselben Besuch und Folgehalte, enthält aber keinen Standort- oder Audioverlauf. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
 - TODO: Einheitliche Quellen-/Zeitdarstellung in Fahrtdetail, Widget und Samsung-Sperrbildschirm bei Display-aus-Betrieb und wiederkehrendem Signal prüfen. Reine Kotlin-Tests belegen keine reale ETA-Güte.
 
+## Flutter-Umsetzung
+
+`flutter/lib/tracking/` portiert Beobachtungs-, Besuchs-, ETA- und gemeinsame-Restweg-Verträge. Monotone Fix-Zeit und Systemuhr bleiben getrennt; GPS-Prognosen sind keine Provider-/Editorwerte. Reacquisition und eindeutige Visit-Bindung bleiben Pflicht. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

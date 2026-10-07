@@ -60,6 +60,10 @@ Die Einstellungs-Card `Begleitung bei ausgeschaltetem Display` liest den Akkuopt
 
 Detail-Compositions besitzen eigene Beobachtungsleases. Activity-Neuanlage erhält den Fachentwurf und abgeschickte Mutationen; aktueller Busyzustand sperrt Verlassen. Erfolgreiche Löschungen bereinigen die aufgenommene Fahrt getrennt vom alten Screen und navigieren nur durch die aktuelle Detail-Composition. Dropdowns und Einstellungsaktionen besitzen zugeordnete Semantiklabels; die praktische TalkBack-/Rotationprüfung bleibt offen.
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Komponenten](./komponenten.md)

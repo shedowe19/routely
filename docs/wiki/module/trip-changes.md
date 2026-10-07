@@ -48,6 +48,10 @@ Für die Relevanz eines Gleiswechsels zählt der erste nicht gestrichene verblei
 - TODO: Reale Änderungen und deren Android-/TTS-Zustellung prüfen, insbesondere mehrere Ereignisse im selben Polling und konkurrierende Stationsansagen.
 - Datenabhängige Grenze: Ohne frische oder eindeutige API-Felder ist keine verlässliche Änderungsmeldung möglich. Eine bereits beim Trackingstart vorhandene Verspätung wird als Ausgangslage behandelt.
 
+## Flutter-Umsetzung
+
+`flutter/lib/tracking/trip_change_monitor.dart` übernimmt Änderungserkennung. Die Runtime hält begrenzte identitätsgebundene Erklärungen; native Hosts melden sie unabhängig von TTS und deduplizieren Zustellung. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

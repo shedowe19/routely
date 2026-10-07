@@ -66,6 +66,10 @@ Die [Fahrterkennung](../module/ride-recognition.md) nutzt dieselbe Träwelling-S
 
 Der [Reisefortschritt](../module/trip-progress.md) nutzt ab API 36 die Framework-Notification-API und auf älteren Geräten AndroidX-Core 1.18.0. Der aktuelle SDK-/Toolchainstand steht oben; targetSdk 34/minSdk 26 bleiben bestehen. Für GPS-Geometrie, Fahrterkennung und Fortschritt wurde kein zusätzliches Routing-, Karten- oder KI-SDK eingeführt.
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Architektur Überblick](./ueberblick.md)

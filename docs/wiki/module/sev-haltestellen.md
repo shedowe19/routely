@@ -97,6 +97,10 @@ Der Abruf vom 06.10.2026 belegte fünf öffentliche Punkte für Essen, Mülheim 
 - TODO: Weitere Bahnhofs-Slugs, Richtungsformulierungen, ungewöhnliche Maßnahmenzeiträume und andere SEV-Linien prüfen. Die Bus-RE/RB-Regel ist bewusst begrenzt.
 - TODO: Änderungen der Website-Struktur, dauerhafte Nutzungsbedingungen, regelmäßige Abrufe und Akku-/Netzwerkverbrauch bewerten. Nach Ende einer Maßnahme dürfen alte öffentliche Punkte keine GPS-Korrektur mehr liefern.
 
+## Flutter-Umsetzung
+
+`flutter/lib/tracking/sev_enrichment.dart` übernimmt öffentliche Bahnhofskarten, Berliner Datum und Unicode-Normalisierung. Nur bestätigte physische Bushaltpaare dürfen Straßen-ETA ermöglichen; unklare Angaben bleiben Wegbeschreibungen. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
 ## Verwandte Seiten
 
 - [GPS-Zeiten](./gps-zeiten.md)

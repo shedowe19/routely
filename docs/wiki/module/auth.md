@@ -52,6 +52,12 @@ Der Token-Hilfelink prüft die eingegebene Serveradresse vor dem Browserstart. U
 
 - TODO: OAuth-Anmeldung einschließlich Callback-Verarbeitung und automatischer Token-Erneuerung an einen erreichbaren UI-Ablauf anbinden, falls dieser Login unterstützt werden soll.
 
+## Flutter-Umsetzung
+
+`flutter/lib/data/app_store.dart` hält einen sicheren Sitzungsdatensatz und trennt schreibende UI von lesender Hintergrund-Engine. Gespeicherte Generationen werden vor/nach API-Requests erneut geprüft. Der validierte Android-Import bestätigt die Übernahme vor dem Löschen alter Credentials. Weitere Details stehen in der [Flutter-Architektur](../architektur/flutter-migration.md). Die bisherigen Kotlin-Verträge bleiben die Verhaltensreferenz.
+
+Der sichere Flutter-Schreibpfad prüft erwartete aktive Status-ID und Operationsgültigkeit auch nach dem asynchronen Speichercommit. Ist eine Auswahl inzwischen überholt, stellt er den aktuellen Sitzungsdatensatz innerhalb derselben Warteschlange wieder her; ein verspäteter Schreibabschluss darf die neue aktive Auswahl nicht dauerhaft ersetzen. Eine verzögert abgeschlossene Speicherung dient als Regression für diesen Randfall.
+
 ## Verwandte Seiten
 
 - [API Überblick](../api/ueberblick.md)

@@ -366,6 +366,14 @@ Die unabhängige Abschlussprüfung liest Produktivcode und alle 24 Regressionen 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.
 - `kotlinx-coroutines-test` ist als Testabhängigkeit derselben Coroutines-Version ergänzt. Meldungs- und Feedcontroller verwenden `runTest`, kontrollierte Test-Dispatcher und verzögerte Antworten; keine sleeps ersetzen diese Reihenfolgeprüfungen.
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Der aktuelle [Flutter-Prüfstand](./flutter.md#prüfstand-vom-07102026) trennt lokale Flutter-Tests, Offline-Releaseguards und ausstehende native Builds. Historische Kotlin-CI-Zahlen oben sind keine Testergebnisse der neuen Flutter-App.
+
+Die App-Widgettests initialisieren Store und Testfutures innerhalb von Flutters `FakeAsync` und verwenden einen isolierten `MemoryFeedCache`. `test/app/widget_http_client.dart` erhält die HTTP-Mock-Metadaten und erzeugt einen expliziten asynchronen Cancellation-Future in derselben Testzone. Damit bleibt die Kombination aus Antwortstream und `Stream.timeout` deterministisch; die gemeinsame Cancellation-Future von `Stream.value` darf den Test nicht außerhalb dieser Zone fortsetzen. Android-Varianten verwenden `TargetPlatformVariant`, damit Plattformüberschreibungen vor der Framework-Invariantenprüfung zurückgesetzt werden.
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Setup](./setup.md)

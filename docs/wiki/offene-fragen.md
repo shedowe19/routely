@@ -35,6 +35,15 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 - TODO: [Änderungshinweise](./module/trip-changes.md) mit realen API-Änderungen, deaktivierten Benachrichtigungen und konkurrierenden TTS-Ansagen prüfen. Ohne Providerwerte gibt es keine Änderungserklärung.
 - TODO: [Reisefortschritt](./module/trip-progress.md) auf Android API 35, 36 und 36.1 sowie Samsung prüfen: System-/OEM-Promotion, große Schrift, Wegwischen, kalte/warme Navigation und ausgeschaltete Sperrbildschirmdetails. Live Updates bleiben vom System und Nutzer abhängig.
 
+## Flutter-Geräteabnahme
+
+- TODO: Den vollständigen Migrationscommit in GitHub CI auf allen sechs Plattformzielen prüfen. Der lokale Androidbuild scheitert vor Compilation am Netzwerkzugriff auf die Gradle-Distribution; iOS/macOS/Windows-Builds sind in dieser Linux-Sitzung nicht belegt. Der [Prüfstand](./entwicklung/flutter.md#prüfstand-vom-07102026) enthält die Abgrenzung.
+
+- TODO: Signierte iOS-App einschließlich App-Group/Widget und Live Activity auf einem echten iPhone prüfen.
+- TODO: Android-Upgrade mit bisherigem Eigentümerschlüssel und einmaligem Datenimport testen.
+- TODO: Display aus, Tunnelwiederaufnahme, entzogene Berechtigung, erzwungenes Beenden und Logout während einer Ansage auf beiden mobilen Plattformen dokumentieren.
+- Browser benötigt die CORS-Freigabe des gewählten Träwelling-Servers; dies kann der Client nicht durch einen lokalen Build garantieren.
+
 ## Verwandte Seiten
 
 - [Index](./index.md)

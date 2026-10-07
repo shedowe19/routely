@@ -26,6 +26,10 @@ Die [SEV-Ergänzung](../module/sev-haltestellen.md) ändert keine Room-Tabelle u
 
 Die zusätzliche Bahn-/Tram-Geometrie bleibt RAM-Zustand und verlangt kein neues Room-/DataStore-Feld. Das aktive Fahrtcache-JSON bleibt Version 1, Room bleibt Version 2. Auch das Bibliotheksupdate ist kein Grund, eine andere Schemaänderung zu erfinden; die bestehenden Feedcache-Upgraderegeln gelten weiter. Der vorhandene Fahrtcache liefert nur die Haltbasis für erneutes Geometrieladen. Details: [GPS-Zeiten](../module/gps-zeiten.md) und [Build](../entwicklung/build.md).
 
+## Flutter-Migrationsstand vom 07.10.2026
+
+Die plattformübergreifende Anwendung liegt unter `flutter/`; der bisherige Kotlin-/Compose-Quellstand unter `app/` bleibt eine Verhaltensreferenz. Aktuelle Schichten, Funktionsvergleich und Plattformgrenzen stehen in der [Flutter-Architektur](../architektur/flutter-migration.md), Werkzeugketten und Releasepfade unter [Flutter-Entwicklung](../entwicklung/flutter.md). Die übrigen Kotlin-Dateipfade auf dieser Seite beschreiben den erhaltenen Ausgangsstand.
+
 ## Verwandte Seiten
 
 - [Datenbank](./datenbank.md)
