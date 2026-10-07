@@ -90,11 +90,13 @@ class GpsJourneyTimeEstimator {
     )
     private data class SegmentSample(
         val key: String, val fix: LocationFix, val fraction: Double, val segmentMeters: Double,
-        val path: TrackingRouteGeometry.Path? = null, val uniqueRoadCandidate: Boolean = false
+        val path: TrackingRouteGeometry.Path? = null, val uniqueRoadCandidate: Boolean = false,
+        val candidateProgress: Map<TrackingRouteGeometry.Path, Double> = emptyMap()
     )
     private data class Projection(
         val fraction: Double, val length: Double, val path: TrackingRouteGeometry.Path? = null,
-        val across: Double = 0.0, val uniqueRoadCandidate: Boolean = false
+        val across: Double = 0.0, val uniqueRoadCandidate: Boolean = false,
+        val candidateProgress: Map<TrackingRouteGeometry.Path, Double> = emptyMap()
     )
     private data class RoadShape(val from: RoutePoint, val to: RoutePoint, val alternatives: List<List<RoutePoint>>,
                                  val source: GpsGeometrySource)
@@ -244,8 +246,11 @@ class GpsJourneyTimeEstimator {
         // markers or 90-minute limit. It still needs a compatible fresh pair
         // on the ordered incoming section and a confirmed preceding dwell.
         val arrivalEndpoint = progress.arrivedAtCurrent && insideStation && lastVisitKey == stop.key
+        val plannedTravel = previousStop?.plannedDepartureMillis?.let { departure ->
+            stop.plannedArrivalMillis?.let { arrival -> arrival - departure }
+        }
         val roadProjection = if (usesPolyline && roadSegment != null)
-            projectRoad(roadSegment, currentFix, arrivalEndpoint) else null
+            projectRoad(roadSegment, currentFix, arrivalEndpoint, plannedTravel) else null
         val projection = if (usesPolyline) roadProjection?.projection
             else previousStop?.let { project(it, stop, currentFix, arrivalEndpoint) }
         val compatible = previousStop != null && projection != null &&
@@ -438,17 +443,23 @@ class GpsJourneyTimeEstimator {
         val previous = segmentSamples.lastOrNull()
         if (previous != null && previous.key != key) segmentSamples.clear()
         val preceding = segmentSamples.lastOrNull()
-        if (preceding != null && (
-                fix.timeMillis - preceding.fix.timeMillis > MAX_FIX_AGE_MILLIS ||
-                (preceding.fraction - projection.fraction) * projection.length >
-                max(10.0, (preceding.fix.accuracyMeters + fix.accuracyMeters) / 2.0)
+        if (preceding != null && preceding.candidateProgress.keys != projection.candidateProgress.keys) {
+            // A newly plausible road must acquire its own complete movement
+            // window. Agreement at one shared fix does not prove earlier travel.
+            segmentSamples.clear()
+        }
+        val compatiblePreceding = segmentSamples.lastOrNull()
+        if (compatiblePreceding != null && (
+                fix.timeMillis - compatiblePreceding.fix.timeMillis > MAX_FIX_AGE_MILLIS ||
+                candidateMovement(compatiblePreceding, projection) <
+                -max(10.0, (compatiblePreceding.fix.accuracyMeters + fix.accuracyMeters) / 2.0)
             )) {
             segmentSamples.clear()
             cached = null
             return null
         }
         val sample = SegmentSample(key, fix, projection.fraction, projection.length,
-            projection.path, projection.uniqueRoadCandidate)
+            projection.path, projection.uniqueRoadCandidate, projection.candidateProgress)
         // Keep evidence by elapsed time instead of eight callback occurrences.
         // A 1 Hz location provider previously could never span the required 8 s.
         // Downsampling bounds memory even for much faster callbacks; the newest
@@ -460,7 +471,7 @@ class GpsJourneyTimeEstimator {
                 fix.timeMillis - it.fix.timeMillis > MAX_FIX_AGE_MILLIS
             } == true) segmentSamples.removeFirst()
         val first = segmentSamples.first()
-        val movement = (sample.fraction - first.fraction) * projection.length
+        val movement = candidateMovement(first, projection)
         return sample.takeIf {
             segmentSamples.size >= 3 && fix.timeMillis - first.fix.timeMillis >= MIN_MOVEMENT_MILLIS &&
                 movement >= max(50.0, 3.0 * max(first.fix.accuracyMeters, fix.accuracyMeters))
@@ -479,6 +490,14 @@ class GpsJourneyTimeEstimator {
         }
     }
 
+    /** The weakest candidate must independently support the movement window. */
+    private fun candidateMovement(first: SegmentSample, current: Projection): Double =
+        if (current.candidateProgress.isEmpty()) (current.fraction - first.fraction) * current.length
+        else current.candidateProgress.minOf { (path, fraction) ->
+            first.candidateProgress[path]?.let { (fraction - it) * path.length }
+                ?: Double.NEGATIVE_INFINITY
+        }
+
     private fun compatibleProgress(
         from: TrackingStop, to: TrackingStop, previous: LocationFix?,
         fix: LocationFix, projection: Projection, arrivalEndpoint: Boolean = false
@@ -487,6 +506,20 @@ class GpsJourneyTimeEstimator {
         val sameVisit = lastVisitKey == to.key
         val departedVisit = lastVisitKey == from.key
         if (!sameVisit && !departedVisit) return false
+        if (projection.candidateProgress.isNotEmpty()) {
+            return projection.candidateProgress.all { (path, fraction) ->
+                compatiblePathProgress(from, to, previous, fix,
+                    projection.copy(fraction = fraction, length = path.length, path = path,
+                        candidateProgress = emptyMap()), departedVisit, arrivalEndpoint)
+            }
+        }
+        return compatiblePathProgress(from, to, previous, fix, projection, departedVisit, arrivalEndpoint)
+    }
+
+    private fun compatiblePathProgress(
+        from: TrackingStop, to: TrackingStop, previous: LocationFix, fix: LocationFix, projection: Projection,
+        departedVisit: Boolean, arrivalEndpoint: Boolean
+    ): Boolean {
         val priorRoad = projection.path?.let { projectPath(it, previous, arrivalEndpoint) }
         if (priorRoad?.ambiguous == true) return false
         val prior = if (projection.path != null) priorRoad?.projection
@@ -628,27 +661,70 @@ class GpsJourneyTimeEstimator {
         return preparedSegment
     }
 
-    private fun projectRoad(segment: TrackingRouteGeometry.Segment, fix: LocationFix, arrivalEndpoint: Boolean): RoadProjection {
-        lockedRoadPath?.takeIf { it in segment.paths }?.let { locked ->
-            val result = projectPath(locked, fix, arrivalEndpoint)
-            if (result.projection != null) {
-                return result.copy(projection = result.projection.copy(uniqueRoadCandidate = true))
-            }
+    private fun projectRoad(
+        segment: TrackingRouteGeometry.Segment, fix: LocationFix, arrivalEndpoint: Boolean,
+        plannedTravelMillis: Long?
+    ): RoadProjection {
+        val results = segment.paths.distinct().associateWith { projectPath(it, fix, arrivalEndpoint) }
+        // An unresolved loop has no unique across-distance to compare with a
+        // previous lock. It must still veto forecasts before that fast path.
+        if (results.values.any { it.ambiguous }) {
             clearPredictionState()
-            if (result.ambiguous) return result
+            return RoadProjection(null, ambiguous = true)
         }
-        val results = segment.paths.map { projectPath(it, fix, arrivalEndpoint) }
-        if (results.any { it.ambiguous }) return RoadProjection(null, ambiguous = true)
-        val supported = results.mapNotNull { it.projection }
-        if (supported.isEmpty()) return RoadProjection(null)
+        val projected = results.values.mapNotNull { it.projection }
+        val nearestAcross = projected.minOfOrNull { it.across }
+        val acrossTolerance = max(10.0, fix.accuracyMeters * 2)
+        lockedRoadPath?.takeIf { it in segment.paths }?.let { locked ->
+            val result = results.getValue(locked)
+            if (result.projection != null && nearestAcross != null &&
+                result.projection.across <= nearestAcross + acrossTolerance) {
+                return result.copy(projection = result.projection.copy(uniqueRoadCandidate = true,
+                    candidateProgress = mapOf(locked to result.projection.fraction)))
+            }
+            // A previously proven road is no longer supported when another
+            // candidate is clearly nearer outside the fix's uncertainty band.
+            // The newly supported path must establish a fresh movement window.
+            clearPredictionState()
+        }
+        if (nearestAcross == null) return RoadProjection(null)
+        // A path at the edge of the broad route corridor is not equally
+        // plausible to a close path outside the fix's uncertainty band.
+        val supported = projected.filter { it.across <= nearestAcross + acrossTolerance }
         val tolerance = max(50.0, fix.accuracyMeters * 2)
         val reference = supported.first()
-        if (supported.any {
+        val disagree = supported.any {
                 abs(it.fraction - reference.fraction) * max(it.length, reference.length) > tolerance ||
                     abs(it.fraction * it.length - reference.fraction * reference.length) > tolerance
-            }) return RoadProjection(null, ambiguous = true)
-        val chosen = supported.firstOrNull { it.path == selectedRoadPath } ?: reference
-        return RoadProjection(chosen.copy(uniqueRoadCandidate = supported.size == 1))
+            }
+        val travel = plannedTravelMillis?.takeIf { it in MIN_TRAVEL_MILLIS..MAX_TRAVEL_MILLIS }
+        val forecastSpread = travel?.let { (supported.maxOf { it.fraction } -
+            supported.minOf { it.fraction }) * it }
+        // Metre tolerances alone can hide materially different times on a slow
+        // short section. No timed consensus may disagree by more than one minute.
+        if (forecastSpread != null && forecastSpread > MAX_CANDIDATE_FORECAST_SPREAD_MILLIS) {
+            return RoadProjection(null, ambiguous = true)
+        }
+        if (disagree) {
+            // Different historical approaches can merge into the same road.
+            // Their absolute chainage remains different forever, although the
+            // remaining route and bounded arrival forecasts now agree. This
+            // permits only that proven common suffix, never a guessed branch.
+            val sharedSuffix = TrackingRouteGeometry.sharedRemainingPath(supported.map {
+                TrackingRouteGeometry.Projection(it.fraction, it.length, it.path!!, it.across)
+            })
+            val remaining = supported.map { (1.0 - it.fraction) * it.length }
+            if (!sharedSuffix || remaining.max() - remaining.min() > max(10.0, fix.accuracyMeters * 2) ||
+                forecastSpread == null) {
+                return RoadProjection(null, ambiguous = true)
+            }
+        }
+        // A consensus uses the latest candidate ETA. Selecting its representation
+        // does not prove or lock any earlier road; every candidate supplies evidence.
+        val chosen = supported.minWith(compareBy<Projection> { it.fraction }
+            .thenBy { it.path != selectedRoadPath })
+        return RoadProjection(chosen.copy(uniqueRoadCandidate = supported.size == 1,
+            candidateProgress = supported.associate { it.path!! to it.fraction }))
     }
 
     private fun projectPath(path: TrackingRouteGeometry.Path, fix: LocationFix,
@@ -713,6 +789,7 @@ class GpsJourneyTimeEstimator {
         private const val MIN_TRAVEL_MILLIS = 15_000L
         private const val MAX_TRAVEL_MILLIS = 5_400_000L
         private const val MAX_OFFSET_MILLIS = 21_600_000L
+        private const val MAX_CANDIDATE_FORECAST_SPREAD_MILLIS = 60_000.0
         private const val MIN_SEGMENT_METERS = 100.0
         private const val MAX_SEGMENT_METERS = 50_000.0
         private const val MIN_SEGMENT_FRACTION = 0.05

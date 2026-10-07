@@ -6,6 +6,7 @@
 
 ## Liste der Entscheidungen
 
+- [07.10.2026: GPS-Prognose auf gemeinsamem SEV-Restweg](./2026-10-07-sev-gemeinsamer-restweg.md)
 - [07.10.2026: Aktive Fahrtrevision und getrennte GPS-Ereignisse](./2026-10-07-aktive-fahrt-und-beobachtungen.md)
 
 - [06.10.2026: Nachreview-Korrekturen und Versionsclaims](./2026-10-06-nachreview-korrekturen.md)

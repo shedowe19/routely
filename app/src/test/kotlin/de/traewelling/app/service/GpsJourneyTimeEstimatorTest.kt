@@ -641,8 +641,10 @@ class GpsJourneyTimeEstimatorTest {
         }
         val onCommonRoad = pathFix(north, RoutePoint(50.0, .014))
         val unconfirmed = GpsJourneyTimeEstimator()
+        // Both alternatives now have the same remaining road and a bounded
+        // forecast spread. A first shared fix still proves no movement window.
         assertNull(update(unconfirmed, onCommonRoad, progress(), segmentGeometries = listOf(shape), useRoadGeometry = true))
-        assertEquals(GpsTimeUnavailableReason.AMBIGUOUS_ROUTE, unconfirmed.unavailableReason())
+        assertEquals(GpsTimeUnavailableReason.INSUFFICIENT_MOVEMENT, unconfirmed.unavailableReason())
     }
 
     @Test

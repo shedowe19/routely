@@ -14,6 +14,7 @@ internal object TrackingRouteGeometry {
     data class Segment(val source: GpsGeometrySource, val paths: List<Path>)
     data class Projection(val fraction: Double, val length: Double, val path: Path, val across: Double)
     data class Result(val projection: Projection?, val ambiguous: Boolean = false, val beforeOrigin: Boolean = false)
+    private data class RemainingVertex(val fraction: Double, val point: RoutePoint)
     private data class Candidate(
         val projection: Projection,
         val supportedEndpoint: Boolean,
@@ -98,6 +99,81 @@ internal object TrackingRouteGeometry {
         return Result(projection)
     }
 
+    /**
+     * Proves that alternatives have the same ordered future shape from their current
+     * projections. Different past detours and collinear vertex density do not matter;
+     * equal remaining distance alone cannot prove a shared road through a crossing.
+     *
+     * Compare every pair at the union of their remaining vertices. Interpolation is
+     * linear between these breakpoints, so a detour cannot hide between samples.
+     */
+    fun sharedRemainingPath(projections: List<Projection>): Boolean {
+        if (projections.size !in 2..3) return false
+        val remaining = projections.map { remainingVertices(it) ?: return false }
+        for (first in remaining.indices) {
+            for (second in first + 1 until remaining.size) {
+                if (!sameRemainingShape(remaining[first], remaining[second])) return false
+            }
+        }
+        return true
+    }
+
+    private fun remainingVertices(projection: Projection): List<RemainingVertex>? {
+        val path = projection.path
+        if (!projection.fraction.isFinite() || projection.fraction !in 0.0..1.0 ||
+            !projection.length.isFinite() || !path.length.isFinite() || path.length <= 0.0 ||
+            abs(projection.length - path.length) > .01 || path.points.size !in 2..5_002 ||
+            path.lengths.size != path.points.size - 1 || path.points.any { !valid(it) } ||
+            path.lengths.any { !it.isFinite() || it <= 0.0 } ||
+            abs(path.lengths.sum() - path.length) > .01
+        ) return null
+        val travelled = projection.fraction * path.length
+        val remaining = path.length - travelled
+        if (remaining <= .01) return null
+        val vertices = mutableListOf<RemainingVertex>()
+        var cumulative = 0.0
+        for (index in path.lengths.indices) {
+            val next = cumulative + path.lengths[index]
+            if (vertices.isEmpty() && next > travelled) {
+                val fraction = ((travelled - cumulative) / path.lengths[index]).coerceIn(0.0, 1.0)
+                vertices += RemainingVertex(0.0, interpolate(path.points[index], path.points[index + 1], fraction))
+            }
+            if (vertices.isNotEmpty()) {
+                vertices += RemainingVertex(((next - travelled) / remaining).coerceIn(0.0, 1.0),
+                    path.points[index + 1])
+            }
+            cumulative = next
+        }
+        return vertices.takeIf { it.size >= 2 }
+    }
+
+    private fun sameRemainingShape(first: List<RemainingVertex>, second: List<RemainingVertex>): Boolean {
+        val breakpoints = (first.map { it.fraction } + second.map { it.fraction }).distinct().sorted()
+        var firstEdge = 0
+        var secondEdge = 0
+        for (fraction in breakpoints) {
+            while (firstEdge < first.lastIndex - 1 && first[firstEdge + 1].fraction < fraction) firstEdge++
+            while (secondEdge < second.lastIndex - 1 && second[secondEdge + 1].fraction < fraction) secondEdge++
+            val firstPoint = interpolateAt(first, firstEdge, fraction)
+            val secondPoint = interpolateAt(second, secondEdge, fraction)
+            if (distance(firstPoint, secondPoint) > SHARED_REMAINING_TOLERANCE_METERS) return false
+        }
+        return true
+    }
+
+    private fun interpolateAt(vertices: List<RemainingVertex>, edge: Int, fraction: Double): RoutePoint {
+        val from = vertices[edge]
+        val to = vertices[edge + 1]
+        val span = to.fraction - from.fraction
+        val along = if (span > 0.0) ((fraction - from.fraction) / span).coerceIn(0.0, 1.0) else 1.0
+        return interpolate(from.point, to.point, along)
+    }
+
+    private fun interpolate(from: RoutePoint, to: RoutePoint, fraction: Double): RoutePoint = RoutePoint(
+        from.latitude + (to.latitude - from.latitude) * fraction,
+        from.longitude + (to.longitude - from.longitude) * fraction
+    )
+
     fun distance(a: RoutePoint, b: RoutePoint): Double = hypot(
         Math.toRadians(b.longitude - a.longitude) * EARTH_RADIUS * cos(Math.toRadians((a.latitude + b.latitude) / 2)),
         Math.toRadians(b.latitude - a.latitude) * EARTH_RADIUS)
@@ -109,4 +185,5 @@ internal object TrackingRouteGeometry {
         valid(RoutePoint(stop.latitude, stop.longitude))
 
     private const val EARTH_RADIUS = 6_371_000.0
+    private const val SHARED_REMAINING_TOLERANCE_METERS = 1.0
 }

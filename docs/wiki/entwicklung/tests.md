@@ -345,6 +345,22 @@ Der erste vollständige Prüflauf scheiterte beim Kompilieren einer neuen Testfi
 
 Die unabhängige Prüfung des betroffenen Resolver-/Routing-/Service-/UI-Diffs fand keinen weiteren bestätigten Defekt. Reale GPS-Fixfolgen, aktueller Busweg und Prognosegüte auf dem Gerät sind dadurch weiterhin nicht belegt. Ohne bestätigte SEV-Endpunkte, geeignete Straßengeometrie und hinreichende lokale Bewegung gilt der bestehende API-/Plan-Rückfall. Verträge: [SEV-Haltestellen](../module/sev-haltestellen.md), [GPS-Zeiten](../module/gps-zeiten.md) und [Externe Schnittstellen](../api/externe-schnittstellen.md).
 
+
+## Gemeinsamer SEV-Restweg vom 07.10.2026
+
+Der weitere Nutzerbericht nennt nach gültiger Mülheimer Richtungsauflösung `AMBIGUOUS_ROUTE`. Die erneute anonyme Abfrage ausschließlich der öffentlichen Mülheim-/Essen-Ersatzhaltpunkte lieferte dieselben zwei Geometrien wie die vorhandene Fixture; keine Geräteposition ging an den Router. Öffentliche Punkte auf dem gemeinsamen späteren Weg reproduzieren rund 884 Meter historische Chainage-Differenz, aber nur rund 38 Sekunden ETA-Streuung bei 23 Minuten Planfahrzeit. Die Regression speichert keinen Nutzerpunkt oder Geräteverlauf.
+
+24 neue dauerhafte Regressionen ergänzen den vorherigen 815-Test-Stand:
+
+- `GpsRoadConsensusTest`: 15 Fälle zu öffentlichem gemeinsamem Restweg, spätester ETA, Alternativenreihenfolge, zeitlicher Streugrenze auch innerhalb alter Metertoleranz, zukünftiger Abzweigung, fehlender Planbasis, Rückwärtsbewegung, Sprung, ungenauem/altem GPS, Replay, Kandidatenwechsel mit ursprünglichem Ablauf, räumlicher Auswahl naher Wege sowie Verlust einer früheren Bindung durch näheren Parallelweg oder mehrdeutige Schleife.
+- `TrackingRouteGeometryRemainingPathTest`: neun Fälle zu öffentlicher Fixture, kollinearer Verdichtung, Projektion innerhalb einer Kante, gleichen Endpunkten ohne gemeinsamen Weg, vertauschter Wegreihenfolge, zukünftiger Schleife, getrennten parallelen Wegen, paarweiser Prüfung aller drei Kandidaten und fehlendem Restweg am Ziel.
+
+Der erste Lauf führte 839 Tests aus und hatte sechs Fehlschläge: Fünf neue synthetische Fälle verwendeten im gemeinsamen Kurvenhelfer einen absoluten Breitengrad statt des beabsichtigten Offsets um 50 Grad. Die Fixturekorrektur erhält deren Assertions. Der bestehende Test zum früher gebundenen Weg erwartet beim ersten Fix auf nun belegtem gemeinsamem Restweg weiterhin keine Prognose; der passende Grund ist nun fehlende Bewegung statt Mehrdeutigkeit. Die öffentlichen Mülheim-/Essen-Fälle verwenden diesen Helfer nicht.
+
+Der abschließende vollständige Neuaufbau aus bereinigtem `app/build` bestand in **3 min 27 s**: **839 Tests in 65 Klassen**, null Fehlschläge, Fehler oder übersprungene Tests; vollständiges Debug-Lint **0 Fehler / 43 Warnungen**, Debug-APK und unsignierte Release-APK einschließlich Release-Vital-Lint. 108 ausführbare Tasks, davon 107 ausgeführt und eine unveränderte Generierungsaufgabe aktuell. Alle 207 eingefrorenen Quell-/Test-/Konfigurationsdateien blieben SHA256-identisch. Die unveränderten Offline-Python-Releaseguards bestanden separat **56 Tests**. Keine physische Geräteausführung oder signierte Veröffentlichung durch diesen Prüflauf.
+
+Die unabhängige Abschlussprüfung liest Produktivcode und alle 24 Regressionen einschließlich der Fixturekorrektur. Ein näherer, innerhalb seiner eigenen Form mehrdeutiger Weg wird vor einer früheren Kandidatenbindung geprüft und verwirft deren noch gültige Prognose. Die gemeinsame Prognose begründet keine historische Route. Reale GPS-Güte und aktueller Busfahrweg bleiben praktisch zu prüfen; Regeln und Abwägung stehen in der [ADR gemeinsamer SEV-Restweg](../entscheidungen/2026-10-07-sev-gemeinsamer-restweg.md).
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.

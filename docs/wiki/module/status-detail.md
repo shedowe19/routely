@@ -55,6 +55,8 @@ Bestätigte Ankunfts-/Abfahrtsereignisse können als `GPS beobachtet` sichtbar s
 
 Die frühere `propagateDelays()`-Vererbung einschließlich synthetischer Puffer wurde entfernt. Ein Rückfall zeigt dadurch tatsächliche vorhandene Providerwerte und bewahrt Verfrühungen, statt eine ältere positive Verzögerung auf weitere Halte zu übertragen. GPS-Prognosen verändern weder die API-Echtzeitfelder noch die gespeicherten Check-in-Zeiten. Das Bearbeitungsformular verwendet ausdrücklich den Resolver ohne GPS-Daten; eine Schätzung wird nicht beim Speichern zur manuellen Istzeit. Die Prognosebedingungen stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
+Bei Straßenalternativen mit streng belegtem gemeinsamem Restweg und höchstens einer Minute Modellstreuung kann der Schätzer seit 07.10.2026 die späteste passende ETA liefern, ohne die frühere Anfahrtsroute zu behaupten. Eine neue GPS-Schätzung erscheint erst nach dem vollständigen Bewegungsbeleg jedes Kandidaten; während dessen Aufbau kann der Mehrdeutigkeitshinweis bereits auf fehlende Fahrbewegung wechseln. Die UI selbst glättet keine Ablehnung und berechnet keinen Ersatzwert. Der genaue Vertrag steht unter [GPS-Zeiten](./gps-zeiten.md).
+
 ### SEV-Ersatzhaltestellen
 
 Busfahrten mit RE-/RB-Linienkennung erhalten automatisch die [SEV-Ergänzung](./sev-haltestellen.md). Erst wird der vollständige API-Snapshot sichtbar veröffentlicht; danach lädt eine eigene Coroutine öffentliche bahnhof.de-Karten. Der API-Refresh wartet darauf nicht. Bei unverändertem Fahrt-/Routensnapshot wird ein noch laufender Abruf weiterverwendet, damit der 30-Sekunden-Refresh langsamere Ergebnisse nicht ständig abbricht.

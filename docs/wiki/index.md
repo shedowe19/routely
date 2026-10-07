@@ -66,6 +66,7 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 
 ## Entscheidungen
 
+- [07.10.2026: GPS-Prognose auf gemeinsamem SEV-Restweg](./entscheidungen/2026-10-07-sev-gemeinsamer-restweg.md)
 - [06.10.2026: Nachreview-Korrekturen und Versionsclaims](./entscheidungen/2026-10-06-nachreview-korrekturen.md)
 - [06.10.2026: GPS-, Mutations- und Releasezustände](./entscheidungen/2026-10-06-befundkorrekturen.md)
 
