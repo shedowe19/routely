@@ -103,7 +103,10 @@ jobs:
       - name: Build unsigned release APK
         # The repository has no key.properties. Owner signing belongs to the
         # separate, manually dispatched and version-guarded release workflow.
-        run: flutter build apk --release --no-pub
+        # Pub also regenerates the release registrar without dev-only plugins.
+        run: |
+          flutter build apk --release
+          git diff --exit-code -- pubspec.lock
       - name: Verify release identity and absence of a signer
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/aapt" dump badging build/app/outputs/flutter-apk/app-release.apk > "$RUNNER_TEMP/flutter-apk-manifest.txt"

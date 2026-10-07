@@ -47,6 +47,8 @@ flutter build apk --release --build-name="$RELEASE_VERSION_NAME" --build-number=
 
 Die erzeugte APK unter `flutter/build/app/outputs/flutter-apk/` wird mit dem Eigentümerschlüssel signiert. `apksigner verify` muss anschließend die Signatur akzeptieren; danach prüft der Guard Paketidentität, Version und Code anhand des tatsächlichen Manifests. Der Guard reserviert Version, Tag und Draft auf dem exakten Commit; kein nachträglicher Branchwechsel und kein Überschreiben bestehender Assets.
 
+Android-Releasebuilds verwenden bewusst kein `--no-pub`: In Flutter 3.47.6 überspringt diese Option auch die erneute Pluginregistrierung. Ein Registrar aus `pub get` oder einem Debug-Build kann dann noch `integration_test` enthalten, obwohl Gradle Dev-Plugins aus dem Release-Classpath entfernt; der Java-Compiler meldet eine fehlende `IntegrationTestPlugin`-Klasse. Beide APK-Releaseworkflows lassen Flutter den Registrar für den Release neu erzeugen und prüfen anschließend mit `git diff --exit-code -- pubspec.lock`, dass die zuvor strikt aufgelösten Abhängigkeiten unverändert bleiben.
+
 `pubspec.yaml` verwendet eine Entwicklungs-Buildnummer, die keinen neuen Produktivrelease beansprucht. Android-Produktivreleases überschreiben sie ausschließlich mit der beanspruchten monotonen Nummer. Apple-Buildnummern müssen Apples Format erfüllen und mit der Widget-Erweiterung identisch sein. Apple-TestFlight/App-Store-Veröffentlichung erfordert eine separate Eigentümerkonfiguration und wird nicht automatisch ausgelöst.
 
 ## Prüfstand vom 07.10.2026

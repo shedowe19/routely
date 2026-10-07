@@ -85,7 +85,9 @@ jobs:
       - name: Test native contracts and build unsigned release
         working-directory: flutter
         run: |
-          flutter build apk --release --no-pub --build-name "$RELEASE_VERSION_NAME" --build-number "$RELEASE_VERSION_CODE"
+          # Regenerate the release registrar; --no-pub retains debug-only plugins.
+          flutter build apk --release --build-name "$RELEASE_VERSION_NAME" --build-number "$RELEASE_VERSION_CODE"
+          git diff --exit-code -- pubspec.lock
           chmod +x android/gradlew
           cd android
           ./gradlew :app:testDebugUnitTest :app:lintDebug --stacktrace
