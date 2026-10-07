@@ -38,6 +38,7 @@ import com.google.gson.Gson
 import de.traewelling.app.MainActivity
 import de.traewelling.app.R
 import de.traewelling.app.data.model.CheckinInfo
+import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.GpsSegmentGeometry
 import de.traewelling.app.data.model.RoadRouteGeometry
 import de.traewelling.app.data.model.StopStation
@@ -46,6 +47,9 @@ import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.sev.SevJourneyEnricher
 import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.data.repository.TraewellingRepository
+import de.traewelling.app.data.repository.StatusMutation
+import de.traewelling.app.data.repository.StatusMutationEvents
+import de.traewelling.app.data.repository.StatusMutationSnapshot
 import de.traewelling.app.data.routing.RoadRouteRepository
 import de.traewelling.app.data.routing.TransitRouteRepository
 import de.traewelling.app.util.PreferencesManager
@@ -96,6 +100,8 @@ class TripTrackingService : Service() {
     private lateinit var locationClient: FusedLocationProviderClient
 
     private var trackingJob: Job? = null
+    private var mutationRefreshJob: Job? = null
+    private val activeStatusBridge = ActiveTripStatusBridge()
     private var tickJob: Job? = null
     private var sevJob: Job? = null
     private var roadRouteJob: Job? = null
@@ -171,6 +177,19 @@ class TripTrackingService : Service() {
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
         serviceScope.launch {
+            StatusMutationEvents.events.collect { event ->
+                if (event is StatusMutation.LikeChanged || !activeStatusBridge.owns(event)) return@collect
+                val statusId = currentStatusId ?: return@collect
+                val ownerGeneration = generation
+                trackingMutex.withLock {
+                    if (!isCurrentTracking(statusId, ownerGeneration) || !activeStatusBridge.owns(event)) return@withLock
+                    // Read the authoritative ledger: this event may already have been superseded.
+                    ensureCurrentTripSnapshot(statusId, ownerGeneration)
+                    requestMutationRefresh(statusId, ownerGeneration)
+                }
+            }
+        }
+        serviceScope.launch {
             prefs.liveProgressEnabled.distinctUntilChanged().collect { enabled ->
                 trackingMutex.withLock {
                     liveProgressEnabled = enabled
@@ -211,7 +230,7 @@ class TripTrackingService : Service() {
                     }
                     currentStatusId?.let { saveProgress(it) }
                     publishRuntimeIssues()
-                    if (!configuration.enabled && completionStatusId != null) completionStatusId?.let { stopTracking(it) }
+                    if (!configuration.enabled && completionStatusId != null) completionStatusId?.let { completeTracking(it) }
                 }
             }
         }
@@ -417,7 +436,7 @@ class TripTrackingService : Service() {
             }
             if (completionStatusId != null) {
                 completionUtteranceId = utterance?.takeIf(speechDeliveries::contains)
-                if (completionUtteranceId == null) completionStatusId?.let { stopTracking(it) }
+                if (completionUtteranceId == null) completionStatusId?.let { completeTracking(it) }
             }
         }
     }
@@ -579,9 +598,12 @@ class TripTrackingService : Service() {
             generation++
             currentStatusId = statusId
             currentAuthSession = session
+            activeStatusBridge.bind(statusId, session.revision)
             mutableTrackingLiveState.value = null
             stopping = false
             trackingJob?.cancel()
+            mutationRefreshJob?.cancel()
+            mutationRefreshJob = null
             tickJob?.cancel()
             sevJob?.cancel()
             clearRoadRoutes()
@@ -739,54 +761,116 @@ class TripTrackingService : Service() {
         runCatching { tripChanges.reset(statusId, cache.changes) }.onFailure { tripChanges.reset(statusId) }
         liveUpdateDismissed = cache.liveUpdateDismissed
         lastSavedJson = gson.toJson(cache)
+        // A process-local committed edit must be reconciled before cached progress can act.
+        val mutation = repo.getStatusMutationSnapshot(statusId, session)
+        if (activeStatusBridge.acceptsRestoredCache(mutation)) activeStatusBridge.adopt(mutation.revision)
     }
 
     private suspend fun refreshTrip(statusId: Int, expectedGeneration: Long, session: AuthSession) {
         if (!isCurrentTracking(statusId, expectedGeneration) || prefs.getAuthSession() != session) return
-        val status = repo.getStatusDetail(statusId).getOrNull() ?: return
+        val snapshot = repo.getStatusDetailSnapshot(statusId).getOrNull() ?: return
+        val status = snapshot.status
         val checkin = status.checkin ?: return
         val tripId = checkin.trip ?: return
         if (!isCurrentTracking(statusId, expectedGeneration) || prefs.getAuthSession() != session) return
         val stops = repo.getStopovers(tripId).getOrNull() ?: return
-        val rawRoute = checkedInRoute(stops, checkin, applyManualTimes = false)
-        val route = checkedInRoute(stops, checkin)
-        if (route.isEmpty()) return
         trackingMutex.withLock {
-            if (!isCurrentTracking(statusId, expectedGeneration) || completionStatusId != null ||
+            if (!isCurrentTracking(statusId, expectedGeneration) ||
                 prefs.getAuthSession() != session) return@withLock
-            val previousProgress = engine?.getProgress()
-            val currentKeyIndex = previousProgress?.nextStopKey?.let { key ->
-                route.withIndex().firstOrNull { (index, stop) -> stopKey(stop, index) == key }?.index
-            }
-            val nextIndex = currentKeyIndex ?: previousProgress?.nextIndex ?: 0
-            val changes = tripChanges.observe(TripChangeSnapshot.fromApi(
-                statusId, SystemClock.elapsedRealtime(), rawRoute, checkin, nextIndex
-            ))
-            if (cachedCheckin?.manualArrival != checkin.manualArrival ||
-                cachedCheckin?.manualDeparture != checkin.manualDeparture
-            ) gpsJourneyTimes.invalidateLocation()
-            cachedCheckin = checkin
-            cachedStops = route
-            cachedFullStops = stops
-            revalidateSevStops(System.currentTimeMillis())
-            val trackingStops = toTrackingStops(route, checkin)
-            val existingEngine = engine
-            if (existingEngine == null) engine = StationTrackingEngine(trackingStops, radiusMeters = radiusMeters)
-            else existingEngine.updateRoute(trackingStops)
-            val currentEngine = engine ?: return@withLock
-            syncTransitRoutes(System.currentTimeMillis())
-            val relevantChanges = if (SevStopResolver.isReplacementBus(checkin))
-                changes.filterNot { it.kind == TripChangeKind.PLATFORM } else changes
-            deliverTripChanges(relevantChanges, statusId, expectedGeneration)
+            val currentMutation = repo.getStatusMutationSnapshot(statusId, session)
+            if (!activeStatusBridge.acceptsRead(snapshot.revision, currentMutation)) return@withLock
+            if (!adoptTripRoute(status, stops, snapshot.revision, statusId, expectedGeneration)) return@withLock
             if (!isCurrentTracking(statusId, expectedGeneration)) return@withLock
+            val currentEngine = engine ?: return@withLock
             currentEngine.setGpsEnabled(gpsPreferenceEnabled)
             latestLocation?.let(::observeLocation)
             val update = latestLocation?.takeIf { isFreshLocation(it) }?.let {
                 toFix(it)?.let { fix -> currentEngine.onLocation(fix, System.currentTimeMillis()) }
             } ?: currentEngine.onTimetable(System.currentTimeMillis())
             applyUpdate(update, statusId, expectedGeneration)
-            scheduleSevEnrichment(statusId, expectedGeneration, checkin, stops)
         }
+    }
+
+    private fun requestMutationRefresh(statusId: Int, expectedGeneration: Long) {
+        val session = currentAuthSession ?: return
+        if (mutationRefreshJob?.isActive == true) return
+        mutationRefreshJob = serviceScope.launch {
+            try { refreshTrip(statusId, expectedGeneration, session) }
+            catch (cancelled: CancellationException) { throw cancelled }
+            catch (_: Exception) { /* The regular poll retries an unverified replacement. */ }
+        }
+    }
+
+    /** Called while holding trackingMutex, including immediately before irreversible effects. */
+    private suspend fun ensureCurrentTripSnapshot(statusId: Int, expectedGeneration: Long): Boolean {
+        val session = currentAuthSession ?: return false
+        if (!isCurrentTracking(statusId, expectedGeneration) || prefs.getAuthSession() != session) return false
+        val committed = repo.getStatusMutationSnapshot(statusId, session)
+        if (activeStatusBridge.canPublish(committed)) return true
+        if (activeStatusBridge.wasDeleted(committed)) {
+            stopTracking(statusId, session)
+            return false
+        }
+        val replacement = activeStatusBridge.replacement(committed)
+        if (replacement != null && replacement.checkin?.trip == cachedCheckin?.trip &&
+            adoptTripRoute(replacement, cachedFullStops, committed.revision, statusId, expectedGeneration)) return false
+        // An incomplete PUT, ledger eviction or unknown trip cannot authorize the old target.
+        discardOldTripEffects()
+        mutableTrackingLiveState.value = null
+        requestMutationRefresh(statusId, expectedGeneration)
+        startTracking(statusId, session)
+        return false
+    }
+
+    private fun discardOldTripEffects() {
+        completionJob?.cancel()
+        completionJob = null
+        completionStatusId = null
+        completionUtteranceId = null
+        cancelQueuedSpeech(releaseCurrentAnnouncement = true)
+        pendingAnnouncement = null
+    }
+
+    private suspend fun adoptTripRoute(
+        status: Status, fullStops: List<StopStation>, revision: Long,
+        statusId: Int, expectedGeneration: Long
+    ): Boolean {
+        var replacement = prepareActiveTripRoute(status, fullStops, cachedCheckin, cachedStops, engine?.getProgress()) ?: return false
+        if (replacement.boundariesChanged) {
+            // Destination semantics belong to the route revision, even when the visit key survives.
+            discardOldTripEffects()
+            replacement = prepareActiveTripRoute(status, fullStops, cachedCheckin, cachedStops, engine?.getProgress()) ?: return false
+            sevJob?.cancel()
+            sevJob = null
+            clearRoadRoutes()
+            clearTransitRoutes()
+            gpsJourneyTimes.reset()
+        } else if (completionStatusId != null && activeStatusBridge.canPublish(
+                StatusMutationSnapshot(revision, null))) return false
+        val checkin = replacement.checkin
+        val nextIndex = replacement.rebasedProgress?.nextIndex ?: 0
+        val changes = tripChanges.observe(TripChangeSnapshot.fromApi(
+            statusId, SystemClock.elapsedRealtime(), replacement.rawStops, checkin, nextIndex))
+        if (cachedCheckin?.manualArrival != checkin.manualArrival || cachedCheckin?.manualDeparture != checkin.manualDeparture)
+            gpsJourneyTimes.invalidateLocation()
+        cachedCheckin = checkin
+        cachedStops = replacement.stops
+        cachedFullStops = replacement.fullStops
+        revalidateSevStops(System.currentTimeMillis())
+        val trackingStops = toTrackingStops(cachedStops, checkin)
+        if (engine == null || replacement.boundariesChanged)
+            engine = StationTrackingEngine(trackingStops, replacement.rebasedProgress ?: TrackingProgress(), radiusMeters)
+        else engine?.updateRoute(trackingStops)
+        if (activeStatusBridge.revision != revision) lastSavedJson = null
+        activeStatusBridge.adopt(revision)
+        syncTransitRoutes(System.currentTimeMillis())
+        persistCurrentTripSnapshot(statusId)
+        val relevantChanges = if (SevStopResolver.isReplacementBus(checkin)) changes.filterNot { it.kind == TripChangeKind.PLATFORM } else changes
+        deliverTripChanges(relevantChanges, statusId, expectedGeneration)
+        if (!isCurrentTracking(statusId, expectedGeneration)) return false
+        scheduleSevEnrichment(statusId, expectedGeneration, checkin, fullStops)
+        if (replacement.boundariesChanged) currentAuthSession?.let { startTracking(statusId, it) }
+        return true
     }
 
     private fun scheduleSevEnrichment(
@@ -1003,25 +1087,7 @@ class TripTrackingService : Service() {
         }
     }
 
-    private fun checkedInRoute(stops: List<StopStation>, checkin: CheckinInfo, applyManualTimes: Boolean = true): List<StopStation> {
-        val originIndex = stops.indexOfFirst { it.matchesStopover(checkin.origin) }
-        val destinationIndex = stops.indexOfFirst { it.matchesStopover(checkin.destination) }
-        // Never track unrelated parts of the trip if the check-in boundaries cannot be resolved.
-        if (originIndex < 0 || destinationIndex < originIndex) return emptyList()
-        val route = stops.subList(originIndex, destinationIndex + 1)
-        if (!applyManualTimes) return route
-        return route.map { stop ->
-            stop.copy(
-                departureReal = if (stop.matchesStopover(checkin.origin))
-                    checkin.manualDeparture ?: stop.departureReal else stop.departureReal,
-                arrivalReal = if (stop.matchesStopover(checkin.destination))
-                    checkin.manualArrival ?: stop.arrivalReal else stop.arrivalReal
-            )
-        }
-    }
-
-    private fun stopKey(stop: StopStation, index: Int): String = stop.uuid
-        ?: "${stop.stationId ?: "unknown"}:${stop.arrivalPlanned}:${stop.departurePlanned}:$index"
+    private fun stopKey(stop: StopStation, index: Int): String = activeTripStopKey(stop, index)
 
     private fun toTrackingStops(stops: List<StopStation>, checkin: CheckinInfo): List<TrackingStop> =
         stops.mapIndexed { index, stop ->
@@ -1230,6 +1296,7 @@ class TripTrackingService : Service() {
         if (!isCurrentTracking(statusId, expectedGeneration)) return
         val session = currentAuthSession ?: return
         if (prefs.getAuthSession() != session || !isCurrentTracking(statusId, expectedGeneration)) return
+        if (!ensureCurrentTripSnapshot(statusId, expectedGeneration)) return
         if (completionStatusId != null) return
         val checkin = cachedCheckin ?: return
         val nextStop = update.stop
@@ -1308,22 +1375,23 @@ class TripTrackingService : Service() {
         var queuedUtterance: String? = null
         update.announcement?.let { announcedStop ->
             val speechEnabled = prefs.getTtsEnabled()
-            if (!isCurrentTracking(statusId, expectedGeneration)) return
+            if (!isCurrentTracking(statusId, expectedGeneration) || !ensureCurrentTripSnapshot(statusId, expectedGeneration)) return
             if (speechEnabled && isTtsInitialized) queuedUtterance = speakStop(announcedStop, update.source)
+            if (!ensureCurrentTripSnapshot(statusId, expectedGeneration)) return
             if (queuedUtterance == null) {
                 engine?.releaseAnnouncement(announcedStop.key)
                 if (speechEnabled && !isTtsInitialized) pendingAnnouncement = announcedStop to update.source
             }
         }
         saveProgress(statusId)
-        if (!isCurrentTracking(statusId, expectedGeneration)) return
+        if (!isCurrentTracking(statusId, expectedGeneration) || !ensureCurrentTripSnapshot(statusId, expectedGeneration)) return
         if (update.destinationReached) {
             val existingDestinationUtterance = update.stop?.takeIf { it.isDestination }
                 ?.let { speechDeliveries.find(statusId, expectedGeneration, it.key)?.utteranceId }
             val activeQueuedUtterance = queuedUtterance?.takeIf(speechDeliveries::contains)
             if (activeQueuedUtterance != null || existingDestinationUtterance != null || pendingAnnouncement != null) {
                 awaitFinalSpeech(statusId, activeQueuedUtterance ?: existingDestinationUtterance)
-            } else stopTracking(statusId)
+            } else completeTracking(statusId)
         } else {
             scheduleRoadRoutes(statusId, expectedGeneration, progress, nowMillis)
             scheduleTransitRoute(statusId, expectedGeneration, nowMillis)
@@ -1335,16 +1403,26 @@ class TripTrackingService : Service() {
             currentAuthSession != null && currentAuthSession == observedAuthSession
 
     private suspend fun saveProgress(statusId: Int) {
+        val savingGeneration = generation
+        if (!ensureCurrentTripSnapshot(statusId, savingGeneration)) return
+        persistCurrentTripSnapshot(statusId)
+    }
+
+    private suspend fun persistCurrentTripSnapshot(statusId: Int) {
         val session = currentAuthSession ?: return
         val savingGeneration = generation
+        val revision = activeStatusBridge.revision ?: return
         val checkin = cachedCheckin ?: return
         val currentEngine = engine ?: return
         val json = gson.toJson(CachedTripTrackingState(statusId = statusId, checkin = checkin, stopovers = cachedStops,
             progress = currentEngine.getProgress(), changes = tripChanges.getState(), liveUpdateDismissed = liveUpdateDismissed,
             fullStopovers = cachedFullStops, sevMaps = cachedSevMaps))
         if (json != lastSavedJson) {
-            prefs.saveTrackingState(statusId, json, session)
-            if (isCurrentTracking(statusId, savingGeneration) && currentAuthSession == session) lastSavedJson = json
+            val saved = repo.withStatusRevision(statusId, session, revision) {
+                if (isCurrentTracking(statusId, savingGeneration) && activeStatusBridge.revision == revision)
+                    prefs.saveTrackingState(statusId, json, session)
+            }
+            if (saved && isCurrentTracking(statusId, savingGeneration) && currentAuthSession == session) lastSavedJson = json
         }
     }
 
@@ -1373,6 +1451,24 @@ class TripTrackingService : Service() {
     }
 
     private suspend fun speakStop(stop: TrackingStop, source: TrackingSource): String? {
+        val statusId = currentStatusId ?: return null
+        val session = currentAuthSession ?: return null
+        val expectedGeneration = generation
+        val revision = activeStatusBridge.revision ?: return null
+        var utterance: String? = null
+        val current = repo.withStatusRevision(statusId, session, revision) {
+            if (!isCurrentTracking(statusId, expectedGeneration) || activeStatusBridge.revision != revision) return@withStatusRevision
+            val checkin = cachedCheckin ?: return@withStatusRevision
+            val currentStop = toTrackingStops(cachedStops, checkin).firstOrNull { it.key == stop.key }
+            // The same visit can have changed from destination to an ordinary intermediate stop.
+            if (currentStop != stop) return@withStatusRevision
+            utterance = queueStopSpeech(stop, source)
+        }
+        if (!current) ensureCurrentTripSnapshot(statusId, expectedGeneration)
+        return utterance
+    }
+
+    private suspend fun queueStopSpeech(stop: TrackingStop, source: TrackingSource): String? {
         val statusId = currentStatusId ?: return null
         val expectedGeneration = generation
         speechDeliveries.find(statusId, expectedGeneration, stop.key)?.let { return it.utteranceId }
@@ -1492,7 +1588,7 @@ class TripTrackingService : Service() {
         completionJob = serviceScope.launch {
             delay(FINAL_SPEECH_TIMEOUT_MILLIS)
             trackingMutex.withLock {
-                if (completionStatusId == statusId && isCurrentTracking(statusId, completionGeneration)) stopTracking(statusId)
+                if (completionStatusId == statusId && isCurrentTracking(statusId, completionGeneration)) completeTracking(statusId)
             }
         }
     }
@@ -1500,8 +1596,25 @@ class TripTrackingService : Service() {
     private suspend fun completeAfterSpeech(utteranceId: String?) {
         val statusId = completionStatusId ?: return
         if (utteranceId != null && utteranceId == completionUtteranceId && currentStatusId == statusId) {
-            stopTracking(statusId)
+            completeTracking(statusId)
         }
+    }
+
+    private suspend fun completeTracking(statusId: Int) {
+        val session = currentAuthSession ?: return
+        val expectedGeneration = generation
+        if (!ensureCurrentTripSnapshot(statusId, expectedGeneration)) {
+            // A text/time edit may have been adopted by this callback. A changed target
+            // was rebased with completed=false and cannot pass the final check below.
+            if (!isCurrentTracking(statusId, expectedGeneration) || !activeStatusBridge.canPublish(
+                    repo.getStatusMutationSnapshot(statusId, session))) return
+        }
+        val revision = activeStatusBridge.revision ?: return
+        val completed = repo.withStatusRevision(statusId, session, revision) {
+            if (isCurrentTracking(statusId, expectedGeneration) && engine?.getProgress()?.completed == true)
+                stopTracking(statusId, session)
+        }
+        if (!completed) ensureCurrentTripSnapshot(statusId, expectedGeneration)
     }
 
     private fun requestAudioFocus(): Boolean {
@@ -1628,6 +1741,9 @@ class TripTrackingService : Service() {
         releaseTrackingWakeLock()
         generation++
         trackingJob?.cancel()
+        mutationRefreshJob?.cancel()
+        mutationRefreshJob = null
+        activeStatusBridge.clear()
         tickJob?.cancel()
         sevJob?.cancel()
         clearRoadRoutes()

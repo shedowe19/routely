@@ -67,7 +67,7 @@ Das eigene Profil lädt beim erneuten Einfügen der Composition weiterhin über 
 
 ## Offene Fragen
 
-- TODO: D11/P2 des [weiteren Main-Nachreviews](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) beheben: Ein vor Follow gestarteter Profilrefresh kann nach bestätigtem POST den Beziehungszustand wieder überschreiben. Der erhaltene Header lässt Follow während dieses GET zu. Eine ausgeführte Coroutineprobe bestätigt `following=false` nach zuvor bestätigtem `true`; Unfollow ist spiegelbildlich zu schützen. Profil-GET und bestätigte Followabsicht benötigen eine gemeinsame Revisionsgrenze beziehungsweise frische Verifikation.
+- D11 ist korrigiert: Profil-GETs tragen die Beziehungsrevision ihres Starts. Eine anschließend bestätigte Follow-/Unfollow-/Privatanfrage überlagert nur deren alte Beziehungsfelder; andere frisch geladene Profilfelder bleiben erhalten. Erst ein nach der Bestätigung gestarteter GET ist für die Beziehung wieder maßgeblich. Profil-/Sitzungswechsel verwerfen die alte Absicht; Fehler und notwendige Statusverifikation behalten ihre eigenen Grenzen. Regression: `UserProfileFollowOrderingTest`.
 - Fehler bleiben auch mit vorhandenem Profil sichtbar. Bei einem Paginationfehler pausiert automatisches Nachladen, statt ohne Nutzereingriff denselben fehlgeschlagenen Auftrag zu wiederholen.
 
 ## Verwandte Seiten

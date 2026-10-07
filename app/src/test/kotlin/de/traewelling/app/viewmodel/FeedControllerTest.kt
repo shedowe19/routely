@@ -26,11 +26,15 @@ class FeedControllerTest {
         val oldReply = CompletableDeferred<Result<StatusListResponse>>()
         api.dashboard = { withContext(NonCancellable) { oldReply.await() } }
         controller.refresh(); runCurrent()
+        val freshReply = CompletableDeferred<Result<StatusListResponse>>()
+        api.dashboard = { freshReply.await() }
         events.emit(StatusMutation.Deleted(session.revision, 1)); runCurrent()
         assertEquals(listOf(2), controller.uiState.value.statuses.map { it.id })
-        assertFalse(controller.uiState.value.isRefreshing)
+        assertTrue(controller.uiState.value.isRefreshing)
         oldReply.complete(Result.success(response(status(1), status(2)))); runCurrent()
         assertEquals(listOf(2), controller.uiState.value.statuses.map { it.id })
+        freshReply.complete(Result.success(response(status(2)))); runCurrent()
+        assertFalse(controller.uiState.value.isRefreshing)
     }
 
     @Test fun updatedCardReplacesItsLoadedSnapshotAndDoesNotInsertAnUnknownCard() = runTest {
@@ -89,6 +93,7 @@ class FeedControllerTest {
         val api = Gateway().apply { dashboard = { withContext(NonCancellable) { oldReply.await() } } }
         val controller = FeedController(backgroundScope, api, { session }, events)
         runCurrent(); controller.loadFeed(); runCurrent()
+        api.dashboard = { Result.success(response()) }
         events.emit(StatusMutation.Deleted(session.revision, 9)); runCurrent()
         oldReply.complete(Result.success(response(status(9)))); runCurrent()
         assertTrue(controller.uiState.value.statuses.isEmpty())

@@ -2,7 +2,7 @@
 
 ## Zweck und Prüfstand
 
-Aktueller Prüfstand: Der weitere Nachreview von Main `443d6e17af153d9b81fac8498fc04b9a93519437` bestätigt acht neue Befunde G8–G10, D9–D11 und U8–U9. Fünf parallele unabhängige Sichten und Root prüften den vollständigen Stand; gezielte Produktionsproben ergänzen die grüne reguläre Suite. Die historischen 16 Korrekturen und die auf Nutzerauftrag umgesetzten zwölf Befunde von `f406bad` bleiben erhalten. Die neuen Befunde sind dokumentiert und noch nicht korrigiert; in diesem Prüfauftrag wurde kein Produktivcode verändert.
+Aktueller Umsetzungsstand vom 07.10.2026: Alle acht zusätzlichen Befunde G8–G10/D9–D11/U8–U9 wurden auf Grundlage von Main `4f9cfd2c5c5bee92f4013f09273e0aff936be9aa` korrigiert. Sechs unabhängige Sichten und Root haben den vollständigen geänderten Stand erneut geprüft; alle zusätzlich konkret bestätigten Randfälle wurden im selben Durchlauf geschlossen. Die historischen 16 und zwölf früheren Korrekturen bleiben erhalten. Aktuelle Verträge und Prüfnachweise folgen unter [Umsetzung und Vollscan](#umsetzung-der-acht-befunde-und-erneuter-vollscan).
 
 Die folgenden ursprünglichen Abschnitte und die 16 Korrekturen sind historische Nachweise und bleiben als solche erhalten.
 
@@ -165,6 +165,37 @@ Nicht als neue bestätigte Defekte aufgenommen wurden ein hypothetischer ungült
 
 Aktualisiert wurden elf bestehende Seiten: `entwicklung/main-review-2026-10-06`, `entwicklung/tests`, `index`, `offene-fragen`, `api/traewelling-kompatibilitaet`, `module/gps-zeiten`, `module/trip-tracking`, `module/status-detail`, `module/feed`, `module/user-profile` und `module/checkin`. Gründe sind die neuen belegten Grenzen, getrennten Prüfnachweise und der aktualisierte Quellstand. Keine neue Seite oder ADR ist nötig, weil keine Implementierungsentscheidung getroffen wurde. Zusätzlich wurden Auth/PKCE, Secrets, Build/Deployment, Schemas, Profile, Notifications, Settings, UserSearch, RideRecognition, Widget, TripProgress, TripChanges, SEV/externe Schnittstellen sowie UI Screens/Komponenten und die früheren ADRs gegengeprüft; dort entsteht kein neuer eigener Vertrag. Alle 60 Seiten bleiben auf reale relative Linkziele und abschließende verwandte Seiten geprüft. Offene Code-TODOs sind G8–G10/D9–D11/U8–U9; Geräte-, TalkBack-, Backup-Restore- und signierte Release-Nachweise bleiben getrennt.
 
+## Umsetzung der acht Befunde und erneuter Vollscan
+
+Der Ausgangsstand wurde vollständig abgeglichen: Alle 264 Blobs und Dateimodi entsprechen Main `4f9cfd2` und Tree `1ea274650b2a8bc676d3f2ae516ad70bd52239bb`. Die lokale Checkpoint-Historie unterscheidet sich; veröffentlicht wird ausschließlich auf dem echten Remote-Main-Elterncommit. Es gibt keine Bibliotheks-, Endpunkt-, Datenbank- oder Releaseworkflowänderung.
+
+| Befund | Eingebaute Korrektur | Dauerhafte Prüfung |
+| --- | --- | --- |
+| D9 | Bestätigte Contentrevision für aktive Status-/Halt-/Routebasis, erneute Prüfung nach Suspensionen und geordnete Zielansage/Completion/Cachewrites; Contentcommit invalidiert die passende alte persistente Basis. | `ActiveTripStatusBridgeTest`, `StatusMutationRepositoryTest`, `AuthSessionTest` |
+| G8 | Kumulierte native Chainage auf unveränderter Formbasis plus frisches gerichtetes Paar; Qualitäts-, Gap-, Sprung- und Formwechsel starten Belege neu. | `GpsOrderedDepartureRegressionTest` |
+| G9 | Ausstehende physische Abfahrt bleibt über den exakt geordneten Nahhaltübergang erhalten, bis ein kompatibler Ausfahrtsfix sie belegt. | `GpsOrderedDepartureRegressionTest` |
+| G10 | Physische Ereignisbeobachtung läuft unabhängig von nullable Folgeankunft und zeitlicher Forecastzulässigkeit; ETA-Ablehnung bleibt erhalten. | `GpsOrderedDepartureRegressionTest` |
+| D10 | Aktueller Tab-/Seitenabruf wird nach Mutation oder lokalem Likeabschluss neu gestartet; Invalidated verlangt weiterhin Seite 1. | `FeedTabSwitchLikeTest`, `FeedControllerTest`, `FeedLikeOrderingTest` |
+| D11 | Beziehungsrevision schützt bestätigtes Follow/Unfollow/Privatanfrage vor älteren GETs, erhält andere neue Profilfelder und spätere GET-Autorität. | `UserProfileFollowOrderingTest` |
+| U8 | Herkunft der Zielauswahl entscheidet zwischen Stationssuche/Erkennung und tatsächlich geladener Abfahrtsliste. | `CheckInBackNavigationTest` |
+| U9 | Sichtbare Check-in-Page übernimmt normale Schritte; sichtbarer Main-Eintrag sperrt offene Erstellung auch nach Tabwechsel. Live-VM-Guard schützt den schnellen Back vor Recomposition. | `CheckInNavigationGuardTest`, suspendierter POST-/PUT-Test und statischer Composeabgleich |
+
+Die fachfremde Gegenprüfung bestätigte und schloss zusätzlich folgende konkrete Fälle:
+
+- Updated/Deleted müssen eine erste Tabladung oder Pagination ebenso wie LikeChanged erhalten. Bestätigte Likeabsicht darf nicht durch ein verspätetes eigenes Event vor einer alten Vollstatusantwort verloren gehen.
+- Zurück aus normalen Abfahrten erhält die bekannte gültige Station als Suchergebnis. Ein zurückbehaltener Stationsname mit geleerten Ergebnissen darf keine unbelegte „Kein Bahnhof gefunden“-Anzeige erzeugen.
+- Ein begrenztes Contentledger darf Likes nicht über einen Konto-Feedepoch zur aktiven Fahrtänderung erklären. Verifizierte Statusbaselines und konservative Eviktion trennen diese Fälle.
+- Bestätigter Ziel-PUT, Prozessneustart vor dem nächsten Tick und Offline-Start dürfen nicht regulär den alten persistenten Zielcache zurückholen. Commitinvalidierung und geordnete JSON-Schreibvorgänge schützen die passende Sitzung/Status-ID, während die aktive ID erhalten bleibt. Ein lokaler Speicherfehler ist ausdrücklich keine prozessübergreifende RAM-Garantie.
+- Nach Check-in-Erstellung kann eine getrennte Zeitkorrektur bestätigen, während StatusDetail noch Halte lädt. `StatusDetailRead` trägt die Revision bis nach diesem zweiten Endpoint, lädt höchstens zweimal neu und publiziert keinen alten Zeitstatus. Haltefehler und Sitzungs-Cancellation bleiben getrennt.
+
+Sechs unabhängige Sichten untersuchten GPS/Geometrie/ETA, Android-Service/Lifecycle/Audio, Daten/Auth/API/Cache, UI/Navigation/Zugänglichkeit, Release/Sicherheit und übergreifende Integration. Die finalen Quell-/Regressionabgleiche fanden keinen weiteren bestätigten erreichbaren Codebefund. Root prüfte die Änderungen, Dateibasis, Upstream und automatischen Berichte nochmals. Ein grüner Codevertrag beweist keine reale Android-Fahrt, System-Backzustellung oder OEM-Audiozustellung.
+
+62 dauerhafte Android-Regressionen ergänzen die bisherige Suite: GPS elf, Feed/Follow siebzehn, Check-in neun, Service/Repository/Preferences zwanzig und Detailabruf fünf. Eine alte Feed-Testfixture verwendete dieselbe alte Antwort auch für den neu gestarteten post-Commit-GET; der erste 788-Test-Lauf fand genau diese eine Assertion. Die korrigierte Fixture trennt beide Antworten, erhält den alten Schutzassert und prüft den neuen Server-Likecount. Die endgültigen tatsächlich ausgeführten Gesamtprüfungen stehen unter [Tests](./tests.md). Es gab keine echten Kontotokens, Träwelling-Schreibtests, signierte Veröffentlichung oder Geräteausführung.
+
+### Wiki-Abgleich der vollständigen Umsetzung
+
+Alle 61 Wiki-Seiten werden auf relative echte Linkziele und abschließende verwandte Seiten geprüft. Aktualisiert sind 15 bestehende Seiten: `api/traewelling-kompatibilitaet`, `architektur/datenfluss`, `architektur/entscheidungen`, `entscheidungen/README`, `entwicklung/main-review-2026-10-06`, `entwicklung/tests`, `index`, `module/checkin`, `module/feed`, `module/gps-zeiten`, `module/status-detail`, `module/trip-tracking`, `module/user-profile`, `offene-fragen` und `ui/screens`. Neu ist die [ADR aktive Fahrt und Beobachtungen](../entscheidungen/2026-10-07-aktive-fahrt-und-beobachtungen.md), weil Revision, Persistenz, physische Ereignisse und Navigationsbesitzer neue Architekturentscheidungen bilden. Auth/PKCE, Secrets, Build/Deployment, Schemas/Datenbank, Notifications, Profile, Settings, UserSearch, RideRecognition, Widget/TripProgress/TripChanges, SEV/externe Schnittstellen, UI-Komponenten/Theme und frühere ADRs wurden zusätzlich gegengeprüft; ihre eigenen Verträge brauchen keine weitere Änderung. Offene TODOs betreffen Geräte-/TalkBack-/Backup-Restore-/signierte Release-Nachweise und optionale Ausbauten, keine der acht beauftragten Korrekturen.
+
 ## Sinnvolle Verbesserungen nach den Fehlerkorrekturen
 
 - Unveränderte Notification-/Widget-Payloads unterdrücken. Der Service sendet sie derzeit bei jedem 10-Sekunden-Tick und GPS-Update bis alle drei Sekunden erneut; GPS-/Ansagefrequenz muss hierfür nicht sinken. Kein Akkugewinn wurde gemessen.
@@ -181,7 +212,7 @@ Aktualisiert wurden elf bestehende Seiten: `entwicklung/main-review-2026-10-06`,
 
 - Die historischen 16 Codebefunde sind korrigiert und gezielt abgesichert. Keine Schutzgrenze wurde zugunsten alter unrealistischer Testpositionen gelockert.
 - Alle zwölf zusätzlichen Befunde G5–G7, D4–D8, U5–U7 und R4 sowie konkret bestätigte Folgefälle sind korrigiert. Die erneute Gegenprüfung ist Bestandteil dieses Umsetzungsdurchlaufs; reine und praktische Prüfgrenzen bleiben getrennt.
-- TODO: Die acht neuen bestätigten Befunde G8–G10/D9–D11/U8–U9 des weiteren Nachreviews beheben und die oben belegten Trigger dauerhaft absichern. Zuerst den aktiven Zielwechsel D9, danach GPS-Fortschritt/Istabfahrt und Lade-/Backgrenzen bearbeiten.
+- Alle acht zusätzlichen Befunde und die konkret bestätigten Folgefälle sind korrigiert und dauerhaft abgesichert. Historische Fehlerproben oben bleiben als Ausgangsnachweis erhalten; der aktuelle Umsetzungs-/Vollscanstand steht im neuen Abschnitt.
 - TODO: System-/Compose-/Backup-Restore-Prüfungen und ersten neuen signierten Release ergänzen; die optionalen Ausbauideen sind keine verbleibenden Codebefunde dieses Reviews.
 - TODO: Reale GPS-/ETA-Güte, Samsung-Sperrbildschirm, Display-aus-/Doze-/Audiozustellung und Ressourcenverbrauch weiterhin auf einem Gerät prüfen. Der Review liefert hierfür keine Garantie.
 

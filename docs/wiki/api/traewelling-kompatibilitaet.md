@@ -24,6 +24,8 @@ Die Korrektur des Nachreviews lässt unveränderte Text-/Sichtbarkeitsfelder im 
 
 Beim weiteren [Review von Routely-Main 443d6e1](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) wurde Upstream `develop` erneut als `4d602796da8409017314cc771b1127d169155f02` und der gelesene Changelog als identischer Blob `151ba6f1c9e012f9a665eef2f733ee1114d73015` bestätigt. Keine neue Endpunktmigration ist belegt. D9–D11 betreffen zusätzliche Clientconsumer und Antwortreihenfolgen; G10 trennt nullable Zeit-/Forecastdaten von physischer Ereignisbeobachtung. Kein echter Kontotoken oder schreibender Liveauftrag wurde verwendet.
 
+Am 07.10.2026 wurden während der vollständigen Umsetzung G8–G10/D9–D11/U8–U9 Upstream-Ref und Changelog erneut gelesen: derselbe Commit `4d602796da8409017314cc771b1127d169155f02`, Changelog weiterhin Blob `151ba6f1c9e012f9a665eef2f733ee1114d73015`. Die zusätzlichen Client-Revisions-, Ereignis- und Ladegrenzen verändern keine Endpunkte oder produktiven Abhängigkeiten. Die Prüfung verwendet weiterhin keine echten Kontotokens und keine Träwelling-Schreibaufrufe.
+
 ## Wichtige Dateien
 
 - `app/src/main/kotlin/de/traewelling/app/data/api/TraewellingApiService.kt`

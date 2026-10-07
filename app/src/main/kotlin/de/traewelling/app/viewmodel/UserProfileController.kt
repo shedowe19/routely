@@ -41,8 +41,17 @@ internal class UserProfileController(
     private var followJob: Job? = null
     private var generation = 0L
     private var followGeneration = 0L
+    private var relationshipRevision = 0L
+    private var confirmedRelationship: ConfirmedRelationship? = null
     private var followError: String? = null
     private var needsStatusVerification = false
+
+    private data class ConfirmedRelationship(
+        val userId: Int,
+        val following: Boolean,
+        val pending: Boolean,
+        val revision: Long
+    )
 
     init {
         scope.observeProfileMutations(sessionProvider, mutations) { mutation ->
@@ -77,6 +86,7 @@ internal class UserProfileController(
         if (!sameProfile) {
             needsStatusVerification = false
             followError = null
+            confirmedRelationship = null
         }
         currentUsername = username
         _uiState.value = if (sameProfile) _uiState.value.copy(isLoading = true,
@@ -84,12 +94,23 @@ internal class UserProfileController(
 
         loadJob = scope.launch {
             val session = sessionProvider()
+            val requestRelationshipRevision = relationshipRevision
             val profile = repo.getUserProfile(username)
             coroutineContext.ensureActive()
             if (request != generation || sessionProvider() != session) return@launch
             profile
                 .onSuccess { user ->
-                    _uiState.update { it.copy(user = user) }
+                    val confirmed = confirmedRelationship
+                    val currentUser = if (confirmed != null && confirmed.userId == user.id &&
+                        confirmed.revision > requestRelationshipRevision) {
+                        // Preserve the accepted write while retaining other fresh profile fields.
+                        user.copy(following = confirmed.following, followPending = confirmed.pending)
+                    } else {
+                        // A profile GET dispatched after confirmation is authoritative again.
+                        confirmedRelationship = null
+                        user
+                    }
+                    _uiState.update { it.copy(user = currentUser) }
                 }
                 .onFailure { e ->
                     _uiState.update {
@@ -190,10 +211,12 @@ internal class UserProfileController(
                 } else {
                     false
                 }
+                confirmedRelationship = ConfirmedRelationship(userId, newFollowing, newPending,
+                    ++relationshipRevision)
                 _uiState.update {
                     it.copy(
                         isFollowLoading = false,
-                        user = user.copy(following = newFollowing, followPending = newPending)
+                        user = it.user?.copy(following = newFollowing, followPending = newPending)
                     )
                 }
             }.onFailure { e ->
@@ -217,6 +240,7 @@ internal class UserProfileController(
         currentUsername = null
         needsStatusVerification = false
         followError = null
+        confirmedRelationship = null
         _uiState.value = UserProfileUiState()
     }
 

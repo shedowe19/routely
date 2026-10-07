@@ -47,7 +47,14 @@ class CheckInNavigationGuardTest {
         runCurrent()
         assertEquals(1, posts)
         assertNull(resetCheckInState(state))
+        assertNull(previousCheckInState(state))
         assertTrue(state.hasPendingSubmission)
+        assertEquals(CheckInSystemBackAction.BLOCK_SUBMISSION, checkInSystemBackAction(state, true))
+        // Main owns the pending write even after switching to Feed. The composed
+        // offscreen Check-in page does not become a second navigation owner.
+        assertEquals(CheckInSystemBackAction.DEFER_TO_ACTIVITY, checkInSystemBackAction(state, false))
+        assertTrue(guardPendingCheckInSystemBack(state, isMainDestination = true))
+        assertFalse(guardPendingCheckInSystemBack(state, isMainDestination = false))
         assertTrue(job.isActive)
         createResponse.complete(CheckInResult(createdStatus, null))
         runCurrent()
@@ -55,9 +62,13 @@ class CheckInNavigationGuardTest {
         assertEquals(1, puts)
         assertEquals(CheckInStep.SUCCESS, state.step)
         assertNull(resetCheckInState(state))
+        assertNull(previousCheckInState(state))
+        assertTrue(guardPendingCheckInSystemBack(state, isMainDestination = true))
         correctionResponse.complete(createdStatus)
         job.join()
         assertFalse(state.hasPendingSubmission)
+        assertFalse(guardPendingCheckInSystemBack(state, isMainDestination = true))
+        assertEquals(CheckInSystemBackAction.DEFER_TO_ACTIVITY, checkInSystemBackAction(state, true))
         assertEquals(42, state.checkInResult?.status?.id)
         assertEquals(CheckInStep.STATION, resetCheckInState(state)?.step)
         assertEquals(1, posts)
@@ -78,5 +89,28 @@ class CheckInNavigationGuardTest {
         assertTrue(reset.activeRidePresent)
         assertSame(source.rideRecognition, reset.rideRecognition)
         assertEquals("", reset.statusBody)
+    }
+
+    @Test fun ordinaryBackIsOwnedOnlyByTheVisibleCheckInPage() {
+        for (step in listOf(CheckInStep.DEPARTURES, CheckInStep.DESTINATION, CheckInStep.CONFIRM)) {
+            val state = CheckInUiState(step = step)
+            assertEquals(CheckInSystemBackAction.STEP_BACK, checkInSystemBackAction(state, true))
+            assertEquals(CheckInSystemBackAction.DEFER_TO_ACTIVITY, checkInSystemBackAction(state, false))
+            assertFalse(guardPendingCheckInSystemBack(state, isMainDestination = true))
+        }
+        for (step in listOf(CheckInStep.STATION, CheckInStep.SUCCESS)) {
+            assertEquals(CheckInSystemBackAction.DEFER_TO_ACTIVITY,
+                checkInSystemBackAction(CheckInUiState(step = step), true))
+        }
+    }
+
+    @Test fun aCreateStartedBeforeTheNextUiFrameIsProtectedByTheCurrentStateReducer() {
+        val rendered = CheckInUiState(step = CheckInStep.CONFIRM)
+        assertEquals(CheckInSystemBackAction.STEP_BACK, checkInSystemBackAction(rendered, true))
+        // The already registered step callback uses goBack's live state check;
+        // an old rendered enabled flag is not permission to cancel the POST.
+        val submitted = rendered.copy(isLoading = true)
+        assertNull(previousCheckInState(submitted))
+        assertEquals(CheckInStep.CONFIRM, submitted.step)
     }
 }

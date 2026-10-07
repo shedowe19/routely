@@ -56,7 +56,7 @@ Ein durch `Invalidated` erforderlicher Verifikationsabruf bleibt als Auftrag erh
 
 ## Offene Fragen
 
-- TODO: D10/P2 des [weiteren Main-Nachreviews](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) beheben: Dashboard-Like offen, Globaltabwechsel startet dessen erste Ladung, alter Like bestätigt. Event und Likeabschluss brechen den neuen GET ab, setzen Busy zurück und ersetzen die benötigte Ladung nicht. Eine ausgeführte Coroutineprobe zeigt deshalb `[]` statt der vorhandenen Globalkarte. Tab-/Ladebesitzer und notwendiger Neuabruf müssen zusätzlich zu den bestehenden Like-/Cachegrenzen erhalten werden.
+- D10 ist korrigiert: Ein durch Statusmutation oder lokalen Likeabschluss unterbrochener Abruf behält Tab, Seite und Ersetzungs-/Refreshabsicht. Die aktuelle benötigte Ladung wird neu gestartet; alte Antworten bleiben generationsgebunden ausgeschlossen. Das gilt auch für Updated/Deleted während einer ersten Globaltabladung oder Pagination. Eine unvollständige PUT-Antwort fordert weiterhin vorrangig aktuelle Seite 1. Bestätigte Likeabsicht bleibt gegen verzögerte Vollstatusantworten geschützt, bis eine nach Bestätigung gestartete Ladung wieder maßgeblich ist. Regressionen: `FeedTabSwitchLikeTest` und `FeedControllerTest`.
 
 ## Verwandte Seiten
 

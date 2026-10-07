@@ -24,6 +24,11 @@ sealed class StatusMutation(open val sessionRevision: String, open val statusId:
         StatusMutation(sessionRevision, statusId)
 }
 
+/** A bounded, account-partitioned commit watermark, including when no replacement body exists. */
+internal data class StatusMutationSnapshot(val revision: Long, val mutation: StatusMutation?)
+
+internal data class StatusDetailSnapshot(val status: Status, val revision: Long)
+
 /** Shared by repository instances. Tests can supply a private store instead. */
 internal class StatusMutationStore {
     internal val cacheMutex = Mutex()
@@ -35,6 +40,10 @@ internal class StatusMutationStore {
         writeMutexes[((31 * accountKey.hashCode() + statusId) and Int.MAX_VALUE) % writeMutexes.size]
     internal var cacheRevision = 0L // Read and written only while holding cacheMutex.
     private val accountRevisions = mutableMapOf<String, Long>()
+    private val contentMutations = linkedMapOf<Pair<String, Int>, StatusMutationSnapshot>()
+    private var contentRevision = 0L
+    private val accountContentRevisions = mutableMapOf<String, Long>()
+    private var contentEpochOverflow = false
     private var epochOverflow = false
     private val invalidCacheTypes = mutableSetOf<String>()
     private var offlineCacheDisabled = false
@@ -47,6 +56,33 @@ internal class StatusMutationStore {
 
     internal fun revisionFor(accountKey: String): Long =
         if (epochOverflow) cacheRevision else accountRevisions[accountKey] ?: 0L
+
+    /** Likes cannot erase an unconsumed destination edit. Access is protected by cacheMutex. */
+    internal fun recordContentMutation(accountKey: String, event: StatusMutation) {
+        if (event is StatusMutation.LikeChanged) return
+        ++contentRevision
+        if (!contentEpochOverflow) {
+            accountContentRevisions[accountKey] = contentRevision
+            if (accountContentRevisions.size > 64) { accountContentRevisions.clear(); contentEpochOverflow = true }
+        }
+        val key = accountKey to event.statusId
+        contentMutations.remove(key)
+        contentMutations[key] = StatusMutationSnapshot(contentRevision, event)
+        while (contentMutations.size > 64) contentMutations.remove(contentMutations.keys.first())
+    }
+
+    internal fun contentSnapshot(accountKey: String, statusId: Int): StatusMutationSnapshot =
+        contentMutations[accountKey to statusId]
+            // Eviction conservatively invalidates a previously held read/model, rather than
+            // treating the missing ledger entry as proof that no mutation happened.
+            ?: StatusMutationSnapshot(if (contentEpochOverflow) contentRevision else accountContentRevisions[accountKey] ?: 0L, null)
+
+    /** A verified GET installs a per-status baseline, without erasing an unconsumed full PUT. */
+    internal fun rememberContentBaseline(accountKey: String, statusId: Int, revision: Long) {
+        val key = accountKey to statusId
+        if (key !in contentMutations) contentMutations[key] = StatusMutationSnapshot(revision, null)
+        while (contentMutations.size > 64) contentMutations.remove(contentMutations.keys.first())
+    }
 
     internal fun invalidate(accountKey: String, types: List<String>) {
         ++cacheRevision

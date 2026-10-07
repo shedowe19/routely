@@ -98,6 +98,13 @@ internal object AuthSessionPreferences {
         return true
     }
 
+    /** A committed content edit invalidates this session's route cache, preserving the active ID. */
+    fun invalidateTrackingState(prefs: MutablePreferences, statusId: Int, expected: AuthSession): Boolean {
+        if (read(prefs) != expected || prefs[activeStatusId]?.toIntOrNull() != statusId) return false
+        prefs.remove(trackingState)
+        return true
+    }
+
     fun setRecognitionEnabled(prefs: MutablePreferences, enabled: Boolean, expected: AuthSession?): Boolean {
         if (expected != null && read(prefs) != expected) return false
         prefs[recognitionEnabled] = enabled

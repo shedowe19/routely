@@ -6,6 +6,8 @@ Kurze Zusammenfassung technischer Entscheidungen, für die es eventuell keine ei
 
 ## Entscheidungen
 
+- **Aktive Fahrt und Ereignisse vom 07.10.2026**: Bestätigte Statusrevision begrenzt die aktive Route und automatische Zielaktionen; physische GPS-Abfahrt bleibt von der ETA-Zulässigkeit getrennt. Ladebesitzer, Followabsicht und sichtbare System-Zurück-Grenzen sind in der [ADR aktive Fahrt und Beobachtungen](../entscheidungen/2026-10-07-aktive-fahrt-und-beobachtungen.md) begründet.
+
 - **Nachreview-Korrekturen vom 06.10.2026**: Fachzustand und Composition-Beobachtung bleiben getrennt; Schreibaufträge werden je Credential/Status geordnet, MarkAll benötigt einen neuen Serversnapshot und Android-Versionen erhalten dauerhafte Create-only-Claims. Begründung und Grenzen stehen in der [ADR Nachreview-Korrekturen](../entscheidungen/2026-10-06-nachreview-korrekturen.md).
 
 - **Befundkorrekturen vom 06.10.2026**: Monotone Standortbelege, plausible Bewegung vor physischen Übergängen, reaktive begrenzte Laufzeitwiederaufnahme, Editor-Anfangsabsicht, Mutationsepochen sowie unveränderliche neue Releases werden in der [ADR GPS-, Mutations- und Releasezustände](../entscheidungen/2026-10-06-befundkorrekturen.md) zusammenhängend begründet.

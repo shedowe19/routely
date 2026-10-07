@@ -201,6 +201,163 @@ class StatusMutationRepositoryTest {
         assertTrue(store.revisionFor("account-0") > before)
     }
 
+    @Test fun detailReadStartedBeforeDestinationMutationCannotReturnItsOldSnapshot() = runBlocking {
+        val fixture = Fixture()
+        val entered = CompletableDeferred<Unit>()
+        val reply = CompletableDeferred<Response<SingleStatusResponse>>()
+        fixture.statusResponse = { entered.complete(Unit); reply.await() }
+        val reading = async { fixture.newRepository().getStatusDetail(42) }
+        entered.await()
+        fixture.repo.updateStatus(42, UpdateStatusRequest(body = "new destination")).getOrThrow()
+        reply.complete(Response.success(SingleStatusResponse(status("old destination"))))
+        assertTrue(reading.await().isFailure)
+        assertFalse(reading.isCancelled)
+    }
+
+    @Test fun detailSnapshotRetainsARevisionForTheSubsequentStopoverWait() = runBlocking {
+        val fixture = Fixture()
+        val detail = fixture.repo.getStatusDetailSnapshot(42).getOrThrow()
+        fixture.repo.updateStatus(42, UpdateStatusRequest(body = "edited while stopovers load")).getOrThrow()
+        val current = fixture.repo.getStatusMutationSnapshot(42, alice)
+        assertNotEquals(detail.revision, current.revision)
+        assertEquals("edited while stopovers load", (current.mutation as StatusMutation.Updated).status.body)
+    }
+
+    @Test fun aLikeCannotEraseTheUnconsumedFullDestinationMutation() = runBlocking {
+        val fixture = Fixture()
+        fixture.repo.updateStatus(42, UpdateStatusRequest(body = "changed destination")).getOrThrow()
+        val update = fixture.repo.getStatusMutationSnapshot(42, alice)
+        fixture.repo.likeStatus(42).getOrThrow()
+        fixture.repo.unlikeStatus(42).getOrThrow()
+        assertEquals(update, fixture.repo.getStatusMutationSnapshot(42, alice))
+    }
+
+    @Test fun unrelatedLikesCannotPauseAnUneditedActiveTripEvenWithoutALedgerEntry() = runBlocking {
+        val fixture = Fixture()
+        val before = fixture.repo.getStatusMutationSnapshot(42, alice)
+        fixture.repo.likeStatus(99).getOrThrow()
+        fixture.repo.unlikeStatus(42).getOrThrow()
+        assertEquals(before, fixture.repo.getStatusMutationSnapshot(42, alice))
+        assertEquals(0L, before.revision)
+    }
+
+    @Test fun aVerifiedBaselineIgnoresOtherTripsContentUpdates() = runBlocking {
+        val fixture = Fixture()
+        val before = fixture.repo.getStatusDetailSnapshot(42).getOrThrow()
+        fixture.repo.updateStatus(99, UpdateStatusRequest(body = "other ride")).getOrThrow()
+        assertEquals(before.revision, fixture.repo.getStatusMutationSnapshot(42, alice).revision)
+        fixture.repo.updateStatus(42, UpdateStatusRequest(body = "active ride")).getOrThrow()
+        assertNotEquals(before.revision, fixture.repo.getStatusMutationSnapshot(42, alice).revision)
+    }
+
+    @Test fun automaticCompletionWaitsForAnAlreadyDispatchedPutAndRejectsTheOldRevision() = runBlocking {
+        val fixture = Fixture()
+        val old = fixture.repo.getStatusDetailSnapshot(42).getOrThrow()
+        val entered = CompletableDeferred<Unit>()
+        val reply = CompletableDeferred<Response<SingleStatusResponse>>()
+        fixture.updateResponse = { _, _ -> entered.complete(Unit); reply.await() }
+        val editing = async { fixture.repo.updateStatus(42, UpdateStatusRequest(body = "extended target")) }
+        entered.await()
+        var cleared = false
+        val completion = async { fixture.newRepository().withStatusRevision(42, alice, old.revision) { cleared = true } }
+        yield()
+        assertFalse(completion.isCompleted)
+        reply.complete(Response.success(SingleStatusResponse(status("extended target"))))
+        editing.await().getOrThrow()
+        assertFalse(completion.await())
+        assertFalse(cleared)
+    }
+
+    @Test fun destinationClearAndANewerDispatchedEditCannotOvertakeEachOther() = runBlocking {
+        val fixture = Fixture()
+        val revision = fixture.repo.getStatusDetailSnapshot(42).getOrThrow().revision
+        val entered = CompletableDeferred<Unit>()
+        val release = CompletableDeferred<Unit>()
+        val completion = async { fixture.repo.withStatusRevision(42, alice, revision) { entered.complete(Unit); release.await() } }
+        entered.await()
+        val editing = async { fixture.newRepository().updateStatus(42, UpdateStatusRequest(body = "later edit")) }
+        yield()
+        assertEquals(0, fixture.puts)
+        release.complete(Unit)
+        assertTrue(completion.await())
+        editing.await().getOrThrow()
+        assertEquals(1, fixture.puts)
+    }
+
+    @Test fun incompletePutInvalidatesTheOldDetailRevisionUntilANewReadSucceeds() = runBlocking {
+        val fixture = Fixture()
+        val before = fixture.repo.getStatusDetailSnapshot(42).getOrThrow()
+        fixture.updateResponse = { _, _ -> Response.success(SingleStatusResponse(null)) }
+        assertTrue(fixture.repo.updateStatus(42, UpdateStatusRequest(body = "accepted without body")).isFailure)
+        val committed = fixture.repo.getStatusMutationSnapshot(42, alice)
+        assertTrue(committed.mutation is StatusMutation.Invalidated)
+        assertNotEquals(before.revision, committed.revision)
+        fixture.statusResponse = { Response.success(SingleStatusResponse(status("verified fresh target"))) }
+        val verified = fixture.repo.getStatusDetailSnapshot(42).getOrThrow()
+        assertEquals(committed.revision, verified.revision)
+        assertEquals("verified fresh target", verified.status.body)
+    }
+
+    @Test fun contentLedgerEvictionCannotMakeAnOlderTrackingRevisionCurrent() {
+        val store = StatusMutationStore()
+        store.invalidate("alice", emptyList())
+        store.recordContentMutation("alice", StatusMutation.Updated(alice.revision, status("first")))
+        val first = store.contentSnapshot("alice", 42)
+        repeat(65) { index ->
+            store.invalidate("alice", emptyList())
+            store.recordContentMutation("alice", StatusMutation.Updated(alice.revision, status(id = 100 + index)))
+        }
+        val evicted = store.contentSnapshot("alice", 42)
+        assertNull(evicted.mutation)
+        assertTrue(evicted.revision > first.revision)
+        assertEquals(0L, store.contentSnapshot("bob", 42).revision)
+    }
+
+    @Test fun committedEditInvalidatesThePersistedOldRouteBeforeReturningOrPublishing() = runBlocking {
+        val fixture = Fixture()
+        val before = fixture.repo.getStatusDetailSnapshot(42).getOrThrow()
+        var persisted: String? = "old-target"
+        val invalidationEntered = CompletableDeferred<Unit>()
+        val releaseInvalidation = CompletableDeferred<Unit>()
+        fixture.trackingInvalidator = { id, owner ->
+            assertEquals(42, id); assertEquals(alice, owner)
+            invalidationEntered.complete(Unit)
+            releaseInvalidation.await()
+            persisted = null
+        }
+        val event = async(start = CoroutineStart.UNDISPATCHED) { fixture.store.events.first() }
+        val editing = async { fixture.repo.updateStatus(42, UpdateStatusRequest(body = "new-target")) }
+        invalidationEntered.await()
+        assertFalse(editing.isCompleted)
+        assertFalse(event.isCompleted)
+        releaseInvalidation.complete(Unit)
+        editing.await().getOrThrow()
+        assertNull(persisted)
+        assertTrue(event.await() is StatusMutation.Updated)
+        assertFalse(fixture.repo.withStatusRevision(42, alice, before.revision) { persisted = "stale-late-write" })
+        assertNull(persisted)
+    }
+
+    @Test fun anAlreadyStartedCacheWriteFinishesBeforeThePutInvalidatesIt() = runBlocking {
+        val fixture = Fixture()
+        val revision = fixture.repo.getStatusDetailSnapshot(42).getOrThrow().revision
+        var persisted: String? = null
+        fixture.trackingInvalidator = { _, _ -> persisted = null }
+        val writing = CompletableDeferred<Unit>()
+        val releaseWrite = CompletableDeferred<Unit>()
+        val save = async { fixture.repo.withStatusRevision(42, alice, revision) {
+            writing.complete(Unit); releaseWrite.await(); persisted = "old-target"
+        } }
+        writing.await()
+        val editing = async { fixture.repo.updateStatus(42, UpdateStatusRequest(body = "new-target")) }
+        yield()
+        assertEquals(0, fixture.puts)
+        releaseWrite.complete(Unit)
+        assertTrue(save.await())
+        editing.await().getOrThrow()
+        assertNull(persisted)
+    }
+
     private inner class Fixture {
         val dao = Dao()
         val store = StatusMutationStore()
@@ -209,6 +366,7 @@ class StatusMutationRepositoryTest {
         var offline = false
         var posts = 0
         var puts = 0
+        var trackingInvalidator: suspend (Int, AuthSession) -> Unit = { _, _ -> }
         var feedResponse: suspend () -> Response<StatusListResponse> = {
             if (offline) throw IOException("offline")
             feed(feedBody)
@@ -217,10 +375,14 @@ class StatusMutationRepositoryTest {
         var updateResponse: suspend (Int, UpdateStatusRequest) -> Response<SingleStatusResponse> = { id, request ->
             Response.success(SingleStatusResponse(status(request.body ?: "updated", id)))
         }
+        var statusResponse: suspend () -> Response<SingleStatusResponse> = { Response.success(SingleStatusResponse(status())) }
         private val api = object : TraewellingApiService by unusedService() {
             override suspend fun getDashboard(page: Int) = feedResponse()
             override suspend fun getGlobalFeed(page: Int) = feedResponse()
+            override suspend fun getStatus(id: Int) = statusResponse()
             override suspend fun deleteStatus(id: Int) = deleteResponse()
+            override suspend fun likeStatus(id: Int) = Response.success(Unit)
+            override suspend fun unlikeStatus(id: Int) = Response.success(Unit)
             override suspend fun updateStatus(id: Int, request: UpdateStatusRequest): Response<SingleStatusResponse> {
                 puts++
                 return updateResponse(id, request)
@@ -230,7 +392,8 @@ class StatusMutationRepositoryTest {
                 return Response.success(201, CheckInResponse(null))
             }
         }
-        fun newRepository() = TraewellingRepository(dao, { session }, { api }, store)
+        fun newRepository() = TraewellingRepository(dao, { session }, { api }, store,
+            { id, owner -> trackingInvalidator(id, owner) })
         val repo = newRepository()
     }
 

@@ -27,16 +27,28 @@ class FeedLikeOrderingTest {
         controller.loadFeed()
         runCurrent()
         val staleGet = CompletableDeferred<Result<StatusListResponse>>()
-        gateway.dashboard = { staleGet.await() }
+        val freshGet = CompletableDeferred<Result<StatusListResponse>>()
+        var reads = 0
+        gateway.dashboard = {
+            if (++reads == 1) withContext(NonCancellable) { staleGet.await() }
+            else freshGet.await()
+        }
         controller.refresh()
         runCurrent()
         controller.likeStatus(1)
         runCurrent()
         assertEquals(1, gateway.likeCalls)
         assertEquals(true, controller.uiState.value.statuses.single().liked)
+        assertEquals("A confirmed Like must restart the interrupted read", 2, reads)
         staleGet.complete(Result.success(response()))
         runCurrent()
         assertTrue("A GET begun before the successful Like must preserve liked=true", controller.uiState.value.statuses.single().liked == true)
+        assertTrue(controller.uiState.value.isRefreshing)
+        freshGet.complete(Result.success(response(liked = true, likes = 5)))
+        runCurrent()
+        assertEquals(true, controller.uiState.value.statuses.single().liked)
+        assertEquals("The fresh server snapshot supplies the authoritative count", 5,
+            controller.uiState.value.statuses.single().likes)
     }
 
     @Test fun aGetCompletingDuringALikeMustNotMakeTheNextTapSendAnotherLike() = runTest {

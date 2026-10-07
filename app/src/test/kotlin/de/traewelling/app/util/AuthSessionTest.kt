@@ -155,4 +155,30 @@ class AuthSessionTest {
         assertEquals(true, prefs[keys.recognitionEnabled])
         assertTrue(keys.setRecognitionEnabled(prefs, false, current))
     }
+
+    @Test fun committedContentEditInvalidatesOnlyItsActiveRouteAndPreservesTheActiveId() {
+        val prefs = mutablePreferencesOf()
+        keys.saveValidated(prefs, "https://a.example", "token-a", "alice")
+        val session = keys.read(prefs)
+        keys.saveActiveStatusIdIfMatches(prefs, session, 42)
+        keys.saveTrackingState(prefs, 42, "old-target", session)
+        assertFalse(keys.invalidateTrackingState(prefs, 99, session))
+        assertEquals("old-target", prefs[keys.trackingState])
+        assertTrue(keys.invalidateTrackingState(prefs, 42, session))
+        assertNull(prefs[keys.trackingState])
+        assertEquals("42", prefs[keys.activeStatusId])
+    }
+
+    @Test fun lateCacheInvalidationCannotTouchTheSameNumericRideAfterRelogin() {
+        val prefs = mutablePreferencesOf()
+        keys.saveValidated(prefs, "https://a.example", "token-a", "alice")
+        val old = keys.read(prefs)
+        keys.saveValidated(prefs, old.serverUrl, old.accessToken!!, "alice")
+        val current = keys.read(prefs)
+        keys.saveActiveStatusIdIfMatches(prefs, current, 42)
+        keys.saveTrackingState(prefs, 42, "new-session-route", current)
+        assertFalse(keys.invalidateTrackingState(prefs, 42, old))
+        assertEquals("new-session-route", prefs[keys.trackingState])
+        assertEquals("42", prefs[keys.activeStatusId])
+    }
 }

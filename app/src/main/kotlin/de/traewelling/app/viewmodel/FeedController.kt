@@ -40,10 +40,18 @@ internal class FeedController(
     private val _uiState = MutableStateFlow(FeedUiState())
     val uiState: StateFlow<FeedUiState> = _uiState.asStateFlow()
     private var loadJob: Job? = null
+    private var pendingLoad: FeedLoad? = null
     private var generation = 0L
     private var needsMutationVerification = false
     private var likeRevision = 0L
     private val likeIntents = mutableMapOf<Int, LikeIntent>()
+
+    private data class FeedLoad(
+        val feedType: FeedType,
+        val page: Int,
+        val replaceFeed: Boolean,
+        val refresh: Boolean
+    )
 
     private class LikeIntent(
         val liked: Boolean,
@@ -62,9 +70,11 @@ internal class FeedController(
                 val session = sessionProvider()
                 coroutineContext.ensureActive()
                 if (session.accessToken == null || mutation.sessionRevision != session.revision) return@collect
+                val interruptedLoad = pendingLoad
                 // No GET started before a successful write may resurrect its old card.
                 ++generation
                 loadJob?.cancel()
+                pendingLoad = null
                 if (mutation is StatusMutation.Invalidated) needsMutationVerification = true
                 _uiState.update { state ->
                     val statuses = when (mutation) {
@@ -83,11 +93,7 @@ internal class FeedController(
                         is StatusMutation.LikeChanged -> state.statuses.map { existing ->
                             if (existing.id != mutation.statusId) existing
                             else if (existing.id in likeIntents) {
-                                val replacement = overlayLike(existing, recordBaseline = false)
-                                val intent = likeIntents[existing.id]
-                                if (intent?.confirmedAt != null && intent.liked == mutation.liked)
-                                    likeIntents.remove(existing.id)
-                                replacement
+                                overlayLike(existing, recordBaseline = false)
                             }
                             else existing.copy(liked = mutation.liked,
                                 likes = adjustedLikes(existing, mutation.liked))
@@ -98,6 +104,7 @@ internal class FeedController(
                 // A following successful write can cancel the verification GET before its removed
                 // card returns. Retain the requirement until a fresh feed actually arrives.
                 if (needsMutationVerification) refresh()
+                else interruptedLoad?.let(::startLoad)
             }
         }
     }
@@ -108,22 +115,29 @@ internal class FeedController(
         val feedType = _uiState.value.feedType
         val replaceFeed = refresh || needsMutationVerification
         val page = if (replaceFeed) 1 else _uiState.value.currentPage
+        startLoad(FeedLoad(feedType, page, replaceFeed, refresh))
+    }
+
+    private fun startLoad(load: FeedLoad) {
+        if (load.feedType != _uiState.value.feedType) return
         val request = ++generation
         val requestLikeRevision = likeRevision
         loadJob?.cancel()
+        pendingLoad = load
         _uiState.update {
-            it.copy(isLoading = !refresh, isRefreshing = refresh, error = null)
+            it.copy(isLoading = !load.refresh, isRefreshing = load.refresh, error = null)
         }
 
         loadJob = scope.launch {
             val session = sessionProvider()
-            val result = when (feedType) {
-                FeedType.DASHBOARD -> gateway.getDashboard(page)
-                FeedType.GLOBAL    -> gateway.getGlobalFeed(page)
+            val result = when (load.feedType) {
+                FeedType.DASHBOARD -> gateway.getDashboard(load.page)
+                FeedType.GLOBAL    -> gateway.getGlobalFeed(load.page)
             }
             coroutineContext.ensureActive()
             if (request != generation || sessionProvider() != session) return@launch
 
+            pendingLoad = null
             result.onSuccess { response ->
                 val fetched = response.data.orEmpty().map { status ->
                     val intent = likeIntents[status.id]
@@ -134,7 +148,7 @@ internal class FeedController(
                         status
                     } else overlayLike(status)
                 }
-                val newStatuses = if (replaceFeed || page == 1) {
+                val newStatuses = if (load.replaceFeed || load.page == 1) {
                     fetched
                 } else {
                     _uiState.value.statuses + fetched
@@ -150,7 +164,7 @@ internal class FeedController(
                         isRefreshing = false,
                         statuses     = newStatuses.distinctBy { status -> status.id },
                         hasMore      = hasMore,
-                        currentPage  = (meta?.currentPage ?: page) + 1,
+                        currentPage  = (meta?.currentPage ?: load.page) + 1,
                         error        = null
                     )
                 }
@@ -174,6 +188,7 @@ internal class FeedController(
         if (type == _uiState.value.feedType) return
         ++generation
         loadJob?.cancel()
+        pendingLoad = null
         // Confirmed values need no permanent per-card ledger: new feed requests are authoritative.
         // Keep only still-submitted intents, which must survive a tab switch until they finish.
         likeIntents.entries.removeAll { it.value.confirmedAt != null }
@@ -202,12 +217,15 @@ internal class FeedController(
                 if (sessionProvider() != session || likeIntents[statusId] !== intent) return@launch
                 if (result.isSuccess) {
                     intent.confirmedAt = ++likeRevision
+                    val interruptedLoad = pendingLoad
                     // The repository also rejects/cancels old GETs and invalidates their Room cache.
-                    // Clear the corresponding busy state even when that GET exited by cancellation.
+                    // Keep its page/tab owner so an initial load or pagination is not abandoned.
                     ++generation
                     loadJob?.cancel()
+                    pendingLoad = null
                     _uiState.update { it.copy(isLoading = false, isRefreshing = false) }
                     if (needsMutationVerification) refresh()
+                    else interruptedLoad?.let(::startLoad)
                 } else {
                     likeIntents.remove(statusId)
                     updateStatusInList(statusId) {

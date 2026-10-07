@@ -1,5 +1,6 @@
 package de.traewelling.app.ui.navigation
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
@@ -77,7 +78,16 @@ fun MainNavigation(
     ) {
         composable(Screen.Main.route) {
             val notificationState by notificationViewModel.uiState.collectAsState()
+            val checkInState by checkInViewModel.uiState.collectAsState()
+            val mainDestination by navController.currentBackStackEntryAsState()
+            val isMainDestination = mainDestination?.destination?.route == Screen.Main.route
             val unreadCount = notificationState.unreadCount
+
+            // The visible Main entry owns a pending write, even on another pager tab.
+            // Other NavHost destinations keep their ordinary back-stack navigation.
+            BackHandler(enabled = guardPendingCheckInSystemBack(checkInState, isMainDestination)) {
+                checkInViewModel.goBack()
+            }
 
             val tabs = listOf(Screen.Feed, Screen.CheckIn, Screen.Notifications, Screen.Profile)
             val pagerState = rememberPagerState(pageCount = { tabs.size })
@@ -145,7 +155,8 @@ fun MainNavigation(
                             CheckInScreen(
                                 checkInViewModel,
                                 onStartRideRecognition = onStartRideRecognition,
-                                onStopRideRecognition = onStopRideRecognition
+                                onStopRideRecognition = onStopRideRecognition,
+                                isCurrentPage = isMainDestination && pagerState.currentPage == page
                             )
                         }
                         Screen.Notifications -> {

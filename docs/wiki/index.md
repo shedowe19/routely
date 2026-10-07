@@ -8,7 +8,7 @@ Der Main-Audit vom 06.10.2026 ergänzt die bestehenden Verträge für [Sitzungen
 
 Die zwölf zusätzlichen Befunde des [Nachreviews von Main f406bad](./entwicklung/main-review-2026-10-06.md) sind vollständig korrigiert und erneut unabhängig gegengeprüft. Historische Nachweise bleiben erhalten; aktuelle Schutzverträge und ausgeführte Ergebnisse stehen bei den Modulen und unter [Tests](./entwicklung/tests.md).
 
-Der weitere [Nachreview von Main 443d6e1](./entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) bestätigt acht neue offene Fälle beim aktiven Zielwechsel, GPS-Fortschritt/Istabfahrten, Tab-/Followantworten und Check-in-Zurücknavigation. Reguläre Suite und gezielte Fehlerproben bleiben getrennt. Dieser Durchlauf dokumentiert Befunde; Produktivcode wurde nicht verändert.
+Die acht zusätzlichen Befunde des [weiteren Nachreviews](./entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) sind am 07.10.2026 vollständig korrigiert: aktive Ziel-/Fahrtrevision, GPS-Fortschritt/Istabfahrt, Feed-/Followantworten und Check-in-Zurücknavigation. Sechs unabhängige Sichten und Root haben den vollständigen Stand nach der Umsetzung erneut geprüft; bestätigte zusätzliche Grenzfälle wurden im selben Durchlauf geschlossen. Dauerhafte Regressionen und Prüfgrenzen stehen unter [Tests](./entwicklung/tests.md), Entscheidungen in der [ADR aktive Fahrt und Beobachtungen](./entscheidungen/2026-10-07-aktive-fahrt-und-beobachtungen.md).
 
 ## Projekt
 

@@ -14,6 +14,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
 enum class CheckInStep { STATION, DEPARTURES, DESTINATION, CONFIRM, SUCCESS }
+enum class CheckInDestinationSource { DEPARTURE_SELECTION, RIDE_RECOGNITION }
 
 data class CheckInUiState(
     val step: CheckInStep = CheckInStep.STATION,
@@ -29,6 +30,7 @@ data class CheckInUiState(
     val selectedDeparture: DepartureTrip? = null,
     val selectedTripDetails: TripDetails? = null,
     val filteredDestinations: List<StopStation> = emptyList(),
+    val destinationSource: CheckInDestinationSource = CheckInDestinationSource.DEPARTURE_SELECTION,
     // Selected destination stopover; station identity lives in station
     val selectedDestination: StopStation? = null,
     // Optional status message
@@ -109,6 +111,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                 selectedDeparture = ride.departure.copy(station = originStation),
                 selectedTripDetails = ride.trip, resolvedOriginStop = origin,
                 filteredDestinations = destinations, selectedDestination = null,
+                destinationSource = CheckInDestinationSource.RIDE_RECOGNITION,
                 isLoading = false, error = null, stationQuery = originStation.name.orEmpty()
             ) }
         }
@@ -283,6 +286,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                             selectedStation      = origin,
                             filteredDestinations = filteredStopovers,
                             resolvedOriginStop   = if (finalOriginIdx != -1) stopovers[finalOriginIdx] else null,
+                            destinationSource    = CheckInDestinationSource.DEPARTURE_SELECTION,
                             step                 = CheckInStep.DESTINATION
                         )
                     }
@@ -417,21 +421,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         selectionGeneration++
         searchJob?.cancel()
         selectionJob?.cancel()
-        _uiState.update { state ->
-            val idleState = state.copy(isLoading = false, error = null)
-            when (state.step) {
-                CheckInStep.DEPARTURES  -> idleState.copy(
-                    step = CheckInStep.STATION, selectedStation = null, departures = emptyList()
-                )
-                CheckInStep.DESTINATION -> idleState.copy(
-                    step = CheckInStep.DEPARTURES, selectedDeparture = null, selectedTripDetails = null, resolvedOriginStop = null
-                )
-                CheckInStep.CONFIRM     -> idleState.copy(
-                    step = CheckInStep.DESTINATION, selectedDestination = null
-                )
-                else -> idleState
-            }
-        }
+        _uiState.update { state -> previousCheckInState(state) ?: state }
     }
 
     fun clearError() = _uiState.update { it.copy(error = null) }

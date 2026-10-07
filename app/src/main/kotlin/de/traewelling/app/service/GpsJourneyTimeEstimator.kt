@@ -99,6 +99,10 @@ class GpsJourneyTimeEstimator {
     private data class RoadShape(val from: RoutePoint, val to: RoutePoint, val alternatives: List<List<RoutePoint>>,
                                  val source: GpsGeometrySource)
     private data class RoadProjection(val projection: Projection?, val ambiguous: Boolean = false)
+    private data class DepartureBasis(
+        val fromKey: String, val toKey: String, val from: RoutePoint, val to: RoutePoint,
+        val points: List<RoutePoint>?
+    )
 
     private var baseline: List<Baseline>? = null
     private var highestFixTime: Long? = null
@@ -120,6 +124,9 @@ class GpsJourneyTimeEstimator {
     private val arrivals = mutableMapOf<String, ArrivalCandidate>()
     private val observed = mutableMapOf<String, ObservedVisit>()
     private val segmentSamples = ArrayDeque<SegmentSample>()
+    // A close-stop cursor handover can occur while still inside the preceding
+    // arrival radius. Its physical exit must remain provable by later fixes.
+    private var pendingDepartureBasis: DepartureBasis? = null
 
     @Synchronized
     fun reset() {
@@ -233,6 +240,19 @@ class GpsJourneyTimeEstimator {
         }
         val insideStation = distance(currentFix.latitude, currentFix.longitude, stop.latitude!!, stop.longitude!!) +
             currentFix.accuracyMeters <= ARRIVAL_RADIUS_METERS
+        // Physical observation has no dependency on the timed forecast's plan
+        // markers or 90-minute limit. It still needs a compatible fresh pair
+        // on the ordered incoming section and a confirmed preceding dwell.
+        val arrivalEndpoint = progress.arrivedAtCurrent && insideStation && lastVisitKey == stop.key
+        val roadProjection = if (usesPolyline && roadSegment != null)
+            projectRoad(roadSegment, currentFix, arrivalEndpoint) else null
+        val projection = if (usesPolyline) roadProjection?.projection
+            else previousStop?.let { project(it, stop, currentFix, arrivalEndpoint) }
+        val compatible = previousStop != null && projection != null &&
+            compatibleProgress(previousStop, stop, previousFix, currentFix, projection, arrivalEndpoint)
+        if (previousStop != null && projection != null && compatible) {
+            observeDeparture(previousStop, stop, previousFix, currentFix, projection)
+        } else pendingDepartureBasis = null
         val observedArrival = observeArrival(stop, progress.arrivedAtCurrent, currentFix, insideStation)
         var offset: Long? = null
         var offsetFromSegment = false
@@ -254,14 +274,6 @@ class GpsJourneyTimeEstimator {
             } else unavailable = GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
             segmentSamples.clear()
         } else if (previousStop != null) {
-            // An arriving train can stop just beyond the stop centroid. Only an
-            // established approach to this same visit may use the inner arrival
-            // zone while its slow-fix/dwell observation is being confirmed.
-            val arrivalEndpoint = progress.arrivedAtCurrent && insideStation && lastVisitKey == stop.key
-            val roadProjection = if (usesPolyline && roadSegment != null)
-                projectRoad(roadSegment, currentFix, arrivalEndpoint) else null
-            val projection = if (usesPolyline) roadProjection?.projection
-                else project(previousStop, stop, currentFix, arrivalEndpoint)
             val departure = previousStop.plannedDepartureMillis
             val arrival = stop.plannedArrivalMillis
             val supportedRoute = coordinates(previousStop) && departure != null && arrival != null &&
@@ -269,8 +281,6 @@ class GpsJourneyTimeEstimator {
                 (if (usesPolyline) roadSegment != null else
                     distance(previousStop.latitude!!, previousStop.longitude!!, stop.latitude!!, stop.longitude!!) in
                         MIN_SEGMENT_METERS..MAX_SEGMENT_METERS)
-            val compatible = projection != null &&
-                compatibleProgress(previousStop, stop, previousFix, currentFix, projection, arrivalEndpoint)
             unavailable = when {
                 usesPolyline && roadSegment == null -> GpsTimeUnavailableReason.ROUTE_GEOMETRY_UNAVAILABLE
                 !supportedRoute -> GpsTimeUnavailableReason.ROUTE_UNSUPPORTED
@@ -288,9 +298,6 @@ class GpsJourneyTimeEstimator {
                 selectedRoadPath = projection.path
                 activeGeometrySource = projectionSource
                 compatiblePosition = true
-                // A station exit can precede the forecast window on a long
-                // segment; capture that event at the engine's visit transition.
-                observeDeparture(previousStop, stop, previousFix, currentFix, projection)
                 if (!progress.arrivedAtCurrent && projection.fraction in MIN_SEGMENT_FRACTION..MAX_SEGMENT_FRACTION) {
                     offset = observeSegment(stop.key, currentFix, projection)?.let { supported ->
                         currentFix.timeMillis - (departure + ((arrival - departure) * supported.fraction).roundToLong())
@@ -504,9 +511,24 @@ class GpsJourneyTimeEstimator {
         previousStop: TrackingStop, currentStop: TrackingStop, previous: LocationFix?,
         fix: LocationFix, projection: Projection
     ) {
-        val actual = observed[previousStop.key] ?: return
-        if (actual.departure != null || previous == null || lastVisitKey != previousStop.key ||
-            previousStop.plannedDepartureMillis == null || projection.fraction <= 0.0) return
+        val actual = observed[previousStop.key] ?: run {
+            pendingDepartureBasis = null
+            return
+        }
+        if (actual.departure != null || previous == null || previousStop.plannedDepartureMillis == null ||
+            projection.fraction <= 0.0) {
+            pendingDepartureBasis = null
+            return
+        }
+        val basis = DepartureBasis(previousStop.key, currentStop.key,
+            RoutePoint(previousStop.latitude!!, previousStop.longitude!!),
+            RoutePoint(currentStop.latitude!!, currentStop.longitude!!), projection.path?.points)
+        if (lastVisitKey == previousStop.key) {
+            pendingDepartureBasis = basis
+        } else if (lastVisitKey != currentStop.key || pendingDepartureBasis != basis) {
+            pendingDepartureBasis = null
+            return
+        }
         val immediatePrior = projectSamePath(previousStop, currentStop, previous, projection) ?: return
         if (projection.fraction <= immediatePrior.fraction) return
         val anchor = actual.departureAnchor
@@ -518,6 +540,7 @@ class GpsJourneyTimeEstimator {
             // This is the time of a supported departure observation, not the
             // exact moment a vehicle's doors closed or its wheels first moved.
             actual.departure = fix.timeMillis
+            pendingDepartureBasis = null
         }
     }
 
@@ -554,6 +577,7 @@ class GpsJourneyTimeEstimator {
         lastVisitKey = null
         arrivals.clear()
         observed.clear()
+        pendingDepartureBasis = null
     }
 
     /** A projection basis changes forecasts, never the separately confirmed stop events. */

@@ -101,6 +101,9 @@ class StationTrackingEngine(
                                      val from: RoutePoint?, val to: RoutePoint?, val points: List<RoutePoint>?)
     private var movementBasis: MovementBasis? = null
     private var movementBasisSinceMillis = 0L
+    // Consecutive supported pairs can each be shorter than the departure
+    // threshold. Accumulate chainage only on this same physical section/form.
+    private var railMovementAnchor: LocationFix? = null
     private val releasedAnnouncements = mutableSetOf<String>()
 
     private data class RecoveryCandidate(
@@ -188,6 +191,7 @@ class StationTrackingEngine(
         recoveryPending = false
         recoveryCandidate = null
         movementBasis = null
+        railMovementAnchor = null
         resetObservation()
     }
 
@@ -199,6 +203,7 @@ class StationTrackingEngine(
         recoveryEligible = gpsEnabled && !state.completed
         recoveryCandidate = null
         movementBasis = null
+        railMovementAnchor = null
         resetObservation()
     }
 
@@ -259,6 +264,7 @@ class StationTrackingEngine(
         if (latestAcceptedFixMillis?.let { fix.timeMillis <= it } == true) return onTimetable(nowMillis)
         if (!isReliable(fix, nowMillis)) {
             recoveryCandidate = null
+            railMovementAnchor = null
             return onTimetable(nowMillis)
         }
 
@@ -271,6 +277,7 @@ class StationTrackingEngine(
             // movement bound as re-acquisition. Keep the last supported position
             // so an outlier cannot become the reference for the following fix.
             recoveryCandidate = null
+            railMovementAnchor = null
             return TrackingUpdate(currentStop(), TrackingSource.TIMETABLE)
         }
         // A gap invalidates the approach trend, not the persisted visit cursor.
@@ -282,6 +289,7 @@ class StationTrackingEngine(
             resetObservation()
             recoveryEligible = !state.completed
             recoveryCandidate = null
+            railMovementAnchor = null
             gapPassCandidateKey = candidate
             observedKey = candidate
         }
@@ -296,6 +304,7 @@ class StationTrackingEngine(
             if (anchored || state.nextIndex == 0) establishGpsCursor()
         }
         observeMovementBasis(fix, nowMillis)
+        observeRailMovement(oldFix, fix, nowMillis)
         var advanced = false
         if (mayBootstrapOrigin && oldFix != null) {
             advanced = bootstrapDepartedOrigin(oldFix, fix, nowMillis)
@@ -619,7 +628,8 @@ class StationTrackingEngine(
             val remaining = pair.second.length - from
             if ((fromOrigin > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
                     remaining + 2 * fix.accuracyMeters < from) &&
-                (pair.second.fraction - pair.first.fraction) * pair.second.length >= supportedMovement &&
+                cumulativeRailMovement(rail, pair.second) >= supportedMovement &&
+                (pair.second.fraction - pair.first.fraction) * pair.second.length >= trendChange &&
                 fromOrigin - priorFromOrigin >= trendChange) {
                 establishGpsCursor()
                 advance()
@@ -685,7 +695,8 @@ class StationTrackingEngine(
             val remaining = pair.second.length - from
             if ((fromStop > DEPARTURE_RADIUS_METERS + fix.accuracyMeters ||
                     remaining + 2 * fix.accuracyMeters < from) &&
-                (pair.second.fraction - pair.first.fraction) * pair.second.length >= movement &&
+                cumulativeRailMovement(rail, pair.second) >= movement &&
+                (pair.second.fraction - pair.first.fraction) * pair.second.length >= trendChange &&
                 fromStop - priorFromStop >= trendChange) {
                 establishGpsCursor()
                 advance()
@@ -756,8 +767,10 @@ class StationTrackingEngine(
         if (rail != null) {
             val pair = directedRailPair(rail, previous, fix) ?: return false
             val progress = pair.second.fraction * pair.second.length
-            val movement = (pair.second.fraction - pair.first.fraction) * pair.second.length
-            return movement >= max(DEPARTURE_INCREASE_METERS,
+            val movement = cumulativeRailMovement(rail, pair.second)
+            val freshMovement = (pair.second.fraction - pair.first.fraction) * pair.second.length
+            return freshMovement >= max(5.0, fix.accuracyMeters * 0.1) &&
+                movement >= max(DEPARTURE_INCREASE_METERS,
                 (fix.accuracyMeters + previous.accuracyMeters) / 2) &&
                 pair.second.length - progress + 2 * fix.accuracyMeters < progress
         }
@@ -802,6 +815,7 @@ class StationTrackingEngine(
         val basis = MovementBasis(from.key, to.key, first, last, points)
         if (basis != movementBasis) {
             movementBasis = basis
+            railMovementAnchor = null
             // The first new fix on a changed projection basis cannot reuse an
             // earlier fix as its second departure/shortcut observation.
             movementBasisSinceMillis = fix.timeMillis
@@ -810,6 +824,43 @@ class StationTrackingEngine(
 
     private fun hasMovementOnCurrentBasis(previous: LocationFix): Boolean =
         movementBasis != null && previous.timeMillis >= movementBasisSinceMillis
+
+    private fun observeRailMovement(previous: LocationFix?, fix: LocationFix, nowMillis: Long) {
+        val from = currentStop() ?: return
+        val to = route.drop(state.nextIndex + 1).firstOrNull { !it.cancelled } ?: return
+        val segment = railSegment(from, to, nowMillis) ?: run {
+            railMovementAnchor = null
+            return
+        }
+        val path = segment.paths.singleOrNull()
+        if (path == null) {
+            railMovementAnchor = null
+            return
+        }
+        val current = TrackingRouteGeometry.project(path, fix).projection
+        if (current == null) {
+            railMovementAnchor = null
+            return
+        }
+        val pair = previous?.takeIf(::hasMovementOnCurrentBasis)?.let {
+            directedRailPair(segment, it, fix)
+        }
+        val anchor = railMovementAnchor
+        if (pair == null || anchor == null ||
+            TrackingRouteGeometry.project(path, anchor).projection == null) {
+            // The first supported fix after a gap, bad fix, backwards pair or
+            // changed form starts new evidence; it never borrows an old pair.
+            railMovementAnchor = fix
+        }
+    }
+
+    private fun cumulativeRailMovement(segment: TrackingRouteGeometry.Segment,
+                                       current: TrackingRouteGeometry.Projection): Double {
+        val anchor = railMovementAnchor ?: return 0.0
+        val path = segment.paths.singleOrNull() ?: return 0.0
+        val first = TrackingRouteGeometry.project(path, anchor).projection ?: return 0.0
+        return (current.fraction - first.fraction) * current.length
+    }
 
     private fun directedRailPair(segment: TrackingRouteGeometry.Segment, previous: LocationFix,
                                  fix: LocationFix): Pair<TrackingRouteGeometry.Projection, TrackingRouteGeometry.Projection>? {

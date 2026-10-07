@@ -144,16 +144,24 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     private suspend fun loadSnapshot(statusId: Int, request: Long, showLoading: Boolean) {
-        val result = repo.getStatusDetail(statusId)
+        val session = prefs.getAuthSession()
+        val result = readConsistentStatusDetail(
+            readStatus = { repo.getStatusDetailSnapshot(statusId) },
+            readStopovers = repo::getStopovers,
+            isCurrentRevision = { revision ->
+                repo.getStatusMutationSnapshot(statusId, session).revision == revision
+            }
+        )
         coroutineContext.ensureActive()
         if (currentStatusId != statusId || request != loadGeneration) return
-        val status = result.getOrElse { error ->
+        val snapshot = result.getOrElse { error ->
             if (showLoading) _uiState.update {
-                it.copy(isLoading = false, error = "Status nicht gefunden: ${error.message}")
+                it.copy(isLoading = false, error = "Fahrt konnte nicht geladen werden: ${error.message}")
             }
             return
         }
-        val stopsResult = status.checkin?.trip?.let { repo.getStopovers(it) }
+        val status = snapshot.status
+        val stopsResult = snapshot.stopovers
         coroutineContext.ensureActive()
         if (currentStatusId != statusId || request != loadGeneration) return
         _uiState.update { state ->

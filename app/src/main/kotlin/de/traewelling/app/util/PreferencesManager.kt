@@ -231,6 +231,10 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { AuthSessionPreferences.saveTrackingState(it, statusId, stateJson, expectedSession) }
     }
 
+    suspend fun invalidateTrackingState(statusId: Int, expectedSession: AuthSession) {
+        context.dataStore.edit { AuthSessionPreferences.invalidateTrackingState(it, statusId, expectedSession) }
+    }
+
     suspend fun clearActiveTracking(statusId: Int, expectedSession: AuthSession? = null): Boolean {
         var cleared = false
         context.dataStore.edit { cleared = AuthSessionPreferences.clearActiveTracking(it, statusId, expectedSession) }

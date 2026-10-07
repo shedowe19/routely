@@ -319,6 +319,18 @@ Danach wurden alle fünf temporären Quelldateien entfernt; alle 264 ursprüngli
 
 U8 (Zurück nach erkanntem Einstieg) ist statisch am echten Navigationszustand belegt. U9 (System-Zurück während Check-in-POST) kombiniert zwei unabhängige Codesichten mit dem [Android-Primärvertrag](https://developer.android.com/guide/components/activities/tasks-and-back-stack#back-tap-behavior-for-root-launcher-activities): Root-Back beendet Activity bis Android 11, ab Android 12 verschiebt es regulär in den Hintergrund. Keine Android-8–11-Emulator-/Geräteausführung wurde durchgeführt. Abgeschickte manuelle Zeit-PUTs bleiben durch den neuen NonCancellable-Schreibabschluss geschützt. Details und Prioritäten aller acht Befunde stehen im [weiteren Main-Review](./main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1).
 
+## Vollständige Umsetzung der acht Befunde vom 07.10.2026
+
+Die endgültige, aus bereinigtem `app/build` neu kompilierte Suite besteht **788 Android-Unit-Tests in 62 Klassen**, ohne Fehler, Fehlschläge oder übersprungene Tests. Gegenüber Main `4f9cfd2` sind 62 dauerhafte Regressionen ergänzt: GPS elf, Feed/Follow siebzehn, Check-in neun, Service/Repository/Preferences zwanzig und Detailabruf fünf. Die JUnit-XML-Berichte wurden unabhängig gezählt; die 198 eingefrorenen Quell-/Test-/Konfigurationsdateien blieben während des abschließenden Builds SHA-256-identisch.
+
+Der vollständige Lauf `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease --no-build-cache --max-workers=2 -Pkotlin.incremental=false` besteht nach **3 Minuten 54 Sekunden**; 108 Tasks, 107 ausgeführt und eine unveränderte Generierungsaufgabe aktuell. Debug-Lint meldet **0 Fehler und 43 Warnungen**. Debug-APK und **unsignierte** Release-APK sowie Release-Vital-Lint sind erfolgreich. Kein signierter Release oder schreibender Träwelling-Aufruf wurde ausgeführt.
+
+Alle **56 Offline-Python-Releaseguardtests** wurden im unabhängigen Sicherheits-/Releasevollscan erneut erfolgreich ausgeführt. Der finale Quellscan aus sechs unabhängigen Sichten plus Root bestätigt keine weiteren erreichbaren Codebefunde. Kontrollierte Fälle umfassen das echte Parser→Engine→Estimator-Zusammenspiel, Statuswrite-/Cache-/Completionreihenfolge, verzögerte Feed-/Followantworten und StatusDetailrevision bis nach Stopover-GET.
+
+Der erste kompilierte 788-Test-Lauf hatte einen Fehlschlag in einer bestehenden Feed-Testfixture: Deren alte Deferred-Antwort wurde auch dem neu nach Likebestätigung gestarteten GET gegeben. Die korrigierte Fixture trennt alten und frischen Request, behält den Schutzassert unverändert und prüft zusätzlich den frischen Likecount. Der oben angegebene vollständige Neuaufbau enthält diese Korrektur und keine temporären Klassen.
+
+System-/Gesten-Zurück auf API 26–30, echte Android-Prozess-/Speicher-/Restoreabläufe, Doze/OEM/TTS, TalkBack und GPS-Güte bleiben praktisch zu prüfen. JVM-Tests behaupten keine solche Zustellung. Aktuelle Verträge, zusätzlicher Randfallabgleich und Wiki-Pflege stehen im [Umsetzungs-/Vollscanbericht](./main-review-2026-10-06.md#umsetzung-der-acht-befunde-und-erneuter-vollscan).
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.

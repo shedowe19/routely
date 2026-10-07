@@ -156,7 +156,7 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 ## Offene Fragen
 
-- TODO: D9/P1 des [weiteren Main-Nachreviews](../entwicklung/main-review-2026-10-06.md#weiterer-nachreview-von-main-443d6e1) betrifft erfolgreiche Zielbearbeitung während aktiver Begleitung: Detail und Feed übernehmen den PUT, der Service behält zunächst die alte Zielrolle und schützt seinen GET nicht gegen die Statusmutation. Normale Ankunft am alten Ziel kann die Begleitung beenden. Status-/Halt-/Geometriebasis im Service mutationsgebunden übernehmen; ein Aktualisieren nur der Detailansicht genügt nicht.
+- D9 wird durch die gemeinsame Mutationsrevision und den aktiven Serviceverbraucher abgesichert: Ein bestätigter Ziel-PUT ist für die Begleitung eine neue Fahrtbasis. `StatusDetailRead` trägt die typisierte Revision über den nachfolgenden Halteabruf; eine dort inzwischen bestätigte Check-in-Zeitkorrektur führt zu einem begrenzten neuen Abruf statt Veröffentlichung des alten Status. Höchstens zwei Versuche verhindern eine unendliche Ladung bei fortlaufenden Änderungen. Haltefehler behalten den kompatiblen Rückfall, Sitzungsabbruch bleibt Cancellation. Regression: `StatusDetailReadTest`. Vor der Mutation begonnene Detailantworten werden nicht übernommen. Detaildarstellung und aktive Halt-/Geometrie-/Abschlussbasis werden getrennt geprüft; der genaue Servicevertrag steht unter [TripTracking](./trip-tracking.md).
 
 - TODO: EditStatusDialog Layout dokumentieren
 

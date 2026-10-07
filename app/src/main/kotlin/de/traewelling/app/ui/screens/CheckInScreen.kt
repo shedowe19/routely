@@ -14,6 +14,7 @@ import androidx.compose.runtime.*
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
@@ -34,6 +35,9 @@ import de.traewelling.app.ui.theme.SuccessGreen
 import de.traewelling.app.viewmodel.CheckInStep
 import de.traewelling.app.viewmodel.CheckInUiState
 import de.traewelling.app.viewmodel.CheckInViewModel
+import de.traewelling.app.viewmodel.CheckInSystemBackAction
+import de.traewelling.app.viewmodel.checkInSystemBackAction
+import de.traewelling.app.viewmodel.hasPendingSubmission
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -42,9 +46,15 @@ import java.time.format.DateTimeFormatter
 fun CheckInScreen(
     viewModel: CheckInViewModel,
     onStartRideRecognition: () -> Unit = {},
-    onStopRideRecognition: () -> Unit = {}
+    onStopRideRecognition: () -> Unit = {},
+    isCurrentPage: Boolean = true
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    // This callback already exists in CONFIRM before its POST starts. goBack reads the
+    // current VM state, so a Back event before recomposition cannot cancel the write.
+    BackHandler(enabled = checkInSystemBackAction(uiState, isCurrentPage) == CheckInSystemBackAction.STEP_BACK) {
+        viewModel.goBack()
+    }
     
     val title = when (uiState.step) {
         CheckInStep.STATION -> "Check-in"
@@ -63,7 +73,7 @@ fun CheckInScreen(
                 navigationIcon = {
                     if (showBack) {
                         IconButton(onClick = viewModel::goBack,
-                            enabled = !(uiState.step == CheckInStep.CONFIRM && uiState.isLoading)) {
+                            enabled = !uiState.hasPendingSubmission) {
                             Icon(Icons.AutoMirrored.Filled.ArrowBack, "Zurück")
                         }
                     }

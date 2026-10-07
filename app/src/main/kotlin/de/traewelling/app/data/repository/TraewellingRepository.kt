@@ -14,6 +14,7 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.sync.withLock
 import retrofit2.HttpException
 import retrofit2.Response
@@ -25,7 +26,8 @@ class TraewellingRepository internal constructor(
     private val statusDao: StatusDao,
     private val sessionProvider: suspend () -> AuthSession,
     private val apiFactory: (AuthSession) -> TraewellingApiService,
-    private val mutations: StatusMutationStore
+    private val mutations: StatusMutationStore,
+    private val invalidateTrackingState: suspend (Int, AuthSession) -> Unit = { _, _ -> }
 ) {
     internal constructor(statusDao: StatusDao, sessionProvider: suspend () -> AuthSession,
         apiFactory: (AuthSession) -> TraewellingApiService) :
@@ -35,7 +37,9 @@ class TraewellingRepository internal constructor(
         AppDatabase.getDatabase(context).statusDao(),
         prefs::getAuthSession,
         { session -> RetrofitClient.createApiService(session.serverUrl,
-            session.accessToken?.takeIf { it.isNotBlank() } ?: error("Not authenticated")) }
+            session.accessToken?.takeIf { it.isNotBlank() } ?: error("Not authenticated")) },
+        StatusMutationEvents.store,
+        prefs::invalidateTrackingState
     )
 
     private val gson = Gson()
@@ -186,6 +190,13 @@ class TraewellingRepository internal constructor(
                 // Even a late committed response invalidates its original credential partition.
                 // A new revision may reuse those credentials, but may not revive this old cache.
                 mutations.invalidate(cacheType("account", session), types)
+                mutations.recordContentMutation(cacheType("account", session), event)
+                if (event !is StatusMutation.LikeChanged) {
+                    // Prevent a restart from restoring the old target before its next fresh GET.
+                    // Local cleanup remains bounded and cannot make a committed PUT retryable.
+                    try { withTimeout(15_000) { invalidateTrackingState(event.statusId, session) } }
+                    catch (_: Exception) { /* The in-memory revision still blocks the old target. */ }
+                }
                 for (type in types) {
                     // The server already committed. A storage error must not turn that into a retryable mutation.
                     try { statusDao.clearStatuses(type) } catch (_: Exception) { /* Invalid cache remains blocked. */ }
@@ -306,9 +317,45 @@ class TraewellingRepository internal constructor(
 
     // ─── Status Detail ────────────────────────────────────────────────────────
 
-    suspend fun getStatusDetail(statusId: Int): Result<Status> = apiResult {
-        val r = api().getStatus(statusId)
-        r.body()?.data ?: error("Status nicht gefunden (${r.code()})")
+    suspend fun getStatusDetail(statusId: Int): Result<Status> =
+        getStatusDetailSnapshot(statusId).map { it.status }
+
+    internal suspend fun getStatusMutationSnapshot(statusId: Int, expectedSession: AuthSession): StatusMutationSnapshot {
+        requireCurrentSession(expectedSession)
+        return mutations.cacheMutex.withLock {
+            requireCurrentSession(expectedSession)
+            mutations.contentSnapshot(cacheType("account", expectedSession), statusId).let { snapshot ->
+                snapshot.copy(mutation = snapshot.mutation?.takeIf { it.sessionRevision == expectedSession.revision })
+            }
+        }
+    }
+
+    internal suspend fun getStatusDetailSnapshot(statusId: Int): Result<StatusDetailSnapshot> = apiResult {
+        val session = authenticatedSession()
+        val before = getStatusMutationSnapshot(statusId, session)
+        val response = apiFactory(session).getStatus(statusId)
+        if (!response.isSuccessful) throw HttpException(response)
+        val status = response.body()?.data?.takeIf { it.id == statusId }
+            ?: error("Status nicht gefunden (${response.code()})")
+        mutations.cacheMutex.withLock {
+            requireCurrentSession(session)
+            val accountKey = cacheType("account", session)
+            val after = mutations.contentSnapshot(accountKey, statusId)
+            // A normal failed snapshot lets pollers retry; it must not cancel their owning loop.
+            check(before.revision == after.revision) { "Fahrt wurde während des Abrufs geändert. Bitte erneut aktualisieren." }
+            mutations.rememberContentBaseline(accountKey, statusId, after.revision)
+            StatusDetailSnapshot(status, after.revision)
+        }
+    }
+
+    /** A dispatched edit finishes before an automatic destination action may clear its trip. */
+    internal suspend fun withStatusRevision(
+        statusId: Int, expectedSession: AuthSession, revision: Long, action: suspend () -> Unit
+    ): Boolean = mutations.writeMutex(cacheType("account", expectedSession), statusId).withLock {
+        requireCurrentSession(expectedSession)
+        if (getStatusMutationSnapshot(statusId, expectedSession).revision != revision) return@withLock false
+        action()
+        true
     }
 
     suspend fun getStopovers(tripId: Int): Result<List<StopStation>> = apiResult {
