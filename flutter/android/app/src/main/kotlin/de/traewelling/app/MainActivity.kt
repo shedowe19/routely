@@ -99,6 +99,11 @@ class MainActivity : FlutterActivity() {
                 manager.requestLocationUpdates(provider, 0L, 0f, listener, mainLooper)
                 subscribed = true
             } catch (_: SecurityException) {
+                val precise = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val approximate = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                // Older Android requires FINE for GPS even when NETWORK is
+                // usable with COARSE. A rejected provider is not a full revoke.
+                if (TrackingContract.permitsLocation(precise, approximate)) continue
                 // Permission can be revoked between the visible preflight and
                 // this registration. Retire any earlier provider as well.
                 cancelOneLocation()

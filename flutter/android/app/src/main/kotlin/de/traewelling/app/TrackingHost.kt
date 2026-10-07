@@ -427,6 +427,12 @@ class TrackingService : Service(), LocationListener {
                     subscribed = true
                 }
             } catch (_: SecurityException) {
+                val precise = checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val approximate = checkSelfPermission(Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+                val recognition = TrackingHost.current()["mode"] == "recognition"
+                // Preserve any permitted provider, including coarse GPS on
+                // newer Android. Recognition cannot downgrade to COARSE.
+                if (TrackingContract.permitsLocation(precise, approximate, recognition)) continue
                 // Revocation may race with startForeground and the permission
                 // preflight. Remove partial subscriptions before falling back.
                 runCatching { manager.removeUpdates(this) }

@@ -2,6 +2,9 @@ package de.traewelling.app
 
 /** Pure authorization contract shared by UI commands, service and intents. */
 internal object TrackingContract {
+    fun permitsLocation(precise: Boolean, approximate: Boolean, recognition: Boolean = false): Boolean =
+        precise || (approximate && !recognition)
+
     fun isFreshLocation(acquiredNanos: Long, nowNanos: Long): Boolean =
         acquiredNanos > 0 && nowNanos >= acquiredNanos && nowNanos - acquiredNanos <= 30_000_000_000L
 

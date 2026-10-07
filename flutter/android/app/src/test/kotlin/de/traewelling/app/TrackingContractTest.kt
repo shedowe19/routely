@@ -7,6 +7,16 @@ class TrackingContractTest {
     private fun trip(revision: String, generation: Long, id: Int = 42) =
         mapOf<String, Any?>("sessionRevision" to revision, "statusId" to id, "generation" to generation)
 
+    @Test fun coarseLocationAllowsLookupAndTrackingButCannotAuthorizeRecognition() {
+        assertTrue(TrackingContract.permitsLocation(precise = false, approximate = true))
+        assertTrue(TrackingContract.permitsLocation(precise = true, approximate = false))
+        assertFalse(TrackingContract.permitsLocation(precise = false, approximate = false))
+        assertFalse(TrackingContract.permitsLocation(precise = false, approximate = true, recognition = true))
+        assertTrue(TrackingContract.permitsLocation(precise = true, approximate = true, recognition = true))
+        assertTrue(TrackingContract.permitsLocation(precise = true, approximate = false, recognition = true))
+        assertFalse(TrackingContract.permitsLocation(precise = false, approximate = false, recognition = true))
+    }
+
     @Test fun nearbyStationLookupRejectsOldAndFutureCachedLocations() {
         val now = 100_000_000_000L
         assertTrue(TrackingContract.isFreshLocation(now, now))
