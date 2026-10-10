@@ -2,6 +2,7 @@ package de.traewelling.app.service
 
 import de.traewelling.app.data.model.CheckinInfo
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.StopRealtimeInfo
 import de.traewelling.app.data.model.TrainStation
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -296,6 +297,82 @@ class TripChangeMonitorTest {
         assertEquals(TripChangeKind.DELAY_INCREASE,
             monitor.observe(snapshot(listOf(stop(delay = 15), stop("exit", delay = null, destination = true)), 4)).single().kind)
     }
+
+    @Test fun switchingBetweenDbfAndFallbackDoesNotExplainOldPlatformsOrDelaysAsChanges() {
+        val monitor = TripChangeMonitor()
+        monitor.observe(snapshot(listOf(stop(delay = 15, platform = "7").fromSource("DBF / DB IRIS")), 1))
+        assertTrue(monitor.observe(snapshot(listOf(stop(delay = 0, platform = "2").fromSource("Träwelling")), 2)).isEmpty())
+        assertTrue(monitor.observe(snapshot(listOf(stop(delay = 15, platform = "7").fromSource("DBF / DB IRIS")), 3)).isEmpty())
+        val changes = monitor.observe(snapshot(listOf(stop(delay = 20, platform = "9").fromSource("DBF / DB IRIS")), 4))
+        assertEquals(listOf(TripChangeKind.PLATFORM, TripChangeKind.DELAY_INCREASE), changes.map { it.kind })
+        assertTrue(changes.last().message.contains("5 Minuten später als zuletzt gemeldet"))
+    }
+
+    @Test fun aProviderSwitchClearsOldPlatformGapWithoutDisablingLaterSameProviderChanges() {
+        val monitor = TripChangeMonitor()
+        val liveDbf = stop(platform = "7").fromSource("DBF").copy(arrivalPlatformIsLive = true)
+        val dbfGap = stop(platform = "2").fromSource("DBF").copy(arrivalPlatformIsLive = false)
+        val liveFallback = stop(platform = "3").fromSource("Träwelling").copy(arrivalPlatformIsLive = true)
+        monitor.observe(snapshot(listOf(liveDbf), 1))
+        assertTrue(monitor.observe(snapshot(listOf(dbfGap), 2)).isEmpty())
+        assertTrue(monitor.observe(snapshot(listOf(liveFallback), 3)).isEmpty())
+        assertEquals(TripChangeKind.PLATFORM,
+            monitor.observe(snapshot(listOf(liveFallback.copy(arrivalPlatform = "4")), 4)).single().kind)
+    }
+
+    @Test fun providerFallbackCannotRestoreACancelledStopButNewConfirmedCancellationStillWarns() {
+        val monitor = TripChangeMonitor()
+        monitor.observe(snapshot(listOf(stop(cancelled = true).fromSource("DBF")), 1))
+        assertTrue(monitor.observe(snapshot(listOf(stop(cancelled = false).fromSource("Träwelling")), 2)).isEmpty())
+        // A new positive cancellation remains important even when it comes from another source.
+        assertEquals(TripChangeKind.CANCELLED,
+            monitor.observe(snapshot(listOf(stop(cancelled = true).fromSource("DBF")), 3)).single().kind)
+        assertTrue(monitor.observe(snapshot(listOf(stop(cancelled = true).fromSource("DBF")), 4)).isEmpty())
+        assertEquals(TripChangeKind.RESTORED,
+            monitor.observe(snapshot(listOf(stop(cancelled = false).fromSource("DBF")), 5)).single().kind)
+    }
+
+    @Test fun apiSnapshotKeepsPerEventSourcesAndAnUnrelatedDepartureSourceDoesNotHideArrivalChanges() {
+        val raw = StopStation(uuid = "exit", station = TrainStation(id = 7, name = "Station"),
+            arrivalPlanned = "2026-10-10T10:00:00Z", arrivalReal = "2026-10-10T10:05:00Z",
+            departurePlanned = "2026-10-10T10:06:00Z", departureReal = "2026-10-10T10:11:00Z",
+            arrivalPlatformReal = "2", departurePlatformReal = "7", cancelled = false,
+            arrivalRealtimeInfo = StopRealtimeInfo(1, "DBF"),
+            departureRealtimeInfo = StopRealtimeInfo(1, "Träwelling"),
+            arrivalPlatformRealtimeInfo = StopRealtimeInfo(1, "DBF"),
+            departurePlatformRealtimeInfo = StopRealtimeInfo(1, "Träwelling"),
+            cancellationRealtimeInfo = StopRealtimeInfo(1, "DBF"))
+        val initial = TripChangeSnapshot.fromApi(42, 1, listOf(raw), checkin(raw), 0)
+        with(initial.stops.single()) {
+            assertEquals("DBF", arrivalTimeSourceLabel)
+            assertEquals("Träwelling", departureTimeSourceLabel)
+            assertEquals("DBF", arrivalPlatformSourceLabel)
+            assertEquals("Träwelling", departurePlatformSourceLabel)
+            assertEquals("DBF", cancellationSourceLabel)
+        }
+        val monitor = TripChangeMonitor()
+        monitor.observe(initial)
+        val changed = raw.copy(arrivalReal = "2026-10-10T10:10:00Z", arrivalPlatformReal = "4",
+            departureRealtimeInfo = StopRealtimeInfo(2, "DBF"),
+            departurePlatformRealtimeInfo = StopRealtimeInfo(2, "DBF"))
+        assertEquals(listOf(TripChangeKind.PLATFORM, TripChangeKind.DELAY_INCREASE),
+            monitor.observe(TripChangeSnapshot.fromApi(42, 2, listOf(changed), checkin(raw), 0)).map { it.kind })
+    }
+
+    @Test fun unknownProvenanceKeepsExistingComparisonBehaviorWhenOnlyOneSourceIsKnown() {
+        val monitor = TripChangeMonitor()
+        monitor.observe(snapshot(listOf(stop()), 1))
+        assertEquals(listOf(TripChangeKind.PLATFORM, TripChangeKind.DELAY_INCREASE),
+            monitor.observe(snapshot(listOf(stop(delay = 5, platform = "4").fromSource("DBF")), 2)).map { it.kind })
+        assertEquals(listOf(TripChangeKind.PLATFORM, TripChangeKind.DELAY_INCREASE),
+            monitor.observe(snapshot(listOf(stop(delay = 10, platform = "5")), 3)).map { it.kind })
+    }
+
+    private fun TripChangeStop.fromSource(source: String): TripChangeStop = copy(
+        arrivalTimeSourceLabel = source, departureTimeSourceLabel = source,
+        arrivalPlatformSourceLabel = source, departurePlatformSourceLabel = source,
+        cancellationSourceLabel = source
+    )
 
     private fun checkin(destination: StopStation, manualArrival: String? = null): CheckinInfo = CheckinInfo(
         hafasId = null, category = null, mode = null, lineName = "RE 1", distanceMeters = null, points = null,

@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.SevStopInfo
+import de.traewelling.app.data.model.CheckinInfo
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.TrainStation
@@ -33,6 +34,7 @@ data class StatusDetailUiState(
     val stopovers: List<StopStation> = emptyList(),
     val error: String? = null,
     val lastUpdated: Long = 0,
+    val realtimeRefreshFailed: Boolean = false,
     val isDeleting: Boolean = false,
     val deletedStatusId: Int? = null,
     val isOwnStatus: Boolean = false,
@@ -145,18 +147,43 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     private suspend fun loadSnapshot(statusId: Int, request: Long, showLoading: Boolean) {
         val session = prefs.getAuthSession()
+        suspend fun ensureCurrentRead() {
+            coroutineContext.ensureActive()
+            val currentSession = prefs.getAuthSession()
+            coroutineContext.ensureActive()
+            if (currentStatusId != statusId || request != loadGeneration ||
+                currentSession != session) throw CancellationException("Detailabruf ist nicht mehr aktuell")
+        }
+        var currentCheckin: CheckinInfo? = null
         val result = readConsistentStatusDetail(
-            readStatus = { repo.getStatusDetailSnapshot(statusId) },
-            readStopovers = repo::getStopovers,
+            readStatus = {
+                ensureCurrentRead()
+                repo.getStatusDetailSnapshot(statusId).also {
+                    ensureCurrentRead()
+                    currentCheckin = it.getOrNull()?.status?.checkin
+                }
+            },
+            readStopovers = { tripId ->
+                val stops = repo.getStopovers(tripId)
+                ensureCurrentRead()
+                val checkin = currentCheckin
+                if (stops.isSuccess && checkin != null) {
+                    val enriched = repo.enrichStopovers(stops.getOrThrow(), checkin)
+                    ensureCurrentRead()
+                    Result.success(enriched)
+                } else stops
+            },
             isCurrentRevision = { revision ->
-                repo.getStatusMutationSnapshot(statusId, session).revision == revision
+                val current = repo.getStatusMutationSnapshot(statusId, session).revision == revision
+                ensureCurrentRead()
+                current
             }
         )
-        coroutineContext.ensureActive()
-        if (currentStatusId != statusId || request != loadGeneration) return
+        ensureCurrentRead()
         val snapshot = result.getOrElse { error ->
-            if (showLoading) _uiState.update {
-                it.copy(isLoading = false, error = "Fahrt konnte nicht geladen werden: ${error.message}")
+            _uiState.update {
+                it.copy(isLoading = false, realtimeRefreshFailed = true,
+                    error = "Aktualisierung fehlgeschlagen: ${error.message}")
             }
             return
         }
@@ -171,9 +198,15 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 isLoading = false,
                 status = statusWithStopoverBoundaries(status, stops),
                 stopovers = stops,
-                lastUpdated = System.currentTimeMillis(),
-                error = if (showLoading && stopsResult?.isFailure == true)
-                    "Halte konnten nicht geladen werden: ${stopsResult.exceptionOrNull()?.message}" else state.error
+                lastUpdated = when {
+                    stopsResult?.isSuccess == true -> System.currentTimeMillis()
+                    stops.isEmpty() -> 0
+                    else -> state.lastUpdated
+                },
+                realtimeRefreshFailed = stopsResult?.isFailure == true,
+                error = if (stopsResult?.isFailure == true)
+                    "Halte konnten nicht aktualisiert werden: ${stopsResult.exceptionOrNull()?.message}"
+                    else if (state.realtimeRefreshFailed) null else state.error
             )
         }
         enrichSevStops(status, _uiState.value.stopovers)
@@ -203,6 +236,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             )
         }
         sevEnrichmentJob = viewModelScope.launch {
+            val session = prefs.getAuthSession()
             val resolved = try {
                 SevJourneyEnricher.enrich(checkin, stops)
             } catch (cancelled: CancellationException) {
@@ -210,8 +244,10 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             } catch (_: Exception) {
                 emptyMap()
             }
+            val currentSession = prefs.getAuthSession()
+            coroutineContext.ensureActive()
             _uiState.update { state ->
-                if (currentStatusId == status.id && generation == sevGeneration &&
+                if (currentSession == session && currentStatusId == status.id && generation == sevGeneration &&
                     state.status?.let { SevDetailSnapshot.from(it, state.stopovers) } == snapshot) {
                     state.copy(sevStops = resolved, isLoadingSevStops = false)
                 } else state
@@ -443,10 +479,14 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     private fun checkIfOwnStatus(status: Status) {
         val view = viewGeneration
         viewModelScope.launch {
+            val session = prefs.getAuthSession()
             repo.getCurrentUser().onSuccess { currentUser ->
                 coroutineContext.ensureActive()
+                val currentSession = prefs.getAuthSession()
+                coroutineContext.ensureActive()
                 _uiState.update {
-                    if (view == viewGeneration && currentStatusId == status.id && it.status?.id == status.id) {
+                    if (currentSession == session && view == viewGeneration &&
+                        currentStatusId == status.id && it.status?.id == status.id) {
                         it.copy(isOwnStatus = status.user?.id != null && status.user.id == currentUser.id)
                     } else it
                 }

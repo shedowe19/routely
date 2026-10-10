@@ -9,12 +9,13 @@ enum class JourneyTimeSource { GPS_OBSERVED, GPS_ESTIMATE, API_REALTIME, TIMETAB
 data class JourneyTime(
     val millis: Long,
     val source: JourneyTimeSource,
-    val plannedMillis: Long?
+    val plannedMillis: Long?,
+    val providerLabel: String? = null
 ) {
     val sourceLabel: String get() = when (source) {
         JourneyTimeSource.GPS_OBSERVED -> "GPS beobachtet"
         JourneyTimeSource.GPS_ESTIMATE -> "GPS-Schätzung"
-        JourneyTimeSource.API_REALTIME -> "API-Echtzeit"
+        JourneyTimeSource.API_REALTIME -> providerLabel ?: "API-Echtzeit"
         JourneyTimeSource.TIMETABLE -> "Fahrplan"
         JourneyTimeSource.MANUAL -> "Manuell"
     }
@@ -81,7 +82,8 @@ object JourneyTimeResolver {
         }
         parseMillis(manualTime)?.let { return JourneyTime(it, JourneyTimeSource.MANUAL, planned) }
         parseMillis(if (arrival) stop.arrivalReal else stop.departureReal)?.let {
-            return JourneyTime(it, JourneyTimeSource.API_REALTIME, planned)
+            val readInfo = if (arrival) stop.arrivalRealtimeInfo else stop.departureRealtimeInfo
+            return JourneyTime(it, JourneyTimeSource.API_REALTIME, planned, readInfo?.displayLabel(nowMillis))
         }
         return planned?.let { JourneyTime(it, JourneyTimeSource.TIMETABLE, planned) }
     }

@@ -44,6 +44,7 @@ class PreferencesManager(private val context: Context) {
         val KEY_TRIP_CHANGE_SPEECH_ENABLED = booleanPreferencesKey("trip_change_speech_enabled")
         val KEY_LIVE_PROGRESS_ENABLED = booleanPreferencesKey("live_progress_enabled")
         val KEY_LOCK_SCREEN_DETAILS_ENABLED = booleanPreferencesKey("lock_screen_details_enabled")
+        val KEY_PUBLIC_RAIL_REALTIME_ENABLED = booleanPreferencesKey("public_rail_realtime_enabled")
         private val KEY_TRACKING_STATE = AuthSessionPreferences.trackingState
         private val KEY_LOCATION_PERMISSION_REQUESTED = booleanPreferencesKey("location_permission_requested")
 
@@ -123,6 +124,9 @@ class PreferencesManager(private val context: Context) {
     val lockScreenDetailsEnabled: Flow<Boolean> = context.dataStore.data.map {
         it[KEY_LOCK_SCREEN_DETAILS_ENABLED] ?: true
     }
+    val publicRailRealtimeEnabled: Flow<Boolean> = context.dataStore.data.map {
+        it[KEY_PUBLIC_RAIL_REALTIME_ENABLED] ?: true
+    }.distinctUntilChanged()
 
     suspend fun setRideRecognitionEnabled(enabled: Boolean, expectedSession: AuthSession? = null): Boolean {
         var changed = false
@@ -143,12 +147,16 @@ class PreferencesManager(private val context: Context) {
         context.dataStore.edit { it[KEY_LOCK_SCREEN_DETAILS_ENABLED] = enabled }
         if (!enabled) de.traewelling.app.service.TripTrackingService.clearChangeNotifications(context)
     }
+    suspend fun setPublicRailRealtimeEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[KEY_PUBLIC_RAIL_REALTIME_ENABLED] = enabled }
+    }
 
     suspend fun getRideRecognitionEnabled(): Boolean = rideRecognitionEnabled.first()
     suspend fun getTripChangeAlertsEnabled(): Boolean = tripChangeAlertsEnabled.first()
     suspend fun getTripChangeSpeechEnabled(): Boolean = tripChangeSpeechEnabled.first()
     suspend fun getLiveProgressEnabled(): Boolean = liveProgressEnabled.first()
     suspend fun getLockScreenDetailsEnabled(): Boolean = lockScreenDetailsEnabled.first()
+    suspend fun getPublicRailRealtimeEnabled(): Boolean = publicRailRealtimeEnabled.first()
 
     suspend fun saveServerConfig(serverUrl: String, clientId: String, clientSecret: String) {
         context.dataStore.edit { prefs ->

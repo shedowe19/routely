@@ -166,7 +166,12 @@ data class StopStation(
     @SerializedName("departurePlatformReal")    val departurePlatformReal: String? = null,
     val cancelled: Boolean? = null,
     @SerializedName("isArrivalDelayed")   val isArrivalDelayed: Boolean? = null,
-    @SerializedName("isDepartureDelayed") val isDepartureDelayed: Boolean? = null
+    @SerializedName("isDepartureDelayed") val isDepartureDelayed: Boolean? = null,
+    val arrivalRealtimeInfo: StopRealtimeInfo? = null,
+    val departureRealtimeInfo: StopRealtimeInfo? = null,
+    val cancellationRealtimeInfo: StopRealtimeInfo? = null,
+    val arrivalPlatformRealtimeInfo: StopRealtimeInfo? = null,
+    val departurePlatformRealtimeInfo: StopRealtimeInfo? = null
 ) {
     val stationId: Int? get() = station?.id
     val stationName: String? get() = station?.name ?: legacyName

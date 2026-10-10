@@ -10,7 +10,7 @@ Die primäre externe Schnittstelle ist die Träwelling RESTful API.
 
 - **Basis-URL**: Laufzeitwert aus `PreferencesManager`, Standard `https://traewelling.de`. Der manuelle Login erlaubt eine gültige HTTPS-Server-URL ohne eingebettete Zugangsdaten, Query oder Fragment; keine Gradle-Property setzt den API-Server.
 - **Authentifizierung**: Geschützte Endpunkte erhalten einen Bearer-Token. Der erreichbare Login nimmt ihn manuell entgegen und prüft `GET /api/v1/auth/user`, bevor die Sitzung gespeichert wird. `OAuthApiService` (`POST /oauth/token`) enthält zusätzliche Austausch-/Refresh-Helfer, die noch nicht an den Login oder einen automatischen Refresh angebunden sind.
-- **Provider (Transitous/HAFAS)**: Die Träwelling API greift intern auf Transit-Provider (wie HAFAS) zu, um Abfahrten und Trips zu liefern.
+- **Provider (Transitous/MOTIS)**: Der am 10.10.2026 geprüfte Träwelling-Upstream verwendet Transitous für Stations-, Abfahrts- und Fahrtdaten. Die alten `hafasTripId`-Bezeichnungen im Clientvertrag belegen keinen aktuellen DB-HAFAS-Zugriff. Routely `main` enthält keinen direkten Transitous-Live-Datenclient. Quellenvergleich, Backend-Aktualisierung und offene Aktualitätsgrenzen stehen unter [Live-Datenquellen](./live-datenquellen.md).
 
 Besonderheiten beim Umgang mit den von Träwelling gelieferten Transit-Daten:
 
@@ -22,6 +22,10 @@ Besonderheiten beim Umgang mit den von Träwelling gelieferten Transit-Daten:
 - **Gleisangaben**: Gelieferte Gleis-/Plattformstrings bleiben Provider-Anzeigewerte. Eine führende `9`, etwa in `91`, wird nicht ohne gesonderten Herkunftsbeleg entfernt. Die aktive Begleitung wählt am Einstieg Abfahrtsgleise und später Ankunftsgleise; Ersatzbusse erhalten keine Bahnsteigangabe.
 
 API- und OAuth-Clients begrenzen den gesamten HTTP-Call auf 60 Sekunden sowie Connect-, Read- und Write-Phasen auf jeweils 30 Sekunden. Coroutine-Abbruch wird unverändert weitergereicht; Timeout und vorübergehender Netzfehler machen eine fehlgeschlagene Authprüfung nicht zu einem Logout.
+
+## Anonyme DBF-/IRIS-Livedaten
+
+Die zusätzliche [Bahn-Livedatenquelle](./live-datenquellen.md) verwendet `GET https://dbf.finalrewind.org/<EVA>.json?version=3&no_related=1&past=1` mit einem getrennten anonymen OkHttp-Client. Zugangsdaten, Träwelling-Bearer und Gerätepositionen werden nicht übertragen. Die offene DBF-Software verarbeitet IRIS-Tafeln. Die App begrenzt Starts auf zehn/min und einen je EVA/min, teilt Cache und laufende Abrufe und behält bei fehlenden eindeutigen Zusatzdaten die Träwelling-Werte. Quelle und Client-Abrufzeit sind pro Zeit-/Gleis-/Ausfallfeld getrennt; sie belegen keinen Provider-Änderungszeitpunkt. Der standardmäßig aktive Zusatzabruf ist in den Einstellungen abschaltbar.
 
 ## Träwelling-Streckenverlauf für Bahn und Tram
 

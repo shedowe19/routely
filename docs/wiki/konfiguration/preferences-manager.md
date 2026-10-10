@@ -66,8 +66,11 @@ Native Bahn-/Tram-Linienzüge und OSRM-Straßen-Geometrien bleiben ausschließli
 | `trip_change_speech_enabled` | `Flow<Boolean>`, `true` | Änderungssprache; benötigt zusätzlich aktivierte Hinweise und globale TTS. |
 | `live_progress_enabled` | `Flow<Boolean>`, `true` | Fortschrittsdarstellung und systemabhängige Live-Update-Anfrage. |
 | `lock_screen_details_enabled` | `Flow<Boolean>`, `true` | Sichtbare Reisedetails; `false` verwendet öffentliche Ersatzanzeigen und unterdrückt Promotion. |
+| `public_rail_realtime_enabled` | `Flow<Boolean>`, `true` | Anonyme zusätzliche Bahn-Livedaten über DBF/IRIS; benötigt keine Zugangsdaten. |
 
 Die zugehörigen suspend-Getter und Setter entsprechen den Flow-Namen. Ein aktiver Check-in pausiert die Erkennung, ohne einen Kandidaten als Fahrt zu speichern. Der Trackingcache enthält zusätzlich `TripChangeMonitorState` mit letzten Ereigniswerten zur Deduplizierung. Die frische Vergleichsbasis, Verspätungsreferenzen und Gerätepositionen werden weiterhin nicht persistiert.
+
+`getPublicRailRealtimeEnabled()` und `setPublicRailRealtimeEnabled(Boolean)` steuern die [DBF-Ergänzung](../api/live-datenquellen.md). Ein laufender Zusatzabruf wird vor der Veröffentlichung erneut gegen diese Einstellung geprüft. Erfolgreich gelesene Zeiten/Gleise behalten im bestehenden Fahrtcache ihre Quell- und Abrufmetadaten; alte Einträge ohne Metadaten werden als unbekannt behandelt. Cachewiederherstellung setzt keinen neuen Live-Abrufzeitpunkt.
 
 ### TTS-Einstellungen
 

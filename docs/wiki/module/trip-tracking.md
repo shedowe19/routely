@@ -59,6 +59,7 @@ Android-Grundlagen: [Doze und App Standby](https://developer.android.com/trainin
 | Verarbeitung | Gewünschtes Intervall |
 | --- | --- |
 | Status und Stopovers über Träwelling aktualisieren | 60 Sekunden |
+| Optionale zusätzliche Bahnhofstafel über DBF/IRIS | Gemeinsamer 60-Sekunden-Cache; höchstens zehn Starts/min und ein Start je EVA/min |
 | Fahrplan-/Signalalter prüfen | 10 Sekunden |
 | Standortupdates unterwegs | 12 Sekunden |
 | Standortupdates bis 3 km zum aktuellen Halt | 3 Sekunden |
@@ -176,6 +177,8 @@ Der Schätzer nutzt den lokal passenden Linienzug nur zur Fortschrittsprojektion
 Die Prognosebasis berücksichtigt nur Endpunkte und Linienzüge des aktuell eingehenden Abschnitts, keinen geänderten Abrufzeitpunkt oder zusätzlich vorgeladenen Folgeweg. Nach hinreichendem eindeutigem Bewegungsbeleg kann ein Kandidat innerhalb dieses Abschnitts gebunden bleiben, auch wenn mehrere Wege später wieder dieselbe Straße nutzen. Korridorverlust, Verlust der relativen räumlichen Plausibilität, Mehrdeutigkeit innerhalb eines verfügbaren Kandidaten, Form-/Abschnittswechsel und ungültiges GPS lösen die Bindung. Ohne frühere Bindung erlaubt ein streng belegter gemeinsamer Restweg aller plausiblen Alternativen eine gemeinsame Prognose mit höchstens 60 Sekunden Kandidatenstreuung; maßgeblich ist die späteste ETA. Jeder Kandidat benötigt eigene gerichtete Bewegung, ein Kandidatenwechsel beginnt das Fenster neu und der gemeinsame Weg beweist keine historische Route. Beim geordneten Abschnittswechsel beginnen Bewegungsbeleg und Kandidatenwahl neu; ein kompatibler frischer Fix darf die bisherige gültige Prognose nur bis zum ursprünglichen Ablauf erhalten. Endpunktverbindungen erhalten die bestätigten öffentlichen SEV-Koordinaten; Wegsprünge unterliegen weiter Zeit-/Genauigkeitsprüfungen. Details stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 `JourneyTimeResolver` verwendet je Ereignis frische eindeutig zugeordnete GPS-Zeit, sonst manuelle Zeit, parsebare API-Echtzeit und schließlich Planzeit. Notification, Widget, Fahrtdetail und Sperrbildschirm verwenden denselben Resolver und kennzeichnen die Zeitquelle. Eine bereits belegte Prognose wird bei Bremsen oder geordnetem Haltwechsel mit passender frischer Position bis zu ihrem unveränderten ursprünglichen Gültigkeitsende erhalten. Standortqualität, Korridor, Ablauf und fehlende Daten können die GPS-Zeit weiterhin sofort verwerfen, während der räumlich etablierte Besuchscursor erhalten bleibt. Schwellen, stabile Ankunftsbeobachtung, längere Halte und Quellenentscheidung stehen unter [GPS-Zeiten](./gps-zeiten.md).
+
+Die [DBF-/IRIS-Ergänzung](../api/live-datenquellen.md) reichert die Träwelling-Halte vor der bestehenden Fahrt-/Sitzungsrevision-Prüfung lokal an. Zeit, Gleis und Ausfall behalten getrennte Quellen-/Abrufinformationen. Cachewiederherstellung ohne diese Metadaten gilt als unbekannt, erhaltene Metadaten bekommen keinen neuen Zeitstempel. `JourneyTimeResolver` kennzeichnet API-Zeiten mit Quelle und gegebenenfalls älterem Abruf; GPS und manuelle Zeiten behalten ihre bisherigen Labels. Der Änderungsmonitor behandelt bekannte Quellenwechsel als neue Vergleichsbasis, damit ein Rückfall keine falsche Verbesserung oder Entwarnung auslöst.
 
 ## Persistenz und Offlinebetrieb
 

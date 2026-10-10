@@ -15,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.semantics
@@ -67,6 +68,7 @@ fun SettingsScreen(
     onOpenLiveUpdateSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val uriHandler = LocalUriHandler.current
 
     Scaffold(
         topBar = {
@@ -132,6 +134,28 @@ fun SettingsScreen(
                         )
                         OutlinedButton(onClick = onOpenLiveUpdateSettings, modifier = Modifier.fillMaxWidth()) {
                             Text("Android-Anzeigeeinstellungen")
+                        }
+                    }
+                }
+            }
+            item {
+                Text("Bahn-Livedaten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(8.dp))
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        SettingsToggle(
+                            title = "Zusätzliche Bahn-Livedaten",
+                            description = "Ergänzt deine Fahrt um aktuelle Gleise, Verspätungen und Ausfälle an DB-Bahnhöfen. Ohne Konto oder API-Key.",
+                            checked = uiState.publicRailRealtimeEnabled,
+                            onCheckedChange = viewModel::setPublicRailRealtimeEnabled
+                        )
+                        Text(
+                            "Verwendet die öffentliche DBF-Abfahrtstafel mit DB-IRIS-Daten. Dafür werden die Bahnhöfe deiner Fahrt an dbf.finalrewind.org gesendet.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { uriHandler.openUri("https://github.com/derf/db-fakedisplay") }) {
+                            Text("Quelloffenes DBF-Projekt")
                         }
                     }
                 }

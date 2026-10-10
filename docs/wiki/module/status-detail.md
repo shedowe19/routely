@@ -33,6 +33,8 @@ Die Timeline verwendet `StopStation.stationName` und `stationId` aus dem verscha
 
 Alle 30 Sekunden ruft der Hintergrundauftrag `loadSnapshot(..., showLoading = false)` für Live-Delay-Daten auf. Während die frische Haltantwort aussteht, bleibt der vorherige vollständige Snapshot sichtbar. Der neue Status wird mit seinen zugeordneten Stopover-Grenzen und der neuen Timeline in einem UIState-Update übernommen; ein vorübergehender Rohstatus ohne passend hydratisierte Grenzen wird nicht angezeigt. Dadurch wechseln Headerzeiten nicht allein wegen nacheinander eintreffender API-Antworten zwischen GPS und API. Der Speichern-Erfolg ordnet ebenfalls noch kompatible vorhandene Grenzen vor der Veröffentlichung zu.
 
+Die optionale [DBF-/IRIS-Ergänzung](../api/live-datenquellen.md) läuft nach dem Träwelling-Halteabruf innerhalb derselben `readConsistentStatusDetail`-Revision. Eindeutig zugeordnete Bahnhofstafelwerte ergänzen nur den lokalen Snapshot. Ein gleichzeitig bearbeiteter Check-in erzwingt die erneute vollständige Status-/Halte-/Zusatzprüfung; Sitzungs- und Ladegeneration verhindern die Übernahme abgelöster Antworten. Abruffehler behalten kompatible alte Halte samt ursprünglichen Quellenzeiten und setzen `realtimeRefreshFailed`.
+
 Schlägt die Halteanfrage fehl, werden dennoch die neuen Status-/Text-/manuellen Zeitfelder übernommen. Vorhandene Stopovers bleiben nur bei derselben Status-ID und Trip-ID, kompatibler vorhandener Trip-UUID sowie eindeutig passenden gelieferten Grenzen mit unveränderten gelieferten Planzeiten verwendbar. Andernfalls wird die alte Timeline geleert und die eingehenden API-Grenzen bleiben bestehen. Beim initialen Laden wird der Haltefehler angezeigt; der stille Refresh bleibt still. Dies ist keine Anzeigeverzögerung für abgelaufene GPS-Werte.
 
 Antworten auf Status-, Halte- und Nutzeranfragen werden nur übernommen, wenn weiterhin dieselbe Status-ID angezeigt wird. Späte Antworten einer zuvor geöffneten Fahrt überschreiben dadurch nicht die neue Ansicht.
@@ -104,7 +106,8 @@ Die Timeline zeigt:
 - Dezente Container für aktuellen Halt, Einstieg, Ziel und Halte innerhalb der eigenen Reise
 - Weiche Status-Übergänge zwischen Ladezuständen, Error und Timeline via `AnimatedContent`
 - Gestaffelte Fade-in/Slide-in Animationen der Timeline-Einträge via `AnimatedVisibility`
-- "LIVE" Badge mit Puls-Animation wenn Status heute ist
+- Abrufstatus mit Quelle und Alter statt des früheren tagesabhängigen `LIVE`-Badges; ältere Daten und Abruffehler bleiben sichtbar gekennzeichnet
+- Ereignisbezogener Gleisvergleich, beispielsweise `Gleis 7 statt 5`, mit eigener Quellen-/Abrufinformation
 - Höchstens ein aktueller beziehungsweise nächster Besuch gemäß der unten beschriebenen Fortschrittsquelle
 - Verspätungs-Badges (grün/rot)
 - "HALT ENTFÄLLT" für gestrichene Halte
@@ -149,7 +152,8 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 | `editInitialStatus` | Status? | Beim Öffnen gebundener Edit-Anfangsstatus |
 | `editArrivalManuallyChanged` | Boolean? | Explizite Ankunftseingabe gegenüber automatisch angepasster Zielzeit |
 | `isDeleting`  | Boolean           | Löschvorgang                    |
-| `lastUpdated` | Long              | Timestamp letzte Aktualisierung |
+| `lastUpdated` | Long              | Timestamp letzter erfolgreicher Halteabruf; ein Statusabruf allein erneuert ihn nicht |
+| `realtimeRefreshFailed` | Boolean | Aktueller Status-/Halteabruf fehlgeschlagen; vorhandene Werte behalten ihre Abrufzeit |
 
 ### Erhaltener Fachzustand bei Activity-Neuanlage
 

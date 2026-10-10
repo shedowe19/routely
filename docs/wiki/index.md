@@ -48,6 +48,7 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 - [API Überblick](./api/ueberblick.md)
 - [Interne Schnittstellen](./api/interne-schnittstellen.md)
 - [Externe Schnittstellen](./api/externe-schnittstellen.md)
+- [Live-Datenquellen und Aktualitätsprüfung vom 10.10.2026](./api/live-datenquellen.md)
 - [Träwelling-API-Kompatibilität](./api/traewelling-kompatibilitaet.md)
 
 ## Daten

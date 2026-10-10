@@ -41,6 +41,8 @@ Für die Relevanz eines Gleiswechsels zählt der erste nicht gestrichene verblei
 
 ## Abhängigkeiten
 
+Die [DBF-/IRIS-Ergänzung](../api/live-datenquellen.md) liefert optionale zusätzliche Bahnhofstafelwerte. Snapshots führen Zeit-, Gleis- und Ausfallquelle getrennt. Bei bekanntem Quellenwechsel werden Gleis-/Verspätungsvergleiche neu basiert und eine bloße `true`-zu-`false`-Ausfalländerung nicht als Rücknahme gemeldet. Ein neu bestätigter kompletter Ausfall bleibt auch beim Quellenwechsel meldbar. Unbekannte Legacy-Quellen behalten das bisherige Verhalten.
+
 `TripTrackingService`, Träwelling-Status/Stopovers, `PreferencesManager`, Android-Benachrichtigungen und Android-TTS. Die reine Vergleichslogik benötigt weder Android noch Standortdaten.
 
 ## Offene Fragen

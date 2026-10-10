@@ -35,7 +35,17 @@ Sammlung von offenen Punkten, Unsicherheiten und Annahmen im Projekt.
 - TODO: [Änderungshinweise](./module/trip-changes.md) mit realen API-Änderungen, deaktivierten Benachrichtigungen und konkurrierenden TTS-Ansagen prüfen. Ohne Providerwerte gibt es keine Änderungserklärung.
 - TODO: [Reisefortschritt](./module/trip-progress.md) auf Android API 35, 36 und 36.1 sowie Samsung prüfen: System-/OEM-Promotion, große Schrift, Wegwischen, kalte/warme Navigation und ausgeschaltete Sperrbildschirmdetails. Live Updates bleiben vom System und Nutzer abhängig.
 
+## Live-Datenprüfung vom 10.10.2026
+
+Die [anonyme DBF-/IRIS-Ergänzung vom 10.10.2026](./api/live-datenquellen.md) liefert zusätzliche Bahnwerte ohne Registrierung. Abrufalter, Quellenkennzeichnung und Soll-/Ist-Gleisvergleich sind umgesetzt. Offen bleiben:
+
+- TODO: Auf echten Fahrten Gleiswechsel, Verspätungen und Haltausfälle mit Träwelling vergleichen; ein erfolgreicher öffentlicher Tafelabruf belegt keine Vollständigkeit oder garantierte höhere Aktualität.
+- TODO: DBF-Dienstlast bei mehreren Installationen prüfen. Der Client begrenzt Request-Starts je Prozess auf zehn/min und einen je Bahnhof/min; keine flottenweite Quote ist nachgewiesen.
+- Unklar: Alter der zugrunde liegenden Providerprognosen. Die Anzeige belegt den Clientabruf, keine Änderung bei DB beziehungsweise Transitous. Version 3 erlaubt keinen belastbaren Import separater Teilausfälle beziehungsweise deren Rücknahme.
+
 ## Verwandte Seiten
+
+- [Live-Datenquellen](./api/live-datenquellen.md)
 
 - [Index](./index.md)
 - [Tests](./entwicklung/tests.md)
