@@ -28,6 +28,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -778,24 +780,44 @@ private fun TimeRow(label: String, time: JourneyTime?, realtimeInfo: StopRealtim
         if (cancelled) Text("ENTFÄLLT", style = MaterialTheme.typography.labelLarge,
             color = ErrorRed, fontWeight = FontWeight.SemiBold)
         else JourneyTimeValue(time, realtimeInfo = realtimeInfo, nowMillis = nowMillis,
-            realtimeRefreshFailed = realtimeRefreshFailed)
+            realtimeRefreshFailed = realtimeRefreshFailed, eventLabel = label)
     }
 }
 
 @Composable
 private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayBadge: Boolean = false,
                              textAlpha: Float = 1f, realtimeInfo: StopRealtimeInfo? = null,
-                             nowMillis: Long = 0L, realtimeRefreshFailed: Boolean = false) {
+                             nowMillis: Long = 0L, realtimeRefreshFailed: Boolean = false,
+                             compactSource: Boolean = false,
+                             eventLabel: String = when (prefix) {
+                                 "An: " -> "Ankunft"
+                                 "Ab: " -> "Abfahrt"
+                                 else -> ""
+                             }) {
     val actual = formatJourneyTime(time?.millis)
     val planned = formatJourneyTime(time?.plannedMillis)
     val differs = actual != planned && planned != "–"
     val delay = time?.delayMinutes ?: 0L
+    val sourceLabel = time?.let {
+        journeyTimeSourceLabel(it, realtimeInfo, nowMillis, realtimeRefreshFailed)
+    }
+    val localSource = time?.source == JourneyTimeSource.GPS_ESTIMATE ||
+        time?.source == JourneyTimeSource.GPS_OBSERVED || time?.source == JourneyTimeSource.MANUAL
+    val spokenTime = buildString {
+        if (eventLabel.isNotBlank()) append("$eventLabel: ")
+        append(actual)
+        if (differs) append(", geplant $planned")
+        if (delay > 0) append(", $delay Minuten Verspätung")
+        else if (delay < 0) append(", ${-delay} Minuten früher")
+        sourceLabel?.let { append(", $it") }
+    }
     val timeColor = when {
         !differs -> MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha)
         delay > 0 -> WarningOrange
         else -> SuccessGreen
     }
-    Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 180.dp)) {
+    Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 180.dp)
+        .clearAndSetSemantics { contentDescription = spokenTime }) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (prefix.isNotBlank()) {
                 Text(prefix, style = MaterialTheme.typography.bodySmall,
@@ -819,11 +841,24 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
             }
             Text(actual, style = MaterialTheme.typography.bodyMedium, color = timeColor,
                 fontWeight = if (differs) FontWeight.Bold else FontWeight.Medium)
+            if (compactSource && localSource) {
+                Spacer(Modifier.width(4.dp))
+                when (time?.source) {
+                    JourneyTimeSource.GPS_ESTIMATE -> Text("≈",
+                        style = MaterialTheme.typography.bodyMedium, color = TealAccent)
+                    JourneyTimeSource.GPS_OBSERVED -> Icon(Icons.Default.GpsFixed,
+                        contentDescription = null, modifier = Modifier.size(12.dp), tint = TealAccent)
+                    JourneyTimeSource.MANUAL -> Icon(Icons.Default.Edit,
+                        contentDescription = null, modifier = Modifier.size(12.dp),
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                    else -> Unit
+                }
+            }
         }
-        time?.let {
-            Text(journeyTimeSourceLabel(it, realtimeInfo, nowMillis, realtimeRefreshFailed),
+        if (!compactSource && localSource && sourceLabel != null) {
+            Text(sourceLabel,
                 style = MaterialTheme.typography.labelSmall,
-                color = if (it.source == JourneyTimeSource.GPS_ESTIMATE || it.source == JourneyTimeSource.GPS_OBSERVED)
+                color = if (time?.source == JourneyTimeSource.GPS_ESTIMATE || time?.source == JourneyTimeSource.GPS_OBSERVED)
                     TealAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
         }
     }
@@ -832,6 +867,14 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
 private fun formatJourneyTime(millis: Long?): String = millis?.let {
     Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).format(DateTimeFormatter.ofPattern("HH:mm"))
 } ?: "–"
+
+private fun realtimeValueDescription(value: String, info: StopRealtimeInfo?, nowMillis: Long,
+                                     refreshFailed: Boolean): String {
+    if (info == null) return value
+    val retrieval = realtimeRetrievalPresentation(info, nowMillis, refreshFailed)
+    return "$value, ${retrieval.detail}" +
+        if (retrieval.recentlyRetrieved) "" else ", ${retrieval.label}"
+}
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -979,15 +1022,16 @@ private fun StopoverItem(
                                 if (isOrigin) departureTime else arrivalTime,
                                 showDelayBadge = true, textAlpha = textAlpha,
                                 realtimeInfo = eventRealtimeInfo(stop, event), nowMillis = nowMillis,
-                                realtimeRefreshFailed = realtimeRefreshFailed
+                                realtimeRefreshFailed = realtimeRefreshFailed, compactSource = true,
+                                eventLabel = if (isOrigin) "Abfahrt" else "Ankunft"
                             )
                         } else {
                             arrivalTime?.let { JourneyTimeValue(it, prefix = "An: ", textAlpha = textAlpha,
                                 realtimeInfo = eventRealtimeInfo(stop, StopEvent.ARRIVAL), nowMillis = nowMillis,
-                                realtimeRefreshFailed = realtimeRefreshFailed) }
+                                realtimeRefreshFailed = realtimeRefreshFailed, compactSource = true) }
                             departureTime?.let { JourneyTimeValue(it, prefix = "Ab: ", textAlpha = textAlpha,
                                 realtimeInfo = eventRealtimeInfo(stop, StopEvent.DEPARTURE), nowMillis = nowMillis,
-                                realtimeRefreshFailed = realtimeRefreshFailed) }
+                                realtimeRefreshFailed = realtimeRefreshFailed, compactSource = true) }
                         }
                     }
                 }
@@ -1033,7 +1077,12 @@ private fun StopoverItem(
                     ) {
                         Text(
                             platform.label,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                .clearAndSetSemantics {
+                                    contentDescription = realtimeValueDescription(platform.label,
+                                        eventPlatformRealtimeInfo(stop, platformEvent), nowMillis,
+                                        realtimeRefreshFailed)
+                                },
                             style = MaterialTheme.typography.labelSmall,
                             color = if (platform.changed) WarningOrange
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
@@ -1059,6 +1108,10 @@ private fun StopoverItem(
                             Spacer(Modifier.width(3.dp))
                             Text(
                                 "HALT ENTFÄLLT",
+                                modifier = Modifier.clearAndSetSemantics {
+                                    contentDescription = realtimeValueDescription("Halt entfällt",
+                                        stop.cancellationRealtimeInfo, nowMillis, realtimeRefreshFailed)
+                                },
                                 style = MaterialTheme.typography.labelSmall,
                                 color = ErrorRed,
                                 fontWeight = FontWeight.Bold
@@ -1168,19 +1221,6 @@ private fun StopoverItem(
                         }
                     }
                 }
-            }
-            val platformInfo = eventPlatformRealtimeInfo(stop, platformEvent)
-            if (platform != null && !isReplacementBus && !isCancelled && platformInfo != null) {
-                val retrieval = realtimeRetrievalPresentation(platformInfo, nowMillis, realtimeRefreshFailed)
-                Text("Gleis: ${retrieval.detail}" + if (retrieval.recentlyRetrieved) "" else " · ${retrieval.label.lowercase()}",
-                    modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-            }
-            if (isCancelled && stop.cancellationRealtimeInfo != null) {
-                val retrieval = realtimeRetrievalPresentation(stop.cancellationRealtimeInfo, nowMillis, realtimeRefreshFailed)
-                Text("Ausfall: ${retrieval.detail}" + if (retrieval.recentlyRetrieved) "" else " · ${retrieval.label.lowercase()}",
-                    modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall,
-                    color = ErrorRed)
             }
             if (!isCancelled && sevInfo != null) {
                 SevStopGuidance(sevInfo)

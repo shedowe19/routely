@@ -12,6 +12,7 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StatusDetailScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/RealtimePresentation.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusEditRequest.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/DeletedStatusCompletion.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
@@ -43,7 +44,7 @@ Lade- und Ansichtsgenerationen trennen zusätzlich mehrere Refreshs derselben St
 
 ### GPS-Zeiten und API-Rückfall
 
-`JourneyTimeResolver` entscheidet für Header und Halte dieselbe Priorität: frische GPS-Zeit des konkreten Ereignisses, manuelle Check-in-Zeit, parsebare API-Echtzeit, Planzeit. GPS-Werte werden nur aus dem passenden eigenen aktiven `TrackingLiveState` übernommen. Ankunft und Abfahrt erhalten getrennte Quellenhinweise; beobachtete Ankunft und Prognose sind unterscheidbar. Fehlende GPS-Abfahrt verhindert keine gültige API-Abfahrt desselben Halts. Ein bereits belegter passender GPS-Wert kann bei Bremsen und geordnetem Haltwechsel bis zu seinem ursprünglichen Gültigkeitsende erhalten bleiben; die UI führt dafür keine eigene Quellenverzögerung ein. Unbrauchbare oder abgelaufene Werte fallen weiterhin auf die nächsten Quellen zurück.
+`JourneyTimeResolver` entscheidet für Header und Halte dieselbe Priorität: frische GPS-Zeit des konkreten Ereignisses, manuelle Check-in-Zeit, parsebare API-Echtzeit, Planzeit. GPS-Werte werden nur aus dem passenden eigenen aktiven `TrackingLiveState` übernommen. Ankunft und Abfahrt bleiben getrennt gekennzeichnet: In der Timeline steht `≈` neben einer GPS-Schätzung, ein GPS-Symbol neben einer beobachteten Zeit und ein Stift neben einer manuellen Zeit. Die Headerzeiten behalten ausgeschriebene Hinweise für diese lokalen Quellen. API- und Fahrplanzeiten erhalten keine zusätzliche sichtbare Quellenzeile. Fehlende GPS-Abfahrt verhindert keine gültige API-Abfahrt desselben Halts. Ein bereits belegter passender GPS-Wert kann bei Bremsen und geordnetem Haltwechsel bis zu seinem ursprünglichen Gültigkeitsende erhalten bleiben; die UI führt dafür keine eigene Quellenverzögerung ein. Unbrauchbare oder abgelaufene Werte fallen weiterhin auf die nächsten Quellen zurück.
 
 Eine frisch geladene API-Grenze darf keinen GPS-Wert eines früheren Planpaares übernehmen. Auch ohne Stopover-UUID müssen geplante Ankunft und Abfahrt einschließlich fehlender Marker exakt zum GPS-Besuch passen. Entfernt oder ergänzt der Refresh einen Marker, folgt die Anzeige unmittelbar der neuen API-/manuellen Basis, ohne auf das getrennte Service-Polling zu warten.
 
@@ -106,8 +107,9 @@ Die Timeline zeigt:
 - Dezente Container für aktuellen Halt, Einstieg, Ziel und Halte innerhalb der eigenen Reise
 - Weiche Status-Übergänge zwischen Ladezuständen, Error und Timeline via `AnimatedContent`
 - Gestaffelte Fade-in/Slide-in Animationen der Timeline-Einträge via `AnimatedVisibility`
-- Abrufstatus mit Quelle und Alter statt des früheren tagesabhängigen `LIVE`-Badges; ältere Daten und Abruffehler bleiben sichtbar gekennzeichnet
-- Ereignisbezogener Gleisvergleich, beispielsweise `Gleis 7 statt 5`, mit eigener Quellen-/Abrufinformation
+- Eine zentrale Karte zeigt Abrufstatus, beteiligte API-Quellen und das Alter des ältesten verwendeten Abrufs statt des früheren tagesabhängigen `LIVE`-Badges; unbekannte oder ältere Abrufe und Abruffehler bleiben dort sichtbar gekennzeichnet. Quellen-/Altertexte werden nicht bei jeder Ankunft, Abfahrt, Gleisangabe oder jedem Ausfall wiederholt.
+- Ereignisbezogener Gleisvergleich, beispielsweise `Gleis 7 statt 5`; die getrennten Quellen-/Abrufmetadaten bleiben erhalten und fließen in die zentrale Karte ein.
+- TalkBack liest jeden Zeitwert als ein Element mit Ereignis, Istzeit, gegebenenfalls Planzeit und Verspätung sowie genauer Zeitquelle einschließlich API-Abrufalter. Die kompakten GPS-/Manuell-Zeichen erzeugen keine zusätzliche Ansage. Gleis- und Ausfallbadges behalten ihre vorhandene Herkunft über unsichtbare Semantik.
 - Höchstens ein aktueller beziehungsweise nächster Besuch gemäß der unten beschriebenen Fortschrittsquelle
 - Verspätungs-Badges (grün/rot)
 - "HALT ENTFÄLLT" für gestrichene Halte

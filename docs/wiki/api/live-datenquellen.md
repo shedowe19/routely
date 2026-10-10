@@ -57,7 +57,9 @@ Die Tafel enthält nullable Minutenverspätungen, `platform`, `scheduledPlatform
 
 `StopRealtimeInfo.fetchedAtMillis` beschreibt den erfolgreichen Clientabruf, nicht den Zeitpunkt einer Änderung bei DB oder Transitous. `providerUpdatedAtMillis` bleibt ohne belastbaren Beleg leer; ein Störungsmeldungs-Zeitstempel ist keine Prognosezeit.
 
-Die Detailansicht zeigt Quelle und Abrufalter sowie Fehler beziehungsweise ältere Abrufe. Das frühere tagesabhängige grüne `LIVE`-Badge ist ersetzt. `lastUpdated` wird nur nach erfolgreichem Halteabruf erneuert. Ein Gleisvergleich zeigt beispielsweise `Gleis 7 statt 5`; Herkunft und Alter von Gleisen sind von Zeitwerten getrennt. GPS- und manuelle Zeiten behalten ihre eigene Quellenbezeichnung. Alte Fahrtcache-Einträge ohne Abrufmetadaten gelten als unbekannt, statt beim Neustart als frisch gestempelt zu werden.
+Die Detailansicht bündelt API-Quellen und Abrufalter in einer zentralen Karte. Sie berücksichtigt getrennte Zeit-, Gleis- und Ausfallmetadaten, nennt alle beteiligten Quellen und verwendet konservativ den ältesten Abruf; unbekannte Abrufzeiten und Abruffehler bleiben sichtbar. Die Haltezeilen wiederholen keine Quellen-/Altertexte unter Ankunft, Abfahrt, Gleis oder Ausfall. Das frühere tagesabhängige grüne `LIVE`-Badge ist ersetzt. `lastUpdated` wird nur nach erfolgreichem Halteabruf erneuert. Ein Gleisvergleich zeigt weiterhin beispielsweise `Gleis 7 statt 5`; Herkunft und Alter von Gleisen sind im Modell von Zeitwerten getrennt.
+
+GPS-Schätzungen stehen in der Timeline mit `≈`, GPS-Beobachtungen mit einem GPS-Symbol und manuelle Zeiten mit einem Stift direkt neben der Uhrzeit. Bei den Headerzeiten bleiben diese lokalen Quellen ausgeschrieben. TalkBack erhält die genaue ereignisbezogene Zeitquelle samt API-Abrufalter, Ist-/Planzeit und Verzögerung als gemeinsame Ansage; Gleis- und Ausfallbadges behalten ihre vorhandene Herkunft über unsichtbare Semantik. Alte Fahrtcache-Einträge ohne Abrufmetadaten gelten als unbekannt, statt beim Neustart als frisch gestempelt zu werden.
 
 ## Abhängigkeiten
 
