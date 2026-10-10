@@ -35,7 +35,12 @@ internal data class TripChangeStop(
     val isOrigin: Boolean = false,
     val isDestination: Boolean = false,
     val arrivalPlatformIsLive: Boolean? = null,
-    val departurePlatformIsLive: Boolean? = null
+    val departurePlatformIsLive: Boolean? = null,
+    val arrivalTimeSourceLabel: String? = null,
+    val departureTimeSourceLabel: String? = null,
+    val arrivalPlatformSourceLabel: String? = null,
+    val departurePlatformSourceLabel: String? = null,
+    val cancellationSourceLabel: String? = null
 )
 
 internal data class TripChangeSnapshot(
@@ -86,7 +91,12 @@ internal data class TripChangeSnapshot(
                         cleanPlatform(stop.departurePlatformReal) != null -> true
                         cleanPlatform(stop.departurePlatformPlanned) != null -> false
                         else -> null
-                    }
+                    },
+                    arrivalTimeSourceLabel = stop.arrivalRealtimeInfo?.sourceLabel,
+                    departureTimeSourceLabel = stop.departureRealtimeInfo?.sourceLabel,
+                    arrivalPlatformSourceLabel = stop.arrivalPlatformRealtimeInfo?.sourceLabel,
+                    departurePlatformSourceLabel = stop.departurePlatformRealtimeInfo?.sourceLabel,
+                    cancellationSourceLabel = stop.cancellationRealtimeInfo?.sourceLabel
                 )
             },
             nextIndex = nextIndex,
@@ -110,7 +120,8 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
     private val delayReferences = mutableMapOf<String, DelayObservation>()
     private val platformLiveGaps = mutableSetOf<String>()
 
-    private data class DelayObservation(val plannedMillis: Long, val minutes: Int, val arrival: Boolean)
+    private data class DelayObservation(val plannedMillis: Long, val minutes: Int, val arrival: Boolean,
+        val sourceLabel: String?)
 
     fun reset(statusId: Int, state: TripChangeMonitorState? = null) {
         this.statusId = statusId
@@ -141,7 +152,11 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
         val events = mutableListOf<TripChangeEvent>()
         for ((index, stop) in remaining.withIndex()) {
             val old = previousByKey[stop.key] ?: continue
-            if (old.cancelled != null && stop.cancelled != null && old.cancelled != stop.cancelled) {
+            // A confirmed new cancellation is actionable even after switching providers. A
+            // fallback provider's older "not cancelled" value does not prove reinstatement.
+            if (old.cancelled != null && stop.cancelled != null && old.cancelled != stop.cancelled &&
+                (stop.cancelled || !differentKnownSources(old.cancellationSourceLabel, stop.cancellationSourceLabel))
+            ) {
                 val cancelled = stop.cancelled
                 val subject = when {
                     stop.isDestination -> "Deine Ausstiegshaltestelle ${stop.name}"
@@ -161,10 +176,12 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
                 val newPlatform = platform(stop)
                 val oldIsLive = platformIsLive(old)
                 val newIsLive = platformIsLive(stop)
-                val liveValueLost = oldIsLive == true && newIsLive != true
+                val sourceChanged = differentKnownSources(platformSourceLabel(old), platformSourceLabel(stop))
+                if (sourceChanged) platformLiveGaps.remove(stop.key)
+                val liveValueLost = !sourceChanged && oldIsLive == true && newIsLive != true
                 if (liveValueLost) platformLiveGaps += stop.key
-                val liveValueRestored = newIsLive == true && platformLiveGaps.remove(stop.key)
-                if (!liveValueLost && !liveValueRestored && oldPlatform != null && newPlatform != null &&
+                val liveValueRestored = !sourceChanged && newIsLive == true && platformLiveGaps.remove(stop.key)
+                if (!sourceChanged && !liveValueLost && !liveValueRestored && oldPlatform != null && newPlatform != null &&
                     !oldPlatform.equals(newPlatform, ignoreCase = true)
                 ) {
                     emit(events, stop, "platform", newPlatform.uppercase(Locale.ROOT), TripChangeKind.PLATFORM,
@@ -185,7 +202,9 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
             val manualChanged = (delayStop.isOrigin && !current.arrival && previous.manualDepartureMillis != snapshot.manualDepartureMillis) ||
                 (delayStop.isDestination && current.arrival && previous.manualArrivalMillis != snapshot.manualArrivalMillis)
             val reference = delayReferences[delayStop.key]
-            if (manualChanged || prior.plannedMillis != current.plannedMillis || prior.arrival != current.arrival ||
+            if (manualChanged || differentKnownSources(prior.sourceLabel, current.sourceLabel) ||
+                differentKnownSources(reference?.sourceLabel, current.sourceLabel) ||
+                prior.plannedMillis != current.plannedMillis || prior.arrival != current.arrival ||
                 reference == null || reference.plannedMillis != current.plannedMillis || reference.arrival != current.arrival
             ) {
                 delayReferences[delayStop.key] = current
@@ -239,12 +258,23 @@ internal class TripChangeMonitor(private val delayThresholdMinutes: Int = 5) {
     private fun platformIsLive(stop: TripChangeStop): Boolean? =
         if (stop.isOrigin) stop.departurePlatformIsLive else stop.arrivalPlatformIsLive
 
+    private fun platformSourceLabel(stop: TripChangeStop): String? =
+        if (stop.isOrigin) stop.departurePlatformSourceLabel else stop.arrivalPlatformSourceLabel
+
+    /** Unknown legacy provenance keeps the existing comparison behavior. */
+    private fun differentKnownSources(previous: String?, current: String?): Boolean {
+        val old = previous?.trim()?.takeIf(String::isNotEmpty) ?: return false
+        val new = current?.trim()?.takeIf(String::isNotEmpty) ?: return false
+        return !old.equals(new, ignoreCase = true)
+    }
+
     private fun delayObservation(stop: TripChangeStop): DelayObservation? {
         val arrival = !stop.isOrigin && stop.arrivalPlannedMillis != null && stop.arrivalRealMillis != null
         val planned = if (arrival) stop.arrivalPlannedMillis else stop.departurePlannedMillis
         val real = if (arrival) stop.arrivalRealMillis else stop.departureRealMillis
         if (planned == null || real == null) return null
-        return DelayObservation(planned, ((real - planned) / 60_000L).toInt(), arrival)
+        return DelayObservation(planned, ((real - planned) / 60_000L).toInt(), arrival,
+            if (arrival) stop.arrivalTimeSourceLabel else stop.departureTimeSourceLabel)
     }
 
     private fun emit(

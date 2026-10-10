@@ -21,7 +21,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
@@ -36,6 +35,7 @@ import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import de.traewelling.app.data.model.GpsGeometrySource
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.StopRealtimeInfo
 import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.TravelReason
@@ -46,12 +46,18 @@ import de.traewelling.app.service.JourneyTime
 import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.JourneyTimeSource
 import de.traewelling.app.service.TrackingSource
-import de.traewelling.app.service.trackingPlatform
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
 import de.traewelling.app.viewmodel.StatusDetailUiState
+import de.traewelling.app.viewmodel.StopEvent
+import de.traewelling.app.viewmodel.eventRealtimeInfo
+import de.traewelling.app.viewmodel.eventPlatformRealtimeInfo
+import de.traewelling.app.viewmodel.journeyTimeSourceLabel
+import de.traewelling.app.viewmodel.platformPresentation
+import de.traewelling.app.viewmodel.realtimeRetrievalPresentation
+import de.traewelling.app.viewmodel.stopoversRetrievalPresentation
 import kotlinx.coroutines.delay
 import java.time.Instant
 import java.time.ZoneId
@@ -129,54 +135,6 @@ fun StatusDetailScreen(
                     }
                 },
                 actions = {
-                    val isToday = remember(uiState.status) {
-                        val createdAt = uiState.status?.createdAt
-                        if (createdAt != null) {
-                            try {
-                                val zdt = ZonedDateTime.parse(createdAt)
-                                val tripDate = zdt.toLocalDate()
-                                val today = ZonedDateTime.now().toLocalDate()
-                                tripDate == today
-                            } catch (e: Exception) { false }
-                        } else false
-                    }
-
-                    if (uiState.lastUpdated > 0 && isToday) {
-                        val pulseAnim = rememberInfiniteTransition(label = "live")
-                        val pulseAlpha by pulseAnim.animateFloat(
-                            initialValue = 1f, targetValue = 0.3f,
-                            animationSpec = infiniteRepeatable(
-                                animation = tween(800, easing = EaseInOutCubic),
-                                repeatMode = RepeatMode.Reverse
-                            ), label = "pulse"
-                        )
-                        Surface(
-                            color = Color(0xFF00E676).copy(alpha = 0.2f),
-                            shape = RoundedCornerShape(12.dp),
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
-                            ) {
-                                Box(
-                                    Modifier
-                                        .size(8.dp)
-                                        .alpha(pulseAlpha)
-                                        .background(Color(0xFF00E676), CircleShape)
-                                )
-                                Spacer(Modifier.width(6.dp))
-                                Text(
-                                    "LIVE",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = Color(0xFF00E676),
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
-                                )
-                            }
-                        }
-                    }
-
                     if (uiState.isOwnStatus) {
                         if (uiState.isDeleting || uiState.isUpdating) {
                             CircularProgressIndicator(
@@ -331,6 +289,30 @@ private fun StatusDetailContent(
             }
         }
 
+        if (checkin != null) {
+            item {
+                val retrieval = stopoversRetrievalPresentation(stopovers, nowMillis, uiState.realtimeRefreshFailed)
+                val tint = if (retrieval.recentlyRetrieved) MaterialTheme.colorScheme.primary else WarningOrange
+                Surface(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
+                    color = tint.copy(alpha = 0.08f),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(if (uiState.realtimeRefreshFailed) Icons.Default.CloudOff else Icons.Default.Schedule,
+                            contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Column {
+                            Text(retrieval.label, style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.SemiBold, color = tint)
+                            Text(retrieval.detail, style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f))
+                        }
+                    }
+                }
+            }
+        }
+
         // Trip info card
         if (checkin != null) {
             item {
@@ -342,7 +324,7 @@ private fun StatusDetailContent(
                     )
                 ) {
                     TripInfoCard(status, gpsTimes, nowMillis, isReplacementBus,
-                        sevStops.isNotEmpty(), uiState.isLoadingSevStops)
+                        sevStops.isNotEmpty(), uiState.isLoadingSevStops, uiState.realtimeRefreshFailed)
                 }
             }
         }
@@ -480,6 +462,8 @@ private fun StatusDetailContent(
                         stop = stop,
                         sevInfo = sevStops[SevStopResolver.visitKey(stop)],
                         isReplacementBus = isReplacementBus,
+                        nowMillis = nowMillis,
+                        realtimeRefreshFailed = uiState.realtimeRefreshFailed,
                         arrivalTime = JourneyTimeResolver.arrival(stop, gpsTimes, nowMillis,
                             if (isDestination) checkin?.manualArrival else null),
                         departureTime = JourneyTimeResolver.departure(stop, gpsTimes, nowMillis,
@@ -590,7 +574,8 @@ private fun TripInfoCard(
     nowMillis: Long,
     isReplacementBus: Boolean,
     hasSevStops: Boolean,
-    isLoadingSevStops: Boolean
+    isLoadingSevStops: Boolean,
+    realtimeRefreshFailed: Boolean
 ) {
     val checkin = status.checkin ?: return
     val transportColor = TransportColors.forCategory(checkin.category)
@@ -716,10 +701,14 @@ private fun TripInfoCard(
             val origin = checkin.origin
             val dest = checkin.destination
             if (origin != null) {
-                TimeRow("Abfahrt", JourneyTimeResolver.departure(origin, gpsTimes, nowMillis, checkin.manualDeparture))
+                TimeRow("Abfahrt", JourneyTimeResolver.departure(origin, gpsTimes, nowMillis, checkin.manualDeparture),
+                    eventRealtimeInfo(origin, StopEvent.DEPARTURE), nowMillis, realtimeRefreshFailed,
+                    origin.cancelled == true)
             }
             if (dest != null) {
-                TimeRow("Ankunft", JourneyTimeResolver.arrival(dest, gpsTimes, nowMillis, checkin.manualArrival))
+                TimeRow("Ankunft", JourneyTimeResolver.arrival(dest, gpsTimes, nowMillis, checkin.manualArrival),
+                    eventRealtimeInfo(dest, StopEvent.ARRIVAL), nowMillis, realtimeRefreshFailed,
+                    dest.cancelled == true)
             }
         }
     }
@@ -777,7 +766,8 @@ private fun StatPill(icon: androidx.compose.ui.graphics.vector.ImageVector, valu
 }
 
 @Composable
-private fun TimeRow(label: String, time: JourneyTime?) {
+private fun TimeRow(label: String, time: JourneyTime?, realtimeInfo: StopRealtimeInfo?, nowMillis: Long,
+                    realtimeRefreshFailed: Boolean, cancelled: Boolean) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -785,13 +775,17 @@ private fun TimeRow(label: String, time: JourneyTime?) {
     ) {
         Text(label, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
-        JourneyTimeValue(time)
+        if (cancelled) Text("ENTFÄLLT", style = MaterialTheme.typography.labelLarge,
+            color = ErrorRed, fontWeight = FontWeight.SemiBold)
+        else JourneyTimeValue(time, realtimeInfo = realtimeInfo, nowMillis = nowMillis,
+            realtimeRefreshFailed = realtimeRefreshFailed)
     }
 }
 
 @Composable
 private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayBadge: Boolean = false,
-                             textAlpha: Float = 1f) {
+                             textAlpha: Float = 1f, realtimeInfo: StopRealtimeInfo? = null,
+                             nowMillis: Long = 0L, realtimeRefreshFailed: Boolean = false) {
     val actual = formatJourneyTime(time?.millis)
     val planned = formatJourneyTime(time?.plannedMillis)
     val differs = actual != planned && planned != "–"
@@ -801,7 +795,7 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
         delay > 0 -> WarningOrange
         else -> SuccessGreen
     }
-    Column(horizontalAlignment = Alignment.End) {
+    Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 180.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             if (prefix.isNotBlank()) {
                 Text(prefix, style = MaterialTheme.typography.bodySmall,
@@ -827,7 +821,8 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
                 fontWeight = if (differs) FontWeight.Bold else FontWeight.Medium)
         }
         time?.let {
-            Text(it.sourceLabel, style = MaterialTheme.typography.labelSmall,
+            Text(journeyTimeSourceLabel(it, realtimeInfo, nowMillis, realtimeRefreshFailed),
+                style = MaterialTheme.typography.labelSmall,
                 color = if (it.source == JourneyTimeSource.GPS_ESTIMATE || it.source == JourneyTimeSource.GPS_OBSERVED)
                     TealAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
         }
@@ -844,6 +839,8 @@ private fun StopoverItem(
     stop: StopStation,
     sevInfo: SevStopInfo?,
     isReplacementBus: Boolean,
+    nowMillis: Long,
+    realtimeRefreshFailed: Boolean,
     arrivalTime: JourneyTime?,
     departureTime: JourneyTime?,
     progress: StopTimelineProgress,
@@ -896,6 +893,8 @@ private fun StopoverItem(
     }
     
     val isCancelled = stop.cancelled == true
+    val platformEvent = if (isOrigin) StopEvent.DEPARTURE else StopEvent.ARRIVAL
+    val platform = platformPresentation(stop, platformEvent)
 
     // Journeys range logic for lines
     val isTopTraveled = originIndex != -1 && destinationIndex != -1 && index > originIndex && index <= destinationIndex
@@ -975,13 +974,20 @@ private fun StopoverItem(
                 if (!isCancelled) {
                     Column(horizontalAlignment = Alignment.End) {
                         if (isOrigin || isDestination) {
+                            val event = if (isOrigin) StopEvent.DEPARTURE else StopEvent.ARRIVAL
                             JourneyTimeValue(
-                                if (isOrigin) departureTime ?: arrivalTime else arrivalTime ?: departureTime,
-                                showDelayBadge = true, textAlpha = textAlpha
+                                if (isOrigin) departureTime else arrivalTime,
+                                showDelayBadge = true, textAlpha = textAlpha,
+                                realtimeInfo = eventRealtimeInfo(stop, event), nowMillis = nowMillis,
+                                realtimeRefreshFailed = realtimeRefreshFailed
                             )
                         } else {
-                            arrivalTime?.let { JourneyTimeValue(it, prefix = "An: ", textAlpha = textAlpha) }
-                            departureTime?.let { JourneyTimeValue(it, prefix = "Ab: ", textAlpha = textAlpha) }
+                            arrivalTime?.let { JourneyTimeValue(it, prefix = "An: ", textAlpha = textAlpha,
+                                realtimeInfo = eventRealtimeInfo(stop, StopEvent.ARRIVAL), nowMillis = nowMillis,
+                                realtimeRefreshFailed = realtimeRefreshFailed) }
+                            departureTime?.let { JourneyTimeValue(it, prefix = "Ab: ", textAlpha = textAlpha,
+                                realtimeInfo = eventRealtimeInfo(stop, StopEvent.DEPARTURE), nowMillis = nowMillis,
+                                realtimeRefreshFailed = realtimeRefreshFailed) }
                         }
                     }
                 }
@@ -1019,18 +1025,19 @@ private fun StopoverItem(
                         }
                     }
                 }
-                val plat = trackingPlatform(stop, isOrigin = isOrigin, isReplacementBus = isReplacementBus)
-                if (plat != null && !isReplacementBus) {
-                    val displayPlat = if (plat.startsWith("Gl", ignoreCase = true)) plat else "Gl. $plat"
+                if (platform != null && !isReplacementBus && !isCancelled) {
                     Surface(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
+                        color = if (platform.changed) WarningOrangeLight
+                            else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
-                            displayPlat,
+                            platform.label,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
+                            color = if (platform.changed) WarningOrange
+                                else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                            fontWeight = if (platform.changed) FontWeight.Bold else FontWeight.Normal
                         )
                     }
                 }
@@ -1161,6 +1168,19 @@ private fun StopoverItem(
                         }
                     }
                 }
+            }
+            val platformInfo = eventPlatformRealtimeInfo(stop, platformEvent)
+            if (platform != null && !isReplacementBus && !isCancelled && platformInfo != null) {
+                val retrieval = realtimeRetrievalPresentation(platformInfo, nowMillis, realtimeRefreshFailed)
+                Text("Gleis: ${retrieval.detail}" + if (retrieval.recentlyRetrieved) "" else " · ${retrieval.label.lowercase()}",
+                    modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+            }
+            if (isCancelled && stop.cancellationRealtimeInfo != null) {
+                val retrieval = realtimeRetrievalPresentation(stop.cancellationRealtimeInfo, nowMillis, realtimeRefreshFailed)
+                Text("Ausfall: ${retrieval.detail}" + if (retrieval.recentlyRetrieved) "" else " · ${retrieval.label.lowercase()}",
+                    modifier = Modifier.padding(top = 4.dp), style = MaterialTheme.typography.labelSmall,
+                    color = ErrorRed)
             }
             if (!isCancelled && sevInfo != null) {
                 SevStopGuidance(sevInfo)

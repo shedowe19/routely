@@ -1,0 +1,143 @@
+{
+  "departures": [
+    {
+      "delayArrival": 3,
+      "delayDeparture": null,
+      "destination": "Hannover Hbf",
+      "isCancelled": 0,
+      "messages": {
+        "delay": [
+          {
+            "text": "Vorfahrt eines anderen Zuges",
+            "timestamp": "2026-10-10T19:20:00"
+          }
+        ],
+        "qos": [
+          {
+            "text": "Ein Wagen fehlt",
+            "timestamp": "2026-10-10T14:43:00"
+          }
+        ]
+      },
+      "missingRealtime": false,
+      "platform": "13",
+      "route": [
+        {
+          "name": "Hildesheim Hbf"
+        },
+        {
+          "name": "Harsum"
+        },
+        {
+          "name": "Algermissen"
+        },
+        {
+          "name": "Sehnde"
+        },
+        {
+          "name": "Lehrte"
+        },
+        {
+          "name": "Ahlten"
+        },
+        {
+          "name": "Hannover Anderten-Misburg"
+        },
+        {
+          "name": "Hannover Karl-Wiechert-Allee"
+        },
+        {
+          "name": "Hannover-Kleefeld"
+        },
+        {
+          "name": "Hannover Hbf"
+        }
+      ],
+      "scheduledArrival": "19:24",
+      "scheduledDeparture": null,
+      "scheduledPlatform": "13",
+      "train": "SBH S3",
+      "trainClasses": [],
+      "trainNumber": "34328",
+      "via": []
+    },
+    {
+      "delayArrival": 2,
+      "delayDeparture": 2,
+      "destination": "Hameln",
+      "isCancelled": 0,
+      "messages": {
+        "delay": [],
+        "qos": [
+          {
+            "text": "1. Klasse fehlt",
+            "timestamp": "2026-10-10T15:06:00"
+          }
+        ]
+      },
+      "missingRealtime": false,
+      "platform": "1",
+      "route": [
+        {
+          "name": "Hannover Flughafen"
+        },
+        {
+          "name": "Langenhagen Pferdemarkt"
+        },
+        {
+          "name": "Langenhagen Mitte"
+        },
+        {
+          "name": "Hannover-Vinnhorst"
+        },
+        {
+          "name": "Hannover-Ledeburg"
+        },
+        {
+          "name": "Hannover-Nordstadt"
+        },
+        {
+          "name": "Hannover Hbf"
+        },
+        {
+          "name": "Hannover Bismarckstr."
+        },
+        {
+          "name": "Hannover-Linden/Fischerhof"
+        },
+        {
+          "name": "Weetzen"
+        },
+        {
+          "name": "Holtensen/Linderte"
+        },
+        {
+          "name": "Bennigsen"
+        },
+        {
+          "name": "Völksen/Eldagsen"
+        },
+        {
+          "name": "Springe"
+        },
+        {
+          "name": "Bad Münder(Deister)"
+        },
+        {
+          "name": "Hameln"
+        }
+      ],
+      "scheduledArrival": "19:23",
+      "scheduledDeparture": "19:25",
+      "scheduledPlatform": "1",
+      "train": "SBH S5",
+      "trainClasses": [],
+      "trainNumber": "89463",
+      "via": [
+        "Hannover Bismarckstr.",
+        "Hannover-Linden/Fischerhof",
+        "Weetzen"
+      ]
+    }
+  ]
+}

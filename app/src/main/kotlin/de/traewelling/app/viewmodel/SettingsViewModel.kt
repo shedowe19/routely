@@ -28,7 +28,8 @@ data class SettingsUiState(
     val tripChangeAlertsEnabled: Boolean = true,
     val tripChangeSpeechEnabled: Boolean = true,
     val liveProgressEnabled: Boolean = true,
-    val lockScreenDetailsEnabled: Boolean = true
+    val lockScreenDetailsEnabled: Boolean = true,
+    val publicRailRealtimeEnabled: Boolean = true
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -103,6 +104,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             launch { prefs.tripChangeSpeechEnabled.collect { enabled -> _uiState.update { it.copy(tripChangeSpeechEnabled = enabled) } } }
             launch { prefs.liveProgressEnabled.collect { enabled -> _uiState.update { it.copy(liveProgressEnabled = enabled) } } }
             launch { prefs.lockScreenDetailsEnabled.collect { enabled -> _uiState.update { it.copy(lockScreenDetailsEnabled = enabled) } } }
+            launch { prefs.publicRailRealtimeEnabled.collect { enabled -> _uiState.update { it.copy(publicRailRealtimeEnabled = enabled) } } }
         }
     }
 
@@ -229,6 +231,10 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
     fun setLockScreenDetailsEnabled(enabled: Boolean) {
         viewModelScope.launch { prefs.setLockScreenDetailsEnabled(enabled) }
+    }
+
+    fun setPublicRailRealtimeEnabled(enabled: Boolean) {
+        viewModelScope.launch { prefs.setPublicRailRealtimeEnabled(enabled) }
     }
 }
 

@@ -8,6 +8,7 @@ import de.traewelling.app.data.local.AppDatabase
 import de.traewelling.app.data.local.StatusDao
 import de.traewelling.app.data.local.StatusEntity
 import de.traewelling.app.data.model.*
+import de.traewelling.app.data.dbf.DbfRealtimeRepository
 import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.CancellationException
@@ -27,7 +28,8 @@ class TraewellingRepository internal constructor(
     private val sessionProvider: suspend () -> AuthSession,
     private val apiFactory: (AuthSession) -> TraewellingApiService,
     private val mutations: StatusMutationStore,
-    private val invalidateTrackingState: suspend (Int, AuthSession) -> Unit = { _, _ -> }
+    private val invalidateTrackingState: suspend (Int, AuthSession) -> Unit = { _, _ -> },
+    private val enrichRealtime: suspend (List<StopStation>, CheckinInfo) -> List<StopStation> = { stops, _ -> stops }
 ) {
     internal constructor(statusDao: StatusDao, sessionProvider: suspend () -> AuthSession,
         apiFactory: (AuthSession) -> TraewellingApiService) :
@@ -39,7 +41,8 @@ class TraewellingRepository internal constructor(
         { session -> RetrofitClient.createApiService(session.serverUrl,
             session.accessToken?.takeIf { it.isNotBlank() } ?: error("Not authenticated")) },
         StatusMutationEvents.store,
-        prefs::invalidateTrackingState
+        prefs::invalidateTrackingState,
+        DbfRealtimeRepository(context.applicationContext)::enrich
     )
 
     private val gson = Gson()
@@ -359,8 +362,21 @@ class TraewellingRepository internal constructor(
     }
 
     suspend fun getStopovers(tripId: Int): Result<List<StopStation>> = apiResult {
-        val r = api().getStopovers(tripId)
-        r.body()?.allStopovers()?.deduplicate() ?: error("Keine Halte gefunden (${r.code()})")
+        val session = authenticatedSession()
+        val r = apiFactory(session).getStopovers(tripId)
+        requireCurrentSession(session)
+        if (!r.isSuccessful) throw HttpException(r)
+        val stops = r.body()?.allStopovers()?.deduplicate() ?: error("Keine Halte gefunden (${r.code()})")
+        val fetchedAt = System.currentTimeMillis()
+        stops.map { it.withTraewellingReadInfo(fetchedAt) }
+    }
+
+    /** Public station-board data is a local display layer; it never modifies the Träwelling check-in. */
+    suspend fun enrichStopovers(stops: List<StopStation>, checkin: CheckinInfo): List<StopStation> {
+        val session = authenticatedSession()
+        val enriched = enrichRealtime(stops, checkin)
+        requireCurrentSession(session)
+        return enriched
     }
 
     // ─── Follow / Unfollow ────────────────────────────────────────────────────

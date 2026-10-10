@@ -42,6 +42,7 @@ import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.GpsSegmentGeometry
 import de.traewelling.app.data.model.RoadRouteGeometry
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.withUnknownReadInfo
 import de.traewelling.app.data.model.SevMap
 import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.sev.SevJourneyEnricher
@@ -748,9 +749,10 @@ class TripTrackingService : Service() {
                 cache.progress.announcedKeys.none { it.isBlank() }
         }.getOrDefault(false)
         if (!valid || currentStatusId != statusId) return
-        cachedCheckin = cache.checkin
-        cachedStops = cache.stopovers
-        cachedFullStops = cache.fullStopovers ?: cache.stopovers
+        cachedCheckin = cache.checkin.copy(origin = cache.checkin.origin?.withUnknownReadInfo(),
+            destination = cache.checkin.destination?.withUnknownReadInfo())
+        cachedStops = cache.stopovers.map { it.withUnknownReadInfo() }
+        cachedFullStops = (cache.fullStopovers ?: cache.stopovers).map { it.withUnknownReadInfo() }
         cachedSevMaps = cache.sevMaps ?: emptyMap()
         revalidateSevStops(System.currentTimeMillis())
         // A restored SEV point can have expired or moved while the process was dead.
@@ -773,7 +775,9 @@ class TripTrackingService : Service() {
         val checkin = status.checkin ?: return
         val tripId = checkin.trip ?: return
         if (!isCurrentTracking(statusId, expectedGeneration) || prefs.getAuthSession() != session) return
-        val stops = repo.getStopovers(tripId).getOrNull() ?: return
+        val stops = repo.getStopovers(tripId).getOrNull()?.let {
+            repo.enrichStopovers(it, checkin)
+        } ?: return
         trackingMutex.withLock {
             if (!isCurrentTracking(statusId, expectedGeneration) ||
                 prefs.getAuthSession() != session) return@withLock

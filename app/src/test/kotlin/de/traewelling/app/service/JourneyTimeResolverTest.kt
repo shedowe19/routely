@@ -2,6 +2,7 @@ package de.traewelling.app.service
 
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.TrainStation
+import de.traewelling.app.data.model.StopRealtimeInfo
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Test
@@ -172,6 +173,18 @@ class JourneyTimeResolverTest {
         val ambiguous = listOf(stop, stop.copy())
         assertEquals(ambiguous, JourneyTimeResolver.manualTimelineStops(ambiguous, stop, stop,
             iso(plannedDeparture - MINUTE), iso(plannedArrival - MINUTE)))
+    }
+
+    @Test fun realtimeSourceUsesTheMatchingEventReadTime() {
+        val labelled = stop.copy(arrivalRealtimeInfo = StopRealtimeInfo(now, "DBF · IRIS"),
+            departureRealtimeInfo = StopRealtimeInfo(now - 120_001, "Träwelling"))
+        assertEquals("DBF · IRIS", JourneyTimeResolver.arrival(labelled, null, now)!!.sourceLabel)
+        assertEquals("Träwelling · älterer Abruf", JourneyTimeResolver.departure(labelled, null, now)!!.sourceLabel)
+    }
+
+    @Test fun freshGpsKeepsItsOwnSourceAfterPublicRailEnrichment() {
+        val labelled = stop.copy(arrivalRealtimeInfo = StopRealtimeInfo(now, "DBF · IRIS"))
+        assertEquals("GPS-Schätzung", JourneyTimeResolver.arrival(labelled, gps(), now)!!.sourceLabel)
     }
 
     private fun gps(arrival: Long? = plannedArrival - 2 * MINUTE,
