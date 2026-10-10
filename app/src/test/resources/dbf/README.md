@@ -6,7 +6,7 @@ The HTTP Date was `Sat, 10 Oct 2026 17:26:55 GMT`. Other rows were omitted.
 This original capture does not claim station identity for production: the app
 requests `no_related=1` to exclude nearby stations.
 
-Data: Deutsche Bahn, via DBF / IRIS; Timetables data licensed CC BY 4.0.
+Data provenance: Deutsche Bahn, via DBF / IRIS.
 DBF JSON implementation: <https://github.com/derf/db-fakedisplay>,
 `lib/DBInfoscreen/Controller/Stationboard.pm`, IRIS v3 branch. DBF program code
 is AGPL-3.0-or-later; Routely implements its own parser and does not copy DBF code.

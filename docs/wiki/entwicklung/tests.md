@@ -361,6 +361,20 @@ Der abschließende vollständige Neuaufbau aus bereinigtem `app/build` bestand i
 
 Die unabhängige Abschlussprüfung liest Produktivcode und alle 24 Regressionen einschließlich der Fixturekorrektur. Ein näherer, innerhalb seiner eigenen Form mehrdeutiger Weg wird vor einer früheren Kandidatenbindung geprüft und verwirft deren noch gültige Prognose. Die gemeinsame Prognose begründet keine historische Route. Reale GPS-Güte und aktueller Busfahrweg bleiben praktisch zu prüfen; Regeln und Abwägung stehen in der [ADR gemeinsamer SEV-Restweg](../entscheidungen/2026-10-07-sev-gemeinsamer-restweg.md).
 
+## Anonyme DBF-/IRIS-Livedaten vom 10.10.2026
+
+Die [DBF-Ergänzung](../api/live-datenquellen.md) benötigt für Offline-Regressionen keine Registrierung, Zugangsdaten oder echten API-Aufrufe. Eine gekürzte öffentliche Hannover-JSON-v3-Fixture liegt unter `app/src/test/resources/dbf/`; synthetische Fälle ergänzen Zeit-, Plattform-, Ausfall- und Fehlerzustände.
+
+- `DbfJsonParserTest` und `DbfMatcherTest`: 20 Fälle zu strengem v3-Vertrag, EVA/Zugnummer/Sollereignis, eindeutigen Besuchstreffern, verspäteten Fahrten über Mitternacht, Sommerzeit-Mehrdeutigkeit, unbekannter Echtzeit und atomaren Soll-/Ist-Gleisen.
+- `DbfRealtimeRepositoryTest`: 15 Fälle zu anonymen begrenzten Requests, `no_related=1`, separater Feldherkunft, verspäteten aktuellen Fahrten, gemeinsamem Cache und Singleflight, exakter 10/min- und EVA-1/min-Quote, langem `Retry-After`, alten HTTP-Metadaten, UTF-8-/Größengrenzen und Abschalten während eines Abrufs.
+- `PublicRealtimeSessionTest`: fünf Fälle zu Logout/erneutem Login, lokalen Zusatzdaten ohne Statuswrite, belegtem Clientabruf und vollständigem Revisions-Neuabruf bei konkurrierender Zeitkorrektur.
+- `StopRealtimeInfoTest` und `RealtimePresentationTest`: 19 Fälle zu Abrufalter, unbekannten/futuristischen Zeiten, Offlinewerten, restauriertem Cache, Soll-/Ist-Gleisvergleich und getrennter GPS-/manueller Herkunft.
+- Zwei neue `JourneyTimeResolverTest`-Fälle und fünf neue `TripChangeMonitorTest`-Fälle sichern Zeitquellen beziehungsweise Schutz vor falschen Verbesserungen, Gleiswechseln und Ausfallrücknahmen beim Quellenwechsel.
+
+Der [CI-Lauf 38072554976](https://github.com/shedowe19/routely/actions/runs/38072554976) auf `9340072f935c3282d77655ae8635bcd087a3042d` besteht mit **905 Tests/71 Klassen**, null Fehlern, Fehlschlägen oder Skips. Vollständiges Debug-Lint: **0 Fehler/54 Warnungen**. Debug- und unsignierter Release-Build einschließlich Release-Vital-Lint sowie alle **56 Python-Releaseguardtests** bestehen. 108 ausführbare Gradle-Tasks, alle ausgeführt, Buildzeit 3 Minuten 42 Sekunden. Die JUnit- und Lint-Artefakte wurden unabhängig gezählt. Keine signierte Veröffentlichung oder Geräteausführung.
+
+Der separate anonyme Entwicklungsabruf von DBF lieferte HTTP 200 mit Minutenverspätungen und Gleisabweichungen. Dies ist ein Feld-/Erreichbarkeitsbeleg zum Abrufzeitpunkt, kein systematischer Nachweis eines höheren Aktualitätsvorsprungs gegenüber Träwelling. Reale Fahrten, Dienstkapazität und Anzeige bei großer Schrift bleiben praktisch zu prüfen.
+
 ## Offene Fragen
 
 - TODO: Bei Bedarf die erfolgreiche einmalige GET-Prüfung als wiederholbare Integrationstests einrichten und eine nicht versionierte Tokenbereitstellung festlegen.
