@@ -63,6 +63,12 @@ Die Detailansicht zeigt Quelle und Abrufalter sowie Fehler beziehungsweise älte
 
 Vorhandenes OkHttp, Gson und Coroutines; keine zusätzliche Android-Bibliothek, kein DB-Zugangsspeicher und kein mitgelieferter Proxy. DBF ist ein öffentlich betriebener Dienst mit begrenzter Kapazität; sein Quellcode ermöglicht einen späteren eigenen Betrieb. Die Softwarelizenz beschreibt den Dienstcode und ist kein pauschaler Lizenznachweis für alle zugrunde liegenden Bahndaten.
 
+## Validierung
+
+Der [CI-Lauf 38072554976](https://github.com/shedowe19/routely/actions/runs/38072554976) auf Codecommit `9340072f935c3282d77655ae8635bcd087a3042d` besteht: **905 Tests in 71 Klassen**, keine Fehler, Fehlschläge oder übersprungenen Tests; vollständiges Debug-Lint **0 Fehler / 54 Warnungen**, Debug-APK und unsignierte Release-APK einschließlich Release-Vital-Lint. Alle 108 ausführbaren Gradle-Tasks liefen in 3 Minuten 42 Sekunden. Die unveränderten Python-Releaseguards bestanden mit 56 Tests. JUnit- und Lint-Artefakte wurden unabhängig ausgewertet. Es wurde kein signierter Release veröffentlicht oder physisches Android-Gerät geprüft.
+
+Die 66 neuen Regressionen betreffen JSON-Vertrag und echte öffentliche Fixture, Zug-/Besuchsabgleich einschließlich verspäteter Mitternachtsfahrten, Cache/Quoten/HTTP-Grenzen, getrennte Feldherkunft, Sitzung und konkurrierende Statuskorrektur sowie Quellenwechsel im Änderungsmonitor. Details und Prüfbefehle stehen unter [Tests](../entwicklung/tests.md).
+
 ## Offene Fragen
 
 - TODO: Neue Quelle auf echten Fahrten mit Gleiswechsel, Ausfall, Mitternacht und Rücknahmen mit Träwelling vergleichen. Eine einzelne erfolgreiche Tafel beweist weder Vollständigkeit noch einen festen Aktualitätsvorsprung.
