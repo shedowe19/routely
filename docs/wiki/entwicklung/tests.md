@@ -57,7 +57,7 @@ Die [CI 41662265145](https://github.com/shedowe19/routely/actions/runs/416622651
 
 ## Jetzt-Zeitaktionen und rückwirkende Check-ins vom 03.11.2026
 
-Der lokale Gesamtstand auf Basis von `27ab1d5ca1d8731489e67ddf9efd005e426ec927` besteht **987 Android-Unit-Tests in 81 Klassen**, ohne Fehler, Fehlschläge oder übersprungene Fälle. Gegenüber dem veröffentlichten Stand sind 38 Regressionen ergänzt:
+Der lokale Gesamtstand auf Basis von `27ab1d5ca1d8731489e67ddf9efd005e426ec927` besteht **987 Android-Unit-Tests in 81 Klassen**, ohne Fehler, Fehlschläge oder übersprungene Fälle. Gegenüber v1.10.0 sind 38 Regressionen ergänzt:
 
 | Bereich | Fälle | Geprüftes Verhalten |
 | --- | --- | --- |
@@ -71,7 +71,13 @@ Der vollständige Lauf mit `:app:testDebugUnitTest :app:lintDebug :app:assembleD
 
 Eine ausschließlich lesende Live-Stichprobe umfasst sieben erfolgreiche GETs: Stationssuche Berlin Hbf, drei Abfahrtstafeln mit `when` und je eine zugehörige Fahrt. Für den 03.11.2026 um 08:00 UTC, den 02.11.2026 um 12:00 UTC und den 27.10.2026 um 12:00 UTC kamen 49, 48 beziehungsweise 50 Abfahrten am angefragten Datum sowie lesbare Fahrtverläufe zurück. Das belegt die drei Stichproben, keine allgemeine historische Verfügbarkeit. Es wurden keine Check-ins oder Zeitkorrekturen auf Träwelling geschrieben und keine Zugangsdaten oder persönlichen Antwortinhalte gespeichert.
 
-Das unabhängige Review hat keine offenen blockierenden Befunde. Dieser Stand ist lokal geprüft und noch nicht als neuer signierter Release veröffentlicht. Gerätebedienung, TalkBack, reale Fahrten und die sichtbare Serverbestätigung echter Zeitkorrekturen bleiben praktisch zu prüfen. Funktionsverträge: [Check-in](../module/checkin.md), [StatusDetail](../module/status-detail.md) und [Träwelling-Kompatibilität](../api/traewelling-kompatibilitaet.md).
+Das unabhängige Review hat keine offenen blockierenden Befunde. Dieser Stand wurde anschließend als v1.11.0 veröffentlicht; der genaue Nachweis folgt unten. Gerätebedienung, TalkBack, reale Fahrten und die sichtbare Serverbestätigung echter Zeitkorrekturen bleiben praktisch zu prüfen. Funktionsverträge: [Check-in](../module/checkin.md), [StatusDetail](../module/status-detail.md) und [Träwelling-Kompatibilität](../api/traewelling-kompatibilitaet.md).
+
+### GitHub-Nachweis für Release v1.11.0
+
+Die [CI 41669223966](https://github.com/shedowe19/routely/actions/runs/41669223966) für Commit `fc771e666d62e20f346542a81ee2c928246f0ec2` bestand vollständig. Die heruntergeladenen JUnit-Berichte bestätigen **987 Tests in 81 Klassen**, keine Fehler, Fehlschläge oder Skips; vollständiges Debug-Lint bestätigt **0 Fehler und 55 Warnungen**. Alle **65 Offlineprüfungen** wurden für diesen Commit erneut erfolgreich ausgeführt. Der frische Android-Gesamtlauf bestand in **4 min 57 s** mit allen 108 Aufgaben ausgeführt, einschließlich Debug- und unsigniertem Release-Build sowie Release-Vital-Lint.
+
+Der anschließend erfolgreiche [Signierworkflow 41670396027](https://github.com/shedowe19/routely/actions/runs/41670396027) baute und veröffentlichte `v1.11.0` mit Code `20` aus genau demselben Commit. Die tatsächlich heruntergeladene APK hat gültige v2-/v3-Signaturen mit unverändertem Zertifikat; Version, Commit, Tag, Codeclaim, Größe und Prüfsummen sind unabhängig geprüft. Vollständiger Nachweis unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1110). Keine reale Geräte-, Fahrt- oder schreibende Träwelling-Prüfung durch diese CI- und Artefaktkontrolle.
 
 ## Voraussetzungen
 

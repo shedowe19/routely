@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Codebasierte Übersicht des aktuellen Arbeitsstands auf Basis von `v1.10.0` (Releasecommit `52dcc10`) und dem anschließenden Dokumentationscommit `27ab1d5`. Der lokale Zeitausbau vom 03.11.2026 ergänzt die folgenden Jetzt-Aktionen und die rückwirkende Suche und ist noch nicht veröffentlicht. Veröffentlichungsnachweise stehen unter [Deployment](../entwicklung/deployment.md). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
+Codebasierte Übersicht des veröffentlichten Stands `v1.11.0` (Releasecommit `fc771e6`) vom 03.11.2026. Dieser ergänzt die folgenden Jetzt-Aktionen und die rückwirkende Suche. Signatur-, Versions- und Prüfungsnachweise stehen unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1110). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
 ## Vorhandene Funktionen
 

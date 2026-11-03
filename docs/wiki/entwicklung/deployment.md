@@ -34,6 +34,20 @@ Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen
 
 Die neuen Schutzpfade sind mit API-Doubles getestet. Während der historischen Befundkorrektur wurde kein signierter Release ausgelöst. Der inzwischen vorhandene reale Lauf wurde am 03.11.2026 wie unten beschrieben unabhängig geprüft.
 
+## Verifizierte Veröffentlichung v1.11.0
+
+Der [Release v1.11.0](https://github.com/shedowe19/routely/releases/tag/v1.11.0) wurde am 03.11.2026 mit dem vorhandenen [Signierworkflow 41670396027](https://github.com/shedowe19/routely/actions/runs/41670396027) erfolgreich veröffentlicht. Release-ID `432924572`, Tag, Metadaten und der dauerhaft reservierte Claim `routely-version-code/20` binden Commit `fc771e666d62e20f346542a81ee2c928246f0ec2`. Der Versionscode wurde automatisch als nächster freier Wert vergeben. Die [vollständige CI 41669223966](https://github.com/shedowe19/routely/actions/runs/41669223966) für denselben Commit ist ebenfalls erfolgreich.
+
+Die tatsächlich veröffentlichte APK wurde separat heruntergeladen und geprüft:
+
+- Paket `de.traewelling.app`, Versionsname `1.11.0`, Code `20`.
+- APK-Signaturen v2 und v3 gültig, ein Signer. Das Zertifikat stimmt mit v1.10.0 und v1.9.1 überein; SHA-256 `a9b2e1874c53db597fb15b73e47f6cf40da6a61521a230f97a3f7120ccb684dd`.
+- Datei `routely-v1.11.0.apk`, Größe `16492411` Bytes, SHA-256 `b5ce7c393e0b16c09daf2b100650343ae9379ee0e54b5e5fd793a0920163c1ca`; Größe und Prüfsumme stimmen mit `release-version.json` und GitHubs Asset-Digest überein.
+- Die Metadaten-Prüfsumme `ae6ccbaf31fae7350bb6bce7367e26dbed5d7e60af931a15055ff5a80aae08dd` stimmt mit GitHub überein. Der annotierte Codeclaim nennt den passenden Workflowlauf und Versuch 1; Claim und Metadaten bestätigen Commit, Tag und Version.
+- Die heruntergeladenen CI-Berichte bestätigen 987 Tests in 81 Klassen ohne Fehler, Fehlschläge oder Skips sowie Debug-Lint mit 0 Fehlern und 55 Warnungen. Alle 65 Offlineprüfungen und die vollständigen Debug-/Release-Builds bestanden ebenfalls; Android-Buildzeit 4 Minuten 57 Sekunden, alle 108 Aufgaben ausgeführt.
+
+Dieser Release ergänzt `Abfahrt jetzt`, `Ankunft jetzt`, den direkten Einstieg `Fahrt öffnen` nach Check-in und die Datum-/Uhrzeitsuche für vergessene Fahrten. Abgeschlossene Nachträge starten keine Begleitung und ersetzen keine andere aktive Fahrt. Der Nachweis belegt Signatur und Artefaktidentität; Installation, TalkBack, reale Fahrten und tatsächliche Zeitkorrekturen wurden nicht auf einem Gerät geprüft. Die bestehenden Geräte- und Speicher-Recovery-Aufgaben bleiben unter [Offene Fragen](../offene-fragen.md) dokumentiert.
+
 ## Verifizierte Veröffentlichung v1.10.0
 
 Der [Release v1.10.0](https://github.com/shedowe19/routely/releases/tag/v1.10.0) wurde am 03.11.2026 mit dem vorhandenen [Signierworkflow 41664223463](https://github.com/shedowe19/routely/actions/runs/41664223463) veröffentlicht. Der Workflow ist erfolgreich; Release-ID `432881523`, Tag, Metadaten und der dauerhaft reservierte Claim `routely-version-code/19` binden Commit `52dcc10a7327beccea89ebb0afd8aba3b21dc67e`. Der Code wurde automatisch als nächster freier Wert vergeben. Die [vollständige CI 41662265145](https://github.com/shedowe19/routely/actions/runs/41662265145) für denselben Commit ist ebenfalls erfolgreich.
