@@ -7,7 +7,7 @@ Aktuelle offene Arbeit, praktische Prüfbedingungen und Produktentscheidungen. D
 ## Offene Punkte
 
 - **A01 – laufender API-Abgleich:** Der geprüfte Träwelling-Stand ist develop 6051078ef10246d931a34c72d12ad3f96c8a53bc mit Changelog 4035dadd77fc2fe692396aa4e9a5dcea5a1a6c67. Keine weitere Pflichtmigration wurde gefunden. Weitere Änderungen sind regelmäßig gegen tatsächliche Routen, Ressourcen und Clientverbraucher zu prüfen. Operator-IDs bleiben im geprüften Server noch numerisch; continuationTrip ist dort trotz Changelog nicht im TripResource ausgegeben. Siehe [API-Kompatibilität](./api/traewelling-kompatibilitaet.md).
-- **Bestätigter Validierungsstand:** Der lokale Recovery-/Zeitdialogausbau nach v1.11.0 besteht 1.065 Android-Unit-Tests in 91 Klassen ohne Fehler oder Skips, vollständiges Debug-Lint ohne Fehler (55 Warnungen) sowie Debug- und unsignierten Release-Build. Dieser Stand ist noch nicht veröffentlicht. Der veröffentlichte v1.11.0-Nachweis bleibt bei 987 Android-Tests und 65 Offlineprüfungen; auch die früheren lesenden Live-Stichproben bleiben ihrem Prüfstand zugeordnet. Details und ausdrückliche Geräteprüfgrenzen stehen unter [Tests](./entwicklung/tests.md).
+- **Bestätigter Validierungsstand:** Der als `v1.12.0` veröffentlichte Recovery-/Zeitdialogausbau besteht 1.065 Android-Unit-Tests in 91 Klassen ohne Fehler oder Skips, vollständiges Debug-Lint ohne Fehler (55 Warnungen), Debug- und unsignierten Release-Build sowie 65 erneut erfolgreiche Offlineprüfungen. Die signierte öffentliche APK ist mit Version 1.12.0/Code 21, unverändertem Zertifikat und exakter Commitbindung unter [Deployment](./entwicklung/deployment.md#verifizierte-veröffentlichung-v1120) geprüft. Frühere lesende Live-Stichproben behalten ihren ursprünglichen Prüfstand. Details und Geräteprüfgrenzen stehen unter [Tests](./entwicklung/tests.md).
 
 ## Noch nötige System- und Fahrttests
 
@@ -37,7 +37,7 @@ Diese Punkte sind geklärte Funktionsgrenzen oder optionale Erweiterungen, keine
 
 ## Geklärte und korrigierte Fragen
 
-- **P12 – Storage-Recovery:** Im lokalen Ausbau umgesetzt: gemeinsame Fehlerzustände, begrenztes Wiederholen, sichtbare Retryoberfläche, ausdrücklich bestätigter Korruptionsreset und nicht destruktive Servicepause. Letzte bestätigte Werte bleiben erhalten; schreibende und Startentscheidungen benötigen frische Daten. Implementierungsvertrag und Praxisgrenzen stehen in der [Recovery-Entscheidung](./entscheidungen/2026-11-03-storage-recovery.md), tatsächliche Ergebnisse unter [Tests](./entwicklung/tests.md).
+- **P12 – Storage-Recovery:** Mit v1.12.0 veröffentlicht: gemeinsame Fehlerzustände, begrenztes Wiederholen, sichtbare Retryoberfläche, ausdrücklich bestätigter Korruptionsreset und nicht destruktive Servicepause. Letzte bestätigte Werte bleiben erhalten; schreibende und Startentscheidungen benötigen frische Daten. Implementierungsvertrag und Praxisgrenzen stehen in der [Recovery-Entscheidung](./entscheidungen/2026-11-03-storage-recovery.md), tatsächliche Ergebnisse unter [Tests](./entwicklung/tests.md).
 
 
 - Die historischen 16 Hauptbefunde, zwölf zusätzlichen Nachreview-Befunde und acht weiteren Nachreview-Befunde sind bereits korrigiert; die [historischen Nachweise](./entwicklung/main-review-2026-10-06.md) bleiben erhalten.

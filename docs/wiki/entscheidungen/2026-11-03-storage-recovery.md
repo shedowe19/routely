@@ -2,7 +2,7 @@
 
 ## Zweck und Status
 
-Entscheidung vom 03.11.2026 für den lokalen Ausbau nach v1.11.0: P12 erhält eine gemeinsame Speicherfehlergrenze und eine erreichbare Wiederherstellungsoberfläche. Tatsächlich ausgeführte Ergebnisse stehen unter [Tests](../entwicklung/tests.md); diese Entscheidung allein behauptet keinen Geräte- oder Release-Nachweis.
+Entscheidung vom 03.11.2026: P12 erhält eine gemeinsame Speicherfehlergrenze und eine erreichbare Wiederherstellungsoberfläche. Die Umsetzung wurde mit v1.12.0 aus Commit `94bf23cc13063195376a7e2fdcdc8596b740f8c4` veröffentlicht. Tatsächlich ausgeführte Ergebnisse stehen unter [Tests](../entwicklung/tests.md), der Signatur-/APK-Nachweis unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1120). Diese Entscheidung ersetzt keine Geräte- oder Restoreprüfung.
 
 ## Kontext
 

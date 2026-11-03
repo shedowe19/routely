@@ -34,6 +34,21 @@ Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen
 
 Die neuen Schutzpfade sind mit API-Doubles getestet. Während der historischen Befundkorrektur wurde kein signierter Release ausgelöst. Der inzwischen vorhandene reale Lauf wurde am 03.11.2026 wie unten beschrieben unabhängig geprüft.
 
+## Verifizierte Veröffentlichung v1.12.0
+
+Der [Release v1.12.0](https://github.com/shedowe19/routely/releases/tag/v1.12.0) wurde am 03.11.2026 mit dem vorhandenen [Signierworkflow 41678670414](https://github.com/shedowe19/routely/actions/runs/41678670414) erfolgreich veröffentlicht. Release-ID `432978195`, Tag, Metadaten und der dauerhaft reservierte Claim `routely-version-code/21` binden Commit `94bf23cc13063195376a7e2fdcdc8596b740f8c4`. Der Versionscode wurde automatisch als nächster freier Wert gewählt. Die [vollständige CI 41677528286](https://github.com/shedowe19/routely/actions/runs/41677528286) für denselben Commit ist ebenfalls erfolgreich.
+
+Die tatsächlich veröffentlichte APK wurde separat heruntergeladen und unabhängig geprüft:
+
+- Paket `de.traewelling.app`, Versionsname `1.12.0`, Code `21`, compileSdk `36`, minSdk `26`, targetSdk `34`.
+- APK-Signaturen v2 und v3 gültig, ein Signer. Das Zertifikat stimmt mit v1.11.0 und den zuvor geprüften Releases überein; SHA-256 `a9b2e1874c53db597fb15b73e47f6cf40da6a61521a230f97a3f7120ccb684dd`.
+- Datei `routely-v1.12.0.apk`, Größe `16541563` Bytes, SHA-256 `fba01415a58f841730ce811f1b3ca755e133a6819161c8ebad910c31a15c0f6a`; Größe und Prüfsumme entsprechen `release-version.json` und GitHubs Asset-Digest.
+- Metadaten: `343` Bytes, SHA-256 `91b76cfc29c0265836d6878d7ada08fcfab24792206fad01a95d039ad84775fa`, ebenfalls identisch mit GitHub. Claim und Metadaten bestätigen Version, Code, Tag und Commit; der annotierte Claim nennt den passenden Workflowlauf und Versuch 1.
+- CI-Berichte bestätigen 1.065 Tests in 91 Klassen ohne Fehler, Fehlschläge oder Skips, vollständiges Debug-Lint mit 0 Fehlern und 55 Warnungen sowie 65 erfolgreiche Offlineprüfungen. Debug-/Release-Builds und Release-Vital-Lint sind erfolgreich; Android-Gesamtlauf 5 Minuten 1 Sekunde mit allen 108 Aufgaben ausgeführt.
+- Der Signierlauf besteht zusätzlich seine 56 Releaseguardtests und Test-/Release-Build in 1 Minute 54 Sekunden mit 80 Aufgaben.
+
+Dieser Release enthält die gemeinsame Storage-Recovery mit begrenztem Retry, bestätigtem Korruptionsreset und nicht destruktiver Begleitungspause. `Zeiten erfassen` liegt im Fahrteditor; Jetzt-Aktionen ändern dessen Entwurf und werden mit `Speichern` übernommen. Abfahrt und Ankunft verwenden in Bearbeitung und Check-in native Android-Datum-/Uhrzeitdialoge. Der tatsächliche Dateitest ist auch in der Linux-CI erfolgreich; seine SDK-26-JVM-Fixture und die verbleibenden Geräte-/Restoregrenzen stehen in der [Recovery-Entscheidung](../entscheidungen/2026-11-03-storage-recovery.md). Die APK-Prüfung ist kein Installations-, TalkBack-, Fahrt- oder Live-Schreibtest.
+
 ## Verifizierte Veröffentlichung v1.11.0
 
 Der [Release v1.11.0](https://github.com/shedowe19/routely/releases/tag/v1.11.0) wurde am 03.11.2026 mit dem vorhandenen [Signierworkflow 41670396027](https://github.com/shedowe19/routely/actions/runs/41670396027) erfolgreich veröffentlicht. Release-ID `432924572`, Tag, Metadaten und der dauerhaft reservierte Claim `routely-version-code/20` binden Commit `fc771e666d62e20f346542a81ee2c928246f0ec2`. Der Versionscode wurde automatisch als nächster freier Wert vergeben. Die [vollständige CI 41669223966](https://github.com/shedowe19/routely/actions/runs/41669223966) für denselben Commit ist ebenfalls erfolgreich.
