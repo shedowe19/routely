@@ -54,6 +54,8 @@ import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
 import de.traewelling.app.viewmodel.StatusDetailUiState
+import de.traewelling.app.viewmodel.NowTimeEvent
+import de.traewelling.app.viewmodel.canRecordNow
 import de.traewelling.app.viewmodel.isEditVisibilityLocked
 import de.traewelling.app.viewmodel.StopEvent
 import de.traewelling.app.viewmodel.eventRealtimeInfo
@@ -194,7 +196,8 @@ fun StatusDetailScreen(
                 "CONTENT" -> {
                     StatusDetailContent(
                         uiState = uiState,
-                        onUserClick = onUserClick
+                        onUserClick = onUserClick,
+                        onRecordTimeNow = viewModel::recordTimeNow
                     )
                 }
             }
@@ -205,7 +208,8 @@ fun StatusDetailScreen(
 @Composable
 private fun StatusDetailContent(
     uiState: StatusDetailUiState,
-    onUserClick: (String) -> Unit
+    onUserClick: (String) -> Unit,
+    onRecordTimeNow: (NowTimeEvent) -> Unit
 ) {
     val status = uiState.status ?: return
     val checkin = status.checkin
@@ -291,6 +295,12 @@ private fun StatusDetailContent(
                 )
             ) {
                 StatusHeaderCard(status, onUserClick)
+            }
+        }
+
+        if (uiState.isOwnStatus && checkin != null && uiState.deletedStatusId == null) {
+            item {
+                NowTimeActionsCard(uiState, onRecordTimeNow)
             }
         }
 
@@ -567,6 +577,55 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
                 Spacer(Modifier.height(12.dp))
                 Text(status.body, style = MaterialTheme.typography.bodyMedium,
                     lineHeight = 20.sp)
+            }
+        }
+    }
+}
+
+@Composable
+private fun NowTimeActionsCard(state: StatusDetailUiState, onRecord: (NowTimeEvent) -> Unit) {
+    val checkin = state.status?.checkin ?: return
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.35f))
+    ) {
+        Column(Modifier.fillMaxWidth().padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Zeiten erfassen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+            Text("Speichert die aktuelle Uhrzeit für deinen Einstieg oder dein gewähltes Ziel.",
+                style = MaterialTheme.typography.bodySmall)
+            fun savedTime(value: String?): String? = value?.let {
+                runCatching {
+                    DateTimeFormatter.ofPattern("dd.MM. · HH:mm").withZone(ZoneId.systemDefault()).format(Instant.parse(it))
+                }.getOrNull()
+            }
+            savedTime(checkin.manualDeparture)?.let { Text("Gespeicherte Abfahrt: $it", style = MaterialTheme.typography.bodySmall) }
+            savedTime(checkin.manualArrival)?.let { Text("Gespeicherte Ankunft: $it", style = MaterialTheme.typography.bodySmall) }
+            FilledTonalButton(
+                onClick = { onRecord(NowTimeEvent.DEPARTURE) },
+                enabled = state.canRecordNow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.DepartureBoard, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Abfahrt jetzt")
+            }
+            FilledTonalButton(
+                onClick = { onRecord(NowTimeEvent.ARRIVAL) },
+                enabled = state.canRecordNow,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Flag, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(8.dp))
+                Text("Ankunft jetzt")
+            }
+            if (state.recordingTime != null) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("Zeit wird gespeichert …", style = MaterialTheme.typography.bodySmall)
+            }
+            Text("„Ankunft jetzt“ beendet die Begleitung dieser Fahrt nach dem Speichern.",
+                style = MaterialTheme.typography.bodySmall)
+            state.nowTimeNotice?.let { notice ->
+                Text(notice, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Medium)
             }
         }
     }

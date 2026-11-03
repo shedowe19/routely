@@ -14,6 +14,7 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/RealtimePresentation.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusEditRequest.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/NowTimeCorrection.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/components/StatusVisibilitySelector.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/DeletedStatusCompletion.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
@@ -21,6 +22,20 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 
 ## Verhalten
+
+### Abfahrt und Ankunft jetzt erfassen
+
+Eigene Check-ins zeigen einen direkten Bereich `Zeiten erfassen` mit `Abfahrt jetzt` und `Ankunft jetzt`. Der Klick erfasst die aktuelle Uhrzeit vor jeder suspendierenden Arbeit und kürzt sie auf die vom Server gespeicherte Minutenpräzision. Der PUT enthält ausschließlich `manualDeparture` beziehungsweise `manualArrival`; Text, Sichtbarkeit, Gegenzeit und gewählter Zielhalt bleiben unverändert. Die gespeicherten manuellen Werte und eine Speicherbestätigung stehen im selben Bereich, unabhängig von einer möglicherweise vorrangigen lokalen GPS-Anzeige.
+
+Die Reihenfolge wird gegen die gespeicherte manuelle, sonst reale, sonst geplante Gegenzeit geprüft. Eine Ankunft vor Abfahrt oder Abfahrt nach Ankunft wird lokal erklärt und nicht übertragen. Ein serverseitiger konfigurierbarer Korrekturrahmen bleibt dessen Entscheidung; der Client erfindet keine feste 24-Stunden- oder Nur-heute-Grenze.
+
+Liegt die bisher gespeicherte Ankunft bereits vor der aktuellen Uhrzeit, kann `Abfahrt jetzt` nicht allein gespeichert werden. Der Hinweis verweist auf die Bearbeitung beider Zeiten; es wird keine Ankunft erfunden und keine vergangene Fahrt automatisch erneut aktiviert.
+
+Ein synchroner Klick-Guard und der gemeinsame Schreibzustand verhindern parallele Schnellaktionen, Editoränderungen oder Löschen. Der bestehende Detail-/Session-/Revisionsvertrag schützt verspätete Antworten. `Ankunft jetzt` betrifft ausdrücklich das bisher gewählte Ziel und beendet nach erfolgreichem Servercommit die dazugehörige lokale Begleitung. Das atomare `clearActiveTracking(statusId, expectedSession)` darf weder eine andere Fahrt noch eine neue Sitzung löschen.
+
+Der optionale `updateStatus.onCommitted`-Callback wird bei weiterhin passender Sitzung innerhalb der bestehenden nicht abbrechbaren, geordneten Repository-Schreibgrenze ausgeführt. Deshalb wird eine angenommene Ankunft auch dann lokal abgeschlossen, wenn die Ansicht nach dem Dispatch abgebrochen wurde. Abgelehnte PUTs stoppen nichts. Lokale Cleanupfehler oder eine angenommene 2xx-Antwort ohne vollständigen Snapshot werden als Teilerfolg erklärt, ohne automatischen zweiten PUT. Cleanup ist auf 15 Sekunden begrenzt; ein erforderlicher GET wird sofort nachgeholt. Bei einem lokalen Speicherfehler bleibt eine gezielte Service-Stoppanforderung ein zusätzlicher bestmöglicher Rückfall, kein behaupteter Recovery-Nachweis.
+
+Regressionen: `NowTimeCorrectionTest` prüft Minimalrequests, Minutenpräzision, Reihenfolge, Busy-/Besuchsgrenzen, Sessionweitergabe und akzeptierte Teilerfolge; `StatusTimeCommitRepositoryTest` sichert Commit-Cleanup bei Abbruch, verweigerter Antwort, neuer Sitzung und unvollständigem Erfolg ab. Es wurden keine echten Kontodaten geschrieben. Geräte-, TalkBack- und Hintergrundprüfung bleiben gesondert erforderlich.
 
 ### Lade-Prozess
 

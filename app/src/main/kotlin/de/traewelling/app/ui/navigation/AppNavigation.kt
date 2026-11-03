@@ -157,7 +157,10 @@ fun MainNavigation(
                                 checkInViewModel,
                                 onStartRideRecognition = onStartRideRecognition,
                                 onStopRideRecognition = onStopRideRecognition,
-                                isCurrentPage = isMainDestination && pagerState.currentPage == page
+                                isCurrentPage = isMainDestination && pagerState.currentPage == page,
+                                onStatusClick = { statusId ->
+                                    navController.navigate("statusDetail/$statusId") { launchSingleTop = true }
+                                }
                             )
                         }
                         Screen.Notifications -> {

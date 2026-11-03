@@ -55,6 +55,24 @@ Der abschließende lokale Lauf bestand am 03.11.2026 in **2 min 34 s**: **949 An
 
 Die [CI 41662265145](https://github.com/shedowe19/routely/actions/runs/41662265145) für Commit `52dcc10a7327beccea89ebb0afd8aba3b21dc67e` bestand vollständig. Die heruntergeladenen JUnit-Berichte bestätigen **949 Tests in 76 Klassen**, null Fehler, Fehlschläge oder Skips; Debug-Lint bestätigt **0 Fehler und 55 Warnungen**. Der anschließend erfolgreiche [Signierworkflow 41664223463](https://github.com/shedowe19/routely/actions/runs/41664223463) baute und veröffentlichte `v1.10.0` mit Code `19` aus demselben Commit. Signatur-, Manifest-, Hash- und Claimprüfung der tatsächlichen veröffentlichten APK stehen unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1100). Dieser Nachweis ersetzt keine reale Geräte- oder Fahrtprüfung.
 
+## Jetzt-Zeitaktionen und rückwirkende Check-ins vom 03.11.2026
+
+Der lokale Gesamtstand auf Basis von `27ab1d5ca1d8731489e67ddf9efd005e426ec927` besteht **987 Android-Unit-Tests in 81 Klassen**, ohne Fehler, Fehlschläge oder übersprungene Fälle. Gegenüber dem veröffentlichten Stand sind 38 Regressionen ergänzt:
+
+| Bereich | Fälle | Geprüftes Verhalten |
+| --- | --- | --- |
+| `NowTimeCorrectionTest` | 13 | Minutenpräzision, Zeitreihenfolge, manuelle/API-/Planzeit, gleichzeitige Aktionen, Status- und Sessiongrenzen |
+| `StatusTimeCommitRepositoryTest` | 5 | Bestätigte Statuskorrektur, Cleanup auch bei Abbruch oder leerem Erfolgsbody, kein Cleanup bei Ablehnung |
+| `CheckInDepartureSearchTest` | 8 | Jetzt-/Datumsabfrage, explizite Zeitzone, Sommerzeitlücke und doppelte Uhrzeit, Datum über Mitternacht |
+| `CheckInTrackingCompletionTest` | 8 | Aktivierung erst nach abschließender Zeitkorrektur, vergangene Fahrt als Historie, fehlende Zeit, Speicherkonflikt, Timeout und Abbruch |
+| `CheckInActivationPreferencesTest` | 4 | Atomare Aktivierung bei freiem/gleichem Status, Erhalt einer anderen aktiven Fahrt, Cache- und Sessiongrenzen |
+
+Der vollständige Lauf mit `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease -Pkotlin.incremental=false --no-build-cache` bestand in **3 min 5 s**. 108 Aufgaben: 32 ausgeführt, 76 unverändert aktuell. JUnit-XML wurde unabhängig gezählt; vollständiges Debug-Lint hat **0 Fehler und 55 Warnungen**. Release-Vital-Lint, Debug-APK und unsignierte Release-APK sind erfolgreich. Alle 230 vor dem Lauf eingefrorenen Quell-, Test-, Ressourcen- und Gradle-Dateien blieben per SHA-256 unverändert. Die Python-Releaseguards wurden für diese reinen Android-Zeitänderungen nicht erneut ausgeführt; der vorherige 65-Test-Nachweis bleibt dem vorherigen Stand zugeordnet.
+
+Eine ausschließlich lesende Live-Stichprobe umfasst sieben erfolgreiche GETs: Stationssuche Berlin Hbf, drei Abfahrtstafeln mit `when` und je eine zugehörige Fahrt. Für den 03.11.2026 um 08:00 UTC, den 02.11.2026 um 12:00 UTC und den 27.10.2026 um 12:00 UTC kamen 49, 48 beziehungsweise 50 Abfahrten am angefragten Datum sowie lesbare Fahrtverläufe zurück. Das belegt die drei Stichproben, keine allgemeine historische Verfügbarkeit. Es wurden keine Check-ins oder Zeitkorrekturen auf Träwelling geschrieben und keine Zugangsdaten oder persönlichen Antwortinhalte gespeichert.
+
+Das unabhängige Review hat keine offenen blockierenden Befunde. Dieser Stand ist lokal geprüft und noch nicht als neuer signierter Release veröffentlicht. Gerätebedienung, TalkBack, reale Fahrten und die sichtbare Serverbestätigung echter Zeitkorrekturen bleiben praktisch zu prüfen. Funktionsverträge: [Check-in](../module/checkin.md), [StatusDetail](../module/status-detail.md) und [Träwelling-Kompatibilität](../api/traewelling-kompatibilitaet.md).
+
 ## Voraussetzungen
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.

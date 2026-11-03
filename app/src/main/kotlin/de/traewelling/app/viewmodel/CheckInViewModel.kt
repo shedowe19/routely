@@ -25,6 +25,8 @@ data class CheckInUiState(
     val searchResults: List<TrainStation> = emptyList(),
     // Selected station & departures
     val selectedStation: TrainStation? = null,
+    // Null requests the provider's current departure board; explicit times are UTC instants.
+    val departureSearchTimeMillis: Long? = null,
     val departures: List<DepartureTrip> = emptyList(),
     // Selected departure & loaded trip details
     val selectedDeparture: DepartureTrip? = null,
@@ -44,6 +46,8 @@ data class CheckInUiState(
     // Result
     val checkInResult: CheckInResult? = null,
     val completionWarning: String? = null,
+    val completionTrackingActive: Boolean = false,
+    val completionTrackingNotice: String? = null,
     val resolvedOriginStop: StopStation? = null,
     val rideRecognitionEnabled: Boolean = false,
     val rideRecognition: RideRecognitionState = RideRecognitionState(),
@@ -76,7 +80,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
 
     /** Acceptance only prepares a manual check-in. It never publishes a status. */
     fun acceptRecognizedRide(candidate: RecognizedRide) {
-        if (_uiState.value.hasPendingSubmission) return
+        if (_uiState.value.hasPendingSubmission || _uiState.value.departureSearchTimeMillis != null) return
         val requestedSelection = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -93,7 +97,8 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             val now = System.currentTimeMillis()
             ensureActive()
             if (requestedSelection != selectionGeneration) return@launch
-            if (!enabled || active != null || !loggedIn || current.authSessionRevision != session.revision || freshCandidate == null ||
+            if (!enabled || active != null || !loggedIn || _uiState.value.departureSearchTimeMillis != null ||
+                current.authSessionRevision != session.revision || freshCandidate == null ||
                 now - freshCandidate.latestFixMillis !in 0..RideRecognitionEngine.MAX_FIX_AGE_MILLIS ||
                 current.sessionId != candidate.sessionId || RideRecognitionService.state.value != current) {
                 _uiState.update { it.copy(error = "Dieser Vorschlag ist nicht mehr aktuell. Bitte warte auf eine neue Erkennung.") }
@@ -208,13 +213,24 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
 
     // ─── Step 2: Load departures using station.id ─────────────────────────────
 
+    fun updateDepartureSearchTime(timeMillis: Long?) {
+        val current = _uiState.value
+        if (current.departureSearchTimeMillis == timeMillis) return
+        val updated = withDepartureSearchTime(current, timeMillis) ?: return
+        ++selectionGeneration
+        searchJob?.cancel()
+        selectionJob?.cancel()
+        _uiState.value = updated
+        if (updated.step == CheckInStep.DEPARTURES) updated.selectedStation?.let(::selectStation)
+    }
+
     fun selectStation(station: TrainStation) {
         if (_uiState.value.hasPendingSubmission) return
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
-        val stationId = station.id
-        if (stationId == null) {
+        val query = runCatching { departureSearchRequest(_uiState.value, station) }.getOrNull()
+        if (query == null) {
             _uiState.update { it.copy(error = "Bahnhof hat keine gültige ID.") }
             return
         }
@@ -224,11 +240,19 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                     selectedStation = station,
                     stationQuery    = station.name ?: "",
                     searchResults   = emptyList(),
+                    departures      = emptyList(),
+                    selectedDeparture = null,
+                    selectedTripDetails = null,
+                    filteredDestinations = emptyList(),
+                    resolvedOriginStop = null,
+                    selectedDestination = null,
+                    step            = CheckInStep.DEPARTURES,
                     isLoading       = true,
                     error           = null
                 )
             }
-            repo.getStationDepartures(stationId)
+            queryCheckInDepartures(query, repo::getStationDepartures,
+                isCurrent = { requestGeneration == selectionGeneration }) { result -> result
                 .onSuccess { trips ->
                     if (requestGeneration != selectionGeneration) return@onSuccess
                     _uiState.update {
@@ -242,13 +266,16 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                         it.copy(isLoading = false, error = "Abfahrten konnten nicht geladen werden: ${e.message}")
                     }
                 }
+            }
         }
     }
 
     // ─── Step 3: User picks a departure → load full trip (stopovers) ──────────
 
     fun selectTrip(departure: DepartureTrip) {
-        if (_uiState.value.hasPendingSubmission) return
+        val current = _uiState.value
+        if (current.hasPendingSubmission || current.isLoading || current.step != CheckInStep.DEPARTURES ||
+            departure !in current.departures) return
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
@@ -389,16 +416,23 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                     _uiState.update { it.copy(checkInResult = created, step = CheckInStep.SUCCESS, isLoading = true) }
                     if (prefs.getAuthSession() != session)
                         throw CancellationException("Session changed after check-in")
-                    if (created?.status?.id != null && !prefs.saveActiveStatusIdIfMatches(session, created.status.id))
-                        throw CancellationException("Session changed after check-in")
                 },
                 correctTimes = { statusId, request -> repo.updateStatus(statusId, request, expectedSession = session) }
             )
                 .onSuccess { completion ->
                     ensureActive()
                     if (requestGeneration != selectionGeneration || prefs.getAuthSession() != session) return@onSuccess
+                    val tracking = completeCheckInTracking(completion.result, System.currentTimeMillis()) { statusId ->
+                        val activated = prefs.saveActiveStatusIdIfIdleOrSame(session, statusId)
+                        if (!activated && prefs.getAuthSession() != session)
+                            throw CancellationException("Session changed before tracking activation")
+                        activated
+                    }
+                    ensureActive()
+                    if (requestGeneration != selectionGeneration || prefs.getAuthSession() != session) return@onSuccess
                     _uiState.update { it.copy(isLoading = false, checkInResult = completion.result,
-                        completionWarning = completion.warning, step = CheckInStep.SUCCESS) }
+                        completionWarning = completion.warning, completionTrackingActive = tracking.active,
+                        completionTrackingNotice = tracking.notice, step = CheckInStep.SUCCESS) }
                 }
                 .onFailure { e ->
                     if (e is CancellationException) throw e

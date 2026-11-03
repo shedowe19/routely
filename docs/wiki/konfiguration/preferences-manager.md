@@ -30,6 +30,8 @@ Zentraler Manager für alle App-Einstellungen und persistierte Daten. Nutzt Andr
 
 `clearSessionIfMatches`, `saveUsernameIfMatches` und `saveTokensIfMatches` schreiben nur für den unveränderten erwarteten Snapshot. `saveActiveStatusIdIfMatches` schützt entsprechend verspätete Check-in-Antworten. Diese Prüfung erfolgt im DataStore-`edit`, nicht nur vor einem suspendierenden Aufruf. Revisionen trennen auch Logout und erneuten Login mit demselben Token; sie sind keine Geheimnisse oder GPS-Daten.
 
+`saveActiveStatusIdIfIdleOrSame(expectedSession, statusId)` ergänzt die Check-in-Abschlussgrenze: Sitzung, Anmeldung und bisherige aktive ID werden in derselben `edit`-Transaktion geprüft. Eine andere bereits konfigurierte Begleitung samt Route bleibt erhalten; dieselbe Fahrt darf ihren Cache behalten. Ungültige neue IDs und unlesbare vorhandene IDs werden nicht stillschweigend überschrieben. Erst der finale POST-/Zeitkorrekturstatus entscheidet, ob eine nachgetragene Fahrt überhaupt noch eine zukünftige Ankunft und damit einen Begleitbedarf hat.
+
 ### Active Status
 
 | Key                | Flow-Typ     | Beschreibung                                   |

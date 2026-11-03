@@ -85,6 +85,15 @@ internal object AuthSessionPreferences {
         return true
     }
 
+    /** Called in one DataStore edit: recording another ride must not replace an active journey. */
+    fun saveActiveStatusIdIfIdleOrSame(prefs: MutablePreferences, expected: AuthSession, statusId: Int): Boolean {
+        if (statusId <= 0 || read(prefs) != expected || expected.accessToken == null) return false
+        val active = prefs[activeStatusId]
+        if (active != null && active.toIntOrNull() != statusId) return false
+        saveActiveStatusId(prefs, statusId)
+        return true
+    }
+
     fun saveTrackingState(prefs: MutablePreferences, statusId: Int, json: String, expected: AuthSession?): Boolean {
         if (prefs[activeStatusId]?.toIntOrNull() != statusId || (expected != null && read(prefs) != expected)) return false
         prefs[trackingState] = json

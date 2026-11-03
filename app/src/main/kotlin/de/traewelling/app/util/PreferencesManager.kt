@@ -213,6 +213,14 @@ class PreferencesManager(private val context: Context) {
         return changed
     }
 
+    suspend fun saveActiveStatusIdIfIdleOrSame(expectedSession: AuthSession, statusId: Int): Boolean {
+        var changed = false
+        context.dataStore.edit {
+            changed = AuthSessionPreferences.saveActiveStatusIdIfIdleOrSame(it, expectedSession, statusId)
+        }
+        return changed
+    }
+
     suspend fun setGpsTrackingEnabled(enabled: Boolean) {
         context.dataStore.edit { it[KEY_GPS_TRACKING_ENABLED] = enabled }
     }

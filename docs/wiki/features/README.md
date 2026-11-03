@@ -2,15 +2,15 @@
 
 ## Zweck
 
-Codebasierte Übersicht des vorhandenen Funktionsumfangs, veröffentlicht am 03.11.2026 als `v1.10.0` / Commit `52dcc10a7327beccea89ebb0afd8aba3b21dc67e`. Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
+Codebasierte Übersicht des aktuellen Arbeitsstands auf Basis von `v1.10.0` (Releasecommit `52dcc10`) und dem anschließenden Dokumentationscommit `27ab1d5`. Der lokale Zeitausbau vom 03.11.2026 ergänzt die folgenden Jetzt-Aktionen und die rückwirkende Suche und ist noch nicht veröffentlicht. Veröffentlichungsnachweise stehen unter [Deployment](../entwicklung/deployment.md). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
 ## Vorhandene Funktionen
 
 | Bereich | Erreichbarer Funktionsumfang |
 | --- | --- |
 | [Anmeldung](../module/auth.md) | Server-URL und manueller Access-Token, Tokenprüfung, Willkommen-Hinweis und Logout. |
-| [Check-in](../module/checkin.md) | Stationssuche, Stationen in der Nähe, Abfahrten mit Betreiber/Gleis/Verspätung/Ausfall, Fahrt und Ausstieg auswählen, Status-Text, Reisegrund, Sichtbarkeit und manuelle Zeiten. |
-| [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit sowie gekennzeichnete lokale GPS-Zeiten der eigenen aktiven Fahrt, Gleise, Ausfälle, Einstieg/Ausstieg und gemeinsamer Fortschritt. Eigene Fahrt bearbeiten oder löschen. |
+| [Check-in](../module/checkin.md) | Stationssuche, nahe Stationen, Datum-/Uhrzeitwahl auch für vergessene Fahrten, Abfahrten mit Betreiber/Gleis/Verspätung/Ausfall, Fahrt und Ausstieg, Text, Reisegrund, Sichtbarkeit und manuelle Zeiten. Beendete Nachträge starten keine Begleitung. |
+| [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit, lokale GPS-Zeiten, Gleise, Ausfälle und Reisefortschritt. Eigene Fahrt bearbeiten/löschen sowie Abfahrt oder Ankunft per Jetzt-Knopf festhalten; angenommene Ankunft beendet nur die passende Begleitung. |
 | [Zusätzliche Bahn-Livedaten](../api/live-datenquellen.md) | Anonyme DBF-/IRIS-Werte für eindeutig zugeordnete Zugfahrten; Quellen- und Abrufalteranzeige sowie Soll-/Ist-Gleisvergleich. Ergänzt lokale Anzeigen ohne Rückschreiben nach Träwelling. |
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
 | [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Geeignete native Träwelling-Linienzüge für Bahn/Tram, getrennte Straßenprojektion für SEV sowie gemeinsame Quellenwahl und API-/Plan-Rückfall. |

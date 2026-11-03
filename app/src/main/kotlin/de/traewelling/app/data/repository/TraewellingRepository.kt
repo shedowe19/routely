@@ -154,7 +154,12 @@ class TraewellingRepository internal constructor(
         }
     }
     
-    suspend fun updateStatus(id: Int, request: UpdateStatusRequest, expectedSession: AuthSession? = null): Result<Status> = apiResult {
+    suspend fun updateStatus(
+        id: Int,
+        request: UpdateStatusRequest,
+        expectedSession: AuthSession? = null,
+        onCommitted: suspend (AuthSession) -> Unit = {}
+    ): Result<Status> = apiResult {
         val session = authenticatedSession()
         if (expectedSession != null && session != expectedSession)
             throw CancellationException("Session changed before status correction")
@@ -164,9 +169,11 @@ class TraewellingRepository internal constructor(
             val status = r.body()?.data?.takeIf { it.id == id }
             if (status == null) {
                 completeStatusMutation(session, StatusMutation.Invalidated(session.revision, id))
+                onCommitted(session)
                 error("Änderung wurde angenommen, aber die Antwort ist unvollständig. Bitte aktualisiere die Fahrt (${r.code()}).")
             }
             completeStatusMutation(session, StatusMutation.Updated(session.revision, status))
+            onCommitted(session)
             status
         }
     }

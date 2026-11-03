@@ -30,6 +30,7 @@ import com.google.android.gms.tasks.CancellationTokenSource
 import de.traewelling.app.data.model.*
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusVisibilitySelector
+import de.traewelling.app.ui.components.DepartureSearchTimeSelector
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.service.RideRecognitionPhase
 import de.traewelling.app.ui.theme.SuccessGreen
@@ -39,6 +40,7 @@ import de.traewelling.app.viewmodel.CheckInViewModel
 import de.traewelling.app.viewmodel.CheckInSystemBackAction
 import de.traewelling.app.viewmodel.checkInSystemBackAction
 import de.traewelling.app.viewmodel.hasPendingSubmission
+import de.traewelling.app.viewmodel.DepartureSearchTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
@@ -48,7 +50,8 @@ fun CheckInScreen(
     viewModel: CheckInViewModel,
     onStartRideRecognition: () -> Unit = {},
     onStopRideRecognition: () -> Unit = {},
-    isCurrentPage: Boolean = true
+    isCurrentPage: Boolean = true,
+    onStatusClick: ((Int) -> Unit)? = null
 ) {
     val uiState by viewModel.uiState.collectAsState()
     // This callback already exists in CONFIRM before its POST starts. goBack reads the
@@ -82,13 +85,19 @@ fun CheckInScreen(
             )
         }
     ) { innerPadding ->
-        Box(Modifier.padding(innerPadding).fillMaxSize()) {
-            when (uiState.step) {
-                CheckInStep.STATION     -> StationSearchStep(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
-                CheckInStep.DEPARTURES  -> DeparturesStep(viewModel, uiState)
-                CheckInStep.DESTINATION -> DestinationStep(viewModel, uiState)
-                CheckInStep.CONFIRM     -> ConfirmStep(viewModel, uiState)
-                CheckInStep.SUCCESS     -> SuccessStep(viewModel, uiState)
+        Column(Modifier.padding(innerPadding).fillMaxSize()) {
+            if (uiState.step == CheckInStep.STATION || uiState.step == CheckInStep.DEPARTURES) {
+                DepartureSearchTimeSelector(uiState.departureSearchTimeMillis, viewModel::updateDepartureSearchTime,
+                    enabled = !uiState.hasPendingSubmission)
+            }
+            Box(Modifier.fillMaxWidth().weight(1f)) {
+                when (uiState.step) {
+                    CheckInStep.STATION     -> StationSearchStep(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
+                    CheckInStep.DEPARTURES  -> DeparturesStep(viewModel, uiState)
+                    CheckInStep.DESTINATION -> DestinationStep(viewModel, uiState)
+                    CheckInStep.CONFIRM     -> ConfirmStep(viewModel, uiState)
+                    CheckInStep.SUCCESS     -> SuccessStep(viewModel, uiState, onStatusClick)
+                }
             }
         }
     }
@@ -134,7 +143,9 @@ private fun StationSearchStep(
     }
 
     Column(Modifier.fillMaxSize()) {
-        RideRecognitionCard(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
+        if (uiState.departureSearchTimeMillis == null) {
+            RideRecognitionCard(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
+        }
         Spacer(Modifier.height(16.dp))
 
         Row(
@@ -321,7 +332,6 @@ private fun fetchLocation(
 @Composable
 private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
     Column(Modifier.fillMaxSize()) {
-
         when {
             uiState.isLoading ->
                 StateMessage(
@@ -336,7 +346,9 @@ private fun DeparturesStep(viewModel: CheckInViewModel, uiState: CheckInUiState)
                 StateMessage(
                     icon = Icons.Default.Train,
                     title = "Keine Abfahrten gefunden",
-                    message = "Für diese Station wurden aktuell keine passenden Fahrten gefunden."
+                    message = if (uiState.departureSearchTimeMillis == null)
+                        "Für diese Station wurden aktuell keine passenden Fahrten gefunden."
+                    else "Für den gewählten Zeitpunkt wurden keine Fahrten geliefert. Ändere Datum oder Uhrzeit. Ältere Fahrten sind möglicherweise nicht mehr verfügbar."
                 )
             else ->
                 LazyColumn(Modifier.fillMaxSize()) {
@@ -503,6 +515,8 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                         InfoRow(Icons.Default.Train,       "Linie",   dep?.line?.name ?: "–")
                         InfoRow(Icons.Default.TripOrigin,  "Von",     uiState.selectedStation?.name ?: "–")
                         InfoRow(Icons.Default.LocationOn,  "Nach",    uiState.selectedDestination?.stationName ?: "–")
+                        InfoRow(Icons.Default.DateRange, "Datum", DepartureSearchTime.departureDate(
+                            uiState.resolvedOriginStop?.departurePlanned ?: dep?.plannedWhen, ZoneId.systemDefault()))
                         InfoRow(Icons.Default.Schedule,    "Abfahrt", depTime)
                         dep?.platform?.takeIf { it.isNotBlank() }?.let {
                             InfoRow(Icons.Default.ConfirmationNumber, "Gleis", it)
@@ -585,13 +599,14 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
 // ─── Step 5: Erfolg ──────────────────────────────────────────────────────────
 
 @Composable
-private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
+private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState, onStatusClick: ((Int) -> Unit)?) {
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).statusBarsPadding().padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        val hasConfirmedStatus = (uiState.checkInResult?.status?.id ?: 0) > 0
+        val confirmedStatusId = uiState.checkInResult?.status?.id?.takeIf { it > 0 }
+        val hasConfirmedStatus = confirmedStatusId != null
         Icon(if (hasConfirmedStatus) Icons.Default.CheckCircle else Icons.Default.Info, null, modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.primary)
         Spacer(Modifier.height(16.dp))
@@ -600,8 +615,12 @@ private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
         if (uiState.isLoading) {
             Spacer(Modifier.height(16.dp))
             CircularProgressIndicator(Modifier.size(28.dp))
-            Text("Fahrt wird für die Begleitung aktiviert; eingegebene Zeitkorrekturen werden gespeichert.",
+            Text("Der Check-in wird abgeschlossen; eingegebene Zeitkorrekturen werden gespeichert.",
                 style = MaterialTheme.typography.bodySmall)
+        }
+        uiState.completionTrackingNotice?.let { notice ->
+            Spacer(Modifier.height(16.dp))
+            Text(notice, style = MaterialTheme.typography.bodyMedium)
         }
         uiState.completionWarning?.let { warning ->
             Spacer(Modifier.height(16.dp))
@@ -616,6 +635,18 @@ private fun SuccessStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
             }
         }
         Spacer(Modifier.height(32.dp))
+        if (confirmedStatusId != null && onStatusClick != null) {
+            Button(
+                onClick = { onStatusClick(confirmedStatusId) },
+                enabled = !uiState.isLoading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Train, contentDescription = null)
+                Spacer(Modifier.width(8.dp))
+                Text("Fahrt öffnen")
+            }
+            Spacer(Modifier.height(12.dp))
+        }
         Button(onClick = viewModel::reset, enabled = !uiState.isLoading, modifier = Modifier.fillMaxWidth()) {
             Text("Neuer Check-in")
         }

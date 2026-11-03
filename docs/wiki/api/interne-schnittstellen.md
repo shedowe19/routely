@@ -19,7 +19,7 @@ class TraewellingRepository(context: Context, prefs: PreferencesManager)
 - `getDashboard(page)` / `getGlobalFeed(page)` - Feed mit Pagination
 - `likeStatus(id)` / `unlikeStatus(id)` / `deleteStatus(id)` / `updateStatus(id, request)` - Status-Aktionen
 - `searchStations(query)` / `getNearbyStations(lat, lon)` - Textsuche beziehungsweise Stationssuche über `GET /api/v1/stations`; der zweite Aufruf berechnet aus Breite/Länge die Query-Parameter `min_lat`, `max_lat`, `min_lon`, `max_lon` für eine Bounding-Box.
-- `getStationDepartures(stationId)` - Abfahrten
+- `getStationDepartures(stationId, whenTime)` - Abfahrten, optional mit ausdrücklichem UTC/ISO-Zeitpunkt für rückwirkende Suche; `travelType` ist nur in der darunterliegenden Retrofit-Schnittstelle verfügbar
 - `getTrip(hafasTripId, lineName)` - Trip-Details
 - `checkIn(request)` - Check-in inklusive Reisegrund (`CheckInRequest.business`)
 - `getStatistics()` - Statistiken
@@ -32,6 +32,8 @@ class TraewellingRepository(context: Context, prefs: PreferencesManager)
 Bei einem Check-in-Konflikt (HTTP 409) wertet das Repository `data.conflicts` als Liste vollständiger `Status`-Objekte aus. Fehlermeldungen hängen nicht von den veralteten Feldern `message.status_id` und `message.lineName` ab. Der Serverfehler wird nicht mehr als unverarbeitetes JSON in die Check-in-Oberfläche übernommen.
 
 `apiResult` reicht `CancellationException` unverändert weiter; ein abgebrochener Auftrag wird weder als gewöhnlicher API-Fehler noch als Offline-Erfolg verarbeitet. Feed-Abrufe verwenden einen atomaren `AuthSession`-Snapshot und prüfen ihn vor Cache-/Antwortübernahme erneut. Der [Feed-Cache](../module/feed.md) ist nach Server, Zugangsdaten und Feedart getrennt.
+
+`updateStatus` besitzt einen optionalen `onCommitted(AuthSession)`-Callback. Dieser läuft bei angenommenem HTTP-2xx und weiterhin passender Sitzung innerhalb der geordneten, begrenzten und gegen Abbruch geschützten Schreibgrenze, auch wenn der Antwortstatus unvollständig ist. Die Jetzt-Ankunft beendet darüber ausschließlich ihre eigene lokale Begleitung; eine fehlende Antwort oder fehlerhafte lokale Bereinigung darf keinen automatischen zweiten PUT erzeugen. Die vollständige UI-Bestätigung und weitere Detailaktualisierung bleiben an Ansicht und Sitzung gebunden. [Statusdetail](../module/status-detail.md) beschreibt diese Aktionen.
 
 Stations- und Zeitdaten werden über die Helfer des Datenmodells gelesen: `stationId`, `stationName`, `stationIdentifier(type)`, `effectiveArrival`, `effectiveDeparture` und `matchesStopover(other)`. Damit verwenden UI, ViewModels und Tracking denselben API-Vertrag.
 

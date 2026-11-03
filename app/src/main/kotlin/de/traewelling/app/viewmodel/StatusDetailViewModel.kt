@@ -19,6 +19,7 @@ import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.TrackingLiveState
 import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.util.PreferencesManager
+import de.traewelling.app.util.AuthSession
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
@@ -28,6 +29,9 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
 import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.time.format.FormatStyle
 
 data class StatusDetailUiState(
     val isLoading: Boolean = false,
@@ -42,6 +46,8 @@ data class StatusDetailUiState(
     val trackingState: TrackingLiveState? = null,
     val sevStops: Map<String, SevStopInfo> = emptyMap(),
     val isLoadingSevStops: Boolean = false,
+    val nowTimeNotice: String? = null,
+    val recordingTime: NowTimeEvent? = null,
 
     // Editing state
     val isEditing: Boolean = false,
@@ -77,6 +83,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     private var sevEnrichmentJob: Job? = null
     private var sevGeneration = 0L
     private var sevSnapshot: SevDetailSnapshot? = null
+    private val nowTimeGate = NowTimeCorrectionGate()
+    private var statusSession: AuthSession? = null
 
     init {
         viewModelScope.launch {
@@ -105,6 +113,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         val attachment = presentation.attach(statusId)
         if (attachment.changedStatus) {
             mutationJob?.cancel()
+            nowTimeGate.reset()
+            statusSession = null
             cancelSevEnrichment()
         }
         loadStatusDetail(statusId)
@@ -192,6 +202,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         val stopsResult = snapshot.stopovers
         coroutineContext.ensureActive()
         if (currentStatusId != statusId || request != loadGeneration) return
+        statusSession = session
         _uiState.update { state ->
             val stops = stopsResult?.getOrNull() ?: if (stopsResult != null)
                 compatibleExistingStopovers(status, state) else emptyList()
@@ -297,6 +308,95 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
 
     fun refresh() {
         currentStatusId?.let { loadStatusDetail(it) }
+    }
+
+    /** The click captures its minute before any suspension or network round trip. */
+    fun recordTimeNow(event: NowTimeEvent) {
+        val state = _uiState.value
+        if (state.status?.id != currentStatusId) return
+        val session = statusSession ?: return
+        val submission = try {
+            nowTimeGate.begin(state, event, Instant.now())
+        } catch (invalid: IllegalArgumentException) {
+            _uiState.update { it.copy(error = invalid.message, nowTimeNotice = null) }
+            return
+        } ?: return
+        val view = viewGeneration
+        ++loadGeneration
+        loadJob?.cancel()
+        autoRefreshJob?.cancel()
+        _uiState.update { it.copy(isUpdating = true, isLoading = false, error = null,
+            nowTimeNotice = null, recordingTime = event) }
+        mutationJob = viewModelScope.launch {
+            var refreshAfterWrite = false
+            try {
+                val currentSession = prefs.getAuthSession()
+                coroutineContext.ensureActive()
+                if (currentSession != session || view != viewGeneration || currentStatusId != submission.statusId)
+                    return@launch
+                val result = submitNowTimeCorrection(
+                    submission, session,
+                    update = { id, request, owner, committed ->
+                        repo.updateStatus(id, request, owner, committed)
+                    },
+                    finishArrival = { id, owner -> prefs.clearActiveTracking(id, owner); Unit },
+                    onCleanupFailure = { failure ->
+                        Log.w("StatusDetailViewModel", "Arrival saved; local tracking cleanup failed", failure)
+                        val live = TripTrackingService.trackingLiveState.value
+                        if (live?.statusId == submission.statusId && live.sessionRevision == session.revision) {
+                            val context = getApplication<Application>()
+                            runCatching {
+                                context.startService(Intent(context, TripTrackingService::class.java).apply {
+                                    action = TripTrackingService.ACTION_STOP
+                                    putExtra(TripTrackingService.EXTRA_STATUS_ID, submission.statusId)
+                                    putExtra(TripTrackingService.EXTRA_AUTH_SESSION_REVISION, session.revision)
+                                })
+                            }.onFailure { Log.w("StatusDetailViewModel", "Could not request tracking stop", it) }
+                            if (view != viewGeneration || !presentation.isObserved) {
+                                runCatching {
+                                    Toast.makeText(context, "Ankunft gespeichert; bitte prüfe, ob die Begleitung beendet ist.",
+                                        Toast.LENGTH_LONG).show()
+                                }
+                            }
+                        }
+                    }
+                )
+                coroutineContext.ensureActive()
+                if (prefs.getAuthSession() != session || view != viewGeneration || currentStatusId != submission.statusId)
+                    return@launch
+                result.onSuccess { completed ->
+                    refreshAfterWrite = completed.status == null
+                    val time = DateTimeFormatter.ofLocalizedTime(FormatStyle.SHORT)
+                        .withZone(ZoneId.systemDefault()).format(submission.time)
+                    _uiState.update { current ->
+                        val updated = completed.status
+                        val stops = updated?.let { compatibleExistingStopovers(it, current) } ?: current.stopovers
+                        current.copy(
+                            status = updated?.let { statusWithStopoverBoundaries(it, stops) } ?: current.status,
+                            stopovers = stops,
+                            nowTimeNotice = completed.warning ?: "${event.label} auf $time gesetzt.",
+                            sevStops = if (updated != null) emptyMap() else current.sevStops
+                        )
+                    }
+                    cancelSevEnrichment()
+                }.onFailure { failure ->
+                    _uiState.update { it.copy(error = "${event.label} konnte nicht gespeichert werden: ${failure.message}") }
+                }
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (failure: Exception) {
+                if (view == viewGeneration && currentStatusId == submission.statusId) {
+                    _uiState.update { it.copy(error = "${event.label} konnte nicht gespeichert werden: ${failure.message}") }
+                }
+            } finally {
+                nowTimeGate.finish(submission)
+                if (view == viewGeneration && currentStatusId == submission.statusId) {
+                    _uiState.update { it.copy(isUpdating = false, recordingTime = null) }
+                    if (refreshAfterWrite && presentation.isObserved) loadStatusDetail(submission.statusId)
+                    else startAutoRefresh(submission.statusId)
+                }
+            }
+        }
     }
 
     fun deleteStatus() {
@@ -502,6 +602,8 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         ++loadGeneration
         loadJob?.cancel()
         mutationJob?.cancel()
+        nowTimeGate.reset()
+        statusSession = null
         autoRefreshJob?.cancel()
         cancelSevEnrichment()
         return true

@@ -13,6 +13,9 @@ Der Check-in Prozess führt den Nutzer schrittweise von der Ortung/Suche bis zur
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/CheckInScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInSelection.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInDepartureSearch.kt`
+- `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInTrackingCompletion.kt`
+- `app/src/main/kotlin/de/traewelling/app/ui/components/DepartureSearchTimeSelector.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/components/StatusVisibilitySelector.kt`
 - `app/src/main/kotlin/de/traewelling/app/data/model/StatusVisibility.kt`
 
@@ -27,6 +30,7 @@ Der typische Ablauf eines Check-ins nutzt mehrere API-Endpunkte nacheinander:
 
 2. **Abfahrtsauswahl:**
    - Sobald ein Startbahnhof gewählt ist, werden die Abfahrten geladen (`GET /api/v1/station/{id}/departures`).
+   - Stationssuche und Abfahrtsliste bieten eine gemeinsame Datum-/Uhrzeitauswahl. `Jetzt` lässt den `when`-Parameter weg; eine ausdrückliche Auswahl wird als UTC-Zeitpunkt mit Zone an `when` übergeben. Damit lassen sich vergessene Fahrten suchen, soweit der Server beziehungsweise sein Datenanbieter sie noch liefert.
    - Die `id` des Bahnhofs (numerisch) muss verwendet werden.
    - Liefert die ausgewählte Abfahrt ein eigenes `station`-Objekt, ist diese tatsächliche Abfahrtsstation für den Einstieg maßgeblich; sie kann vom zuvor gesuchten Bahnhof abweichen.
 
@@ -53,6 +57,8 @@ Suche, Standortabfrage, Abfahrtswahl und Zielwechsel besitzen eine gemeinsame Au
 
 ## Fahrtvorschläge aus GPS
 
+Eine ausdrücklich gewählte Suchzeit blendet aktuelle GPS-Vorschläge aus und verweigert deren Annahme im ViewModel. Der weiter laufende optionale Erkennungsdienst verändert diese Zeitwahl nicht. `Jetzt` beziehungsweise ein vollständiger Reset macht den normalen Live-Ablauf wieder verfügbar.
+
 Der Stationsschritt enthält die ausdrücklich aktivierbare [Fahrterkennung](./ride-recognition.md). Eine laufende eigene Fahrt pausiert die Suche. Kandidaten bleiben prozesslokal und können mehrdeutig sein; der Nutzer prüft Linie/Richtung. `CheckInViewModel` zeigt nur Kandidaten mit passender `authSessionRevision` und prüft bei Auswahl Fixalter, aktuelle Zugangsgeneration und das Fehlen eines aktiven Check-ins erneut. Ein gültiger Vorschlag übernimmt Einstieg, Abfahrt und bereits geladene Tripdetails; anschließend folgen normale Zielauswahl und manuelle Bestätigung. Die Herkunft der Zielauswahl bleibt erhalten: Zurück nach erkannter Fahrt führt zur Stationssuche/Erkennung und entfernt alte Stations-/Abfahrtsreste; eine manuell gewählte Fahrt führt zur tatsächlich geladenen Abfahrtsliste zurück. CONFIRM-Zurück erhält diese Herkunft. Zurück aus der manuellen Abfahrtsliste erhält die ausgewählte gültige Station als Suchergebnis mit ihrem Namen; fehlende gültige Auswahl leert die Suche. Der Ablauf behauptet damit keinen negativen Suchbefund ohne Anfrage. Regressionen: `CheckInBackNavigationTest` und `CheckInNavigationGuardTest`. Es gibt keinen automatischen `POST /trains/checkin`.
 
 ## Zeitfelder und Konflikte
@@ -67,7 +73,19 @@ Ein erfolgreicher Check-in enthält `data.status` und `data.points`. Bei HTTP 40
 
 ## Start der Fahrtverfolgung
 
-Nach einem erfolgreichen Check-in speichert `CheckInViewModel` die aktive Status-ID. `MainActivity` übernimmt den sichtbaren, berechtigungsgeprüften Start des [TripTrackingService](./trip-tracking.md); das ViewModel startet keinen GPS-Foreground-Service aus dem Hintergrund.
+Nach einem erfolgreichen Check-in und einem gegebenenfalls folgenden Zeit-PUT prüft `CheckInViewModel` den **finalen** Status. Die erste parsebare Zeit aus manueller Ankunft, API-Echtzeit und Planankunft entscheidet: Ist die Ankunft bereits erreicht, bleibt die Fahrt in der Historie und startet keine Begleitung. Fehlt jede verwertbare Ankunftszeit, wird ebenfalls kein aktiver Zustand erfunden. Eine noch laufende Fahrt darf nur aktiviert werden, wenn keine andere lokale Fahrt begleitet wird oder dieselbe ID bereits aktiv ist. Die atomare Persistenz prüft zugleich die Auth-Sitzung; ein rückwirkender Eintrag überschreibt keine andere Begleitung.
+
+Die lokale Aktivierung ist auf 15 Sekunden begrenzt; Fehler oder Ablauf ändern nichts am bereits angenommenen Check-in und bieten keinen zweiten POST an. Erfolgskarte und Hinweise unterscheiden gespeicherte Historie, aktivierte und unverändert bestehende Begleitung. `MainActivity` übernimmt den sichtbaren, berechtigungsgeprüften Start des [TripTrackingService](./trip-tracking.md); das ViewModel startet keinen GPS-Foreground-Service aus dem Hintergrund.
+
+## Vergessene Fahrten nachtragen
+
+Die Auswahl `Abfahrten ab` ist bereits vor der Stationswahl sichtbar und bleibt auf der Abfahrtsliste erreichbar, auch bei Ladefehlern oder einer leeren Liste. Datum und Uhrzeit werden mit Material-Dialogen gewählt; die Gerätezeitzone und der UTC-Offset sind erkennbar. Eine Sommerzeitlücke wird nicht still auf eine andere Uhrzeit verschoben: Die Eingabe bleibt zur Korrektur offen. Bei einer doppelt vorkommenden Uhrzeit bleibt ein bereits gewählter Offset erhalten; eine neue Auswahl verwendet den früheren Zeitpunkt. In der Bestätigung ist zusätzlich das tatsächliche Abfahrtsdatum der gewählten Fahrt sichtbar.
+
+Jeder Zeitwechsel beendet die vorige Abfragegeneration und entfernt davon abhängige Fahrt-/Zielauswahlen. Verspätete Antworten dürfen die neue Liste nicht ersetzen. Zurück erhält die Suchzeit; vollständiges Zurücksetzen stellt `Jetzt` wieder her. Planzeiten des konkreten gewählten Haltebesuchs bleiben die POST-Marker; der Suchzeitpunkt ersetzt sie nicht.
+
+Die App setzt kein erfundenes 7-/30-Tage-Limit. Träwelling akzeptiert einen datierten `when`-Parameter; historische Verfügbarkeit hängt vom Datenanbieter und vorhandenen gespeicherten Fahrten ab. Eine leere Antwort erklärt diese Grenze und erlaubt eine neue Zeitwahl. Eine ausschließlich lesende Stichprobe am 03.11.2026 lieferte für Berlin Hbf sowohl aktuelle als auch Abfahrten von gestern und vor sieben Tagen sowie passende Fahrtdetails. Das ist kein Nachweis einer garantierten allgemeinen Aufbewahrungsdauer.
+
+Regressionen: `CheckInDepartureSearchTest` prüft UTC-/Kalendertagszuordnung, Sommer-/Winterzeit, verspätete Antworten, Abbruch und Navigation. `CheckInTrackingCompletionTest` prüft abgeschlossene und laufende Fahrten, final korrigierte Ankünfte, aktive Begleitung, fehlende IDs sowie Persistenzfehler und Fristablauf.
 
 ## Reisegrund
 
