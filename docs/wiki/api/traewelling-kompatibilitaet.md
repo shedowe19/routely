@@ -6,7 +6,7 @@ Dokumentiert die Prüfung der von Routely verwendeten Träwelling-Endpunkte und 
 
 ## Aktueller Abgleich vom 03.11.2026
 
-- Routely: `main`, Commit `9b975497f2124d56e2336861d4213e6dae3d3ed2` vom 10.10.2026; neuester veröffentlichter Release `v1.9.1`.
+- Routely-Ausgangsstand: `main`, Commit `9b975497f2124d56e2336861d4213e6dae3d3ed2` vom 10.10.2026; zum Zeitpunkt der Bestandsprüfung war `v1.9.1` der neueste veröffentlichte Release. Die anschließenden Funktionen und Korrekturen wurden am 03.11. als [v1.10.0](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1100) veröffentlicht.
 - Träwelling: `develop`, Commit `6051078ef10246d931a34c72d12ad3f96c8a53bc` vom 29.10.2026; Changelog-Blob `4035dadd77fc2fe692396aa4e9a5dcea5a1a6c67`.
 - Gegenüber dem bisherigen Upstream-Prüfstand liegen 35 weitere Commits vor. Geprüft wurden der vollständige Changelog und Commitvergleich, betroffene Routen, Controller, Requests und Ressourcen sowie die vorhandenen Routely-Consumer. Zum Clientumfang gehört auch der direkte OkHttp-Aufruf von `polyline/{parameters}` in `TransitRouteRepository`, außerhalb des Retrofit-Service.
 - Ergebnis: Keine neue Pflichtmigration der vorhandenen Routely-Funktionen festgestellt. Die Migration vom 05.10. verwendet bereits die weiterhin gültigen Felder und Stationsreferenzen.

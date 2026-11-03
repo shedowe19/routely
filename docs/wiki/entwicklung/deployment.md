@@ -34,6 +34,20 @@ Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen
 
 Die neuen Schutzpfade sind mit API-Doubles getestet. Während der historischen Befundkorrektur wurde kein signierter Release ausgelöst. Der inzwischen vorhandene reale Lauf wurde am 03.11.2026 wie unten beschrieben unabhängig geprüft.
 
+## Verifizierte Veröffentlichung v1.10.0
+
+Der [Release v1.10.0](https://github.com/shedowe19/routely/releases/tag/v1.10.0) wurde am 03.11.2026 mit dem vorhandenen [Signierworkflow 41664223463](https://github.com/shedowe19/routely/actions/runs/41664223463) veröffentlicht. Der Workflow ist erfolgreich; Release-ID `432881523`, Tag, Metadaten und der dauerhaft reservierte Claim `routely-version-code/19` binden Commit `52dcc10a7327beccea89ebb0afd8aba3b21dc67e`. Der Code wurde automatisch als nächster freier Wert vergeben. Die [vollständige CI 41662265145](https://github.com/shedowe19/routely/actions/runs/41662265145) für denselben Commit ist ebenfalls erfolgreich.
+
+Die tatsächlich veröffentlichte APK wurde unabhängig heruntergeladen und geprüft:
+
+- Paket `de.traewelling.app`, Versionsname `1.10.0`, Code `19`, compileSdk `36`.
+- APK-Signaturen v2 und v3 gültig. Das Zertifikat ist mit v1.9.1 identisch; SHA-256 `a9b2e1874c53db597fb15b73e47f6cf40da6a61521a230f97a3f7120ccb684dd`.
+- Datei `routely-v1.10.0.apk`, Größe `16476027` Bytes, SHA-256 `00478ec4fd0b59b78268b3eec968f6bf74bb3f22b4bacb55ad355ae616c1f6c5`; Größe und Prüfsumme stimmen mit `release-version.json` und GitHubs Asset-Digest überein.
+- Die Metadaten-Prüfsumme `5c2429490ec0a5b8b9e2abeab94fc06382e4ae8384ef47c299a84da075f83d34` stimmt ebenfalls mit GitHub überein. Der Claim nennt den passenden Workflowlauf und Versuch 1; die Metadaten bestätigen Commit, Tag und Version.
+- Die heruntergeladenen CI-Berichte bestätigen 949 Tests in 76 Klassen ohne Fehler, Fehlschläge oder Skips sowie Debug-Lint mit 0 Fehlern und 55 Warnungen.
+
+Diese Veröffentlichung enthält Betreiberanzeige, Sichtbarkeitsauswahl, Meldungsnavigation sowie die gezielten Korrekturen von Stopover-Datenverlust, paralleler Refreshrotation und fehlenden Android-Systemseiten. Die Prüfung belegt Signatur und Artefaktidentität, keine Installation oder reale Fahrt. Geräteprüfungen und Speicher-Recovery bleiben im [Fragen-Audit](./offene-fragen-2026-11-03.md) offen.
+
 ## Verifizierte Veröffentlichung v1.9.1
 
 Die offene Frage nach einem realen signierten Release nach R1–R4 ist seit der Prüfung vom 03.11.2026 geschlossen. Der erfolgreiche [Workflowlauf 38074500896](https://github.com/shedowe19/routely/actions/runs/38074500896) vom 10.10.2026 enthält erfolgreiche Schritte für Tests/Build, Signierung, Codeclaim, Reservierung und geprüfte Publikation. Der [veröffentlichte Release v1.9.1](https://github.com/shedowe19/routely/releases/tag/v1.9.1), sein Tag und der annotierte Claim `routely-version-code/18` verweisen auf Commit `9b975497f2124d56e2336861d4213e6dae3d3ed2`. Der Claim nennt denselben Workflowlauf und Versuch 1.
@@ -48,12 +62,6 @@ Die tatsächlich heruntergeladene öffentliche APK wurde zusätzlich lokal gepr�
 Damit sind Signatur, Manifestidentität, veröffentlichte Assets und Commitbindung dieses Releases belegt. Die Prüfung installiert die APK nicht auf einem Gerät und ist keine neue Veröffentlichung der aktuellen lokalen Änderungen. Administrativer Löschschutz für Tags und Claims bleibt eine Repository-Governance-Entscheidung; der Create-only-Helfer richtet kein Ruleset ein.
 
 ## Prüfung vor einem Release
-
-### Vorbereitung v1.10.0 vom 03.11.2026
-
-Der neue Minor-Release bündelt Betreiberanzeige, Sichtbarkeitsauswahl und Meldungsnavigation sowie die gezielten Korrekturen von Stopover-Datenverlust, paralleler Refreshrotation und fehlenden Android-Systemseiten. Der unveränderte lokale Code bestand 949 Android-Unit-Tests, 65 Offlineprüfungen, 16 lesende API-Anfragen, vollständiges Debug-Lint sowie Debug-/Release-Build. Reviews bestätigten den Stand ohne blockierende Befunde; praktische Geräteprüfungen und P12 bleiben getrennt offen.
-
-Für diese Veröffentlichung ist der vorhandene manuelle Signierworkflow mit `version_name=1.10.0` und leerem `version_code` vorgesehen. Remoteprüfung und Codeclaims weisen vor dem Start als Höchstcode 18 aus; der Workflow muss den nächsten gültigen Code selbst reservieren. Exakter Commit, erfolgreiche CI, tatsächliche Publikation und heruntergeladene APK werden vor einer Erfolgsmeldung erneut geprüft. Diese Vorbereitung ist noch kein Veröffentlichungsnachweis.
 
 `.github/workflows/api-compatibility.yml` prüft bei Pushes auf `main`, Pull Requests und manuellem Start Offline-Releaseguard-Tests, Android-Unit-Tests, vollständiges `lintDebug`, Debug-Build und Release-Build einschließlich Release-Lint. Signierungssecrets werden nicht benötigt. Die unsignierte Release-APK steht als `routely-release-unsigned-apk` bereit; Signierung und Veröffentlichung bleiben beim manuellen Workflow.
 

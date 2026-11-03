@@ -51,6 +51,10 @@ Der anschließende Arbeitsstand ergänzt Betreiberanzeige, Sichtbarkeitsauswahl,
 
 Der abschließende lokale Lauf bestand am 03.11.2026 in **2 min 34 s**: **949 Android-Unit-Tests in 76 Klassen**, keine Fehlschläge, Fehler oder übersprungenen Fälle. Das sind 44 zusätzliche Regressionen gegenüber dem Ausgangsstand. Vollständiges Debug-Lint bestand mit **0 Fehlern und 55 Warnungen**, Release-Vital-Lint sowie Debug- und unsignierter Release-Build waren erfolgreich. Die vier Aufgaben wurden mit deaktiviertem Kotlin-Inkrementalmodus und ohne Buildcache ausgeführt; 108 Aufgaben, davon 26 ausgeführt und 82 unverändert aktuell. SHA-256 bestätigte während des Endlaufs unveränderte Inhalte aller 221 erfassten Quell-, Test-, Ressourcen- und Konfigurationsdateien. Die 65 Offlineprüfungen und der verschärfte lesende CLI-Lauf mit 16 Erfolgen bestanden ebenfalls. Unabhängige Reviews haben keine offenen blockierenden Befunde. Frühere Zwischenläufe und der vor der Korrektur bewusst rote Deduplizierungstest sind keine Endnachweise. Es fand kein Geräte-, TalkBack-, Fahrt- oder schreibender Live-API-Test statt.
 
+### GitHub-Nachweis für Release v1.10.0
+
+Die [CI 41662265145](https://github.com/shedowe19/routely/actions/runs/41662265145) für Commit `52dcc10a7327beccea89ebb0afd8aba3b21dc67e` bestand vollständig. Die heruntergeladenen JUnit-Berichte bestätigen **949 Tests in 76 Klassen**, null Fehler, Fehlschläge oder Skips; Debug-Lint bestätigt **0 Fehler und 55 Warnungen**. Der anschließend erfolgreiche [Signierworkflow 41664223463](https://github.com/shedowe19/routely/actions/runs/41664223463) baute und veröffentlichte `v1.10.0` mit Code `19` aus demselben Commit. Signatur-, Manifest-, Hash- und Claimprüfung der tatsächlichen veröffentlichten APK stehen unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1100). Dieser Nachweis ersetzt keine reale Geräte- oder Fahrtprüfung.
+
 ## Voraussetzungen
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.

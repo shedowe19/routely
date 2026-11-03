@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Codebasierte Übersicht des vorhandenen Funktionsumfangs, geprüft am 03.11.2026 gegen `main` / `9b97549` vom 10.10.2026. Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
+Codebasierte Übersicht des vorhandenen Funktionsumfangs, veröffentlicht am 03.11.2026 als `v1.10.0` / Commit `52dcc10a7327beccea89ebb0afd8aba3b21dc67e`. Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
 ## Vorhandene Funktionen
 
