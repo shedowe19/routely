@@ -32,9 +32,28 @@ Claims müssen dauerhaft erhalten bleiben. Create-only in diesem Helfer ist kein
 
 Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen unveröffentlichten Draft mit Teilassets zurücklassen. Der Workflow überschreibt oder entfernt sie nicht automatisch; ein Rerun mit derselben Version wird abgewiesen. Den fehlgeschlagenen Lauf und den Draft zuerst prüfen. Danach eine neue Version mit höherem Code wählen. Der verbrauchte Codeclaim wird auch bei einer nachweislich unveröffentlichten Fehlreservierung nicht bereinigt. Bereits veröffentlichte Tags, Releases und Assets werden durch diesen Ablauf nicht repariert oder ersetzt. Ein Fehler bei der Abschlusskontrolle kann auch nach erfolgreichem `draft:false` auftreten; zuerst den tatsächlichen veröffentlichten Zustand prüfen.
 
-Die neuen Schutzpfade sind mit API-Doubles getestet. In der Befundkorrektur wurde kein signierter Release ausgelöst; der erste reale manuelle Lauf bleibt ein eigener Systemnachweis.
+Die neuen Schutzpfade sind mit API-Doubles getestet. Während der historischen Befundkorrektur wurde kein signierter Release ausgelöst. Der inzwischen vorhandene reale Lauf wurde am 03.11.2026 wie unten beschrieben unabhängig geprüft.
+
+## Verifizierte Veröffentlichung v1.9.1
+
+Die offene Frage nach einem realen signierten Release nach R1–R4 ist seit der Prüfung vom 03.11.2026 geschlossen. Der erfolgreiche [Workflowlauf 38074500896](https://github.com/shedowe19/routely/actions/runs/38074500896) vom 10.10.2026 enthält erfolgreiche Schritte für Tests/Build, Signierung, Codeclaim, Reservierung und geprüfte Publikation. Der [veröffentlichte Release v1.9.1](https://github.com/shedowe19/routely/releases/tag/v1.9.1), sein Tag und der annotierte Claim `routely-version-code/18` verweisen auf Commit `9b975497f2124d56e2336861d4213e6dae3d3ed2`. Der Claim nennt denselben Workflowlauf und Versuch 1.
+
+Die tatsächlich heruntergeladene öffentliche APK wurde zusätzlich lokal geprüft:
+
+- `apksigner verify --verbose` bestätigt APK-Signaturen v2 und v3, ein Signer.
+- `aapt dump badging` bestätigt Paket `de.traewelling.app`, Versionsname `1.9.1`, Code `18` und compileSdk `36`.
+- Dateigröße: `16459643` Bytes. SHA-256: `49cf77a95ee3193f085faa855052b1c1f2b413d0919bb2699c27fd85399ba69e`.
+- Größe und SHA-256 stimmen mit `release-version.json` sowie dem von GitHub gelieferten APK-Asset-Digest überein; Version, Tag und Commit der Metadaten passen ebenfalls.
+
+Damit sind Signatur, Manifestidentität, veröffentlichte Assets und Commitbindung dieses Releases belegt. Die Prüfung installiert die APK nicht auf einem Gerät und ist keine neue Veröffentlichung der aktuellen lokalen Änderungen. Administrativer Löschschutz für Tags und Claims bleibt eine Repository-Governance-Entscheidung; der Create-only-Helfer richtet kein Ruleset ein.
 
 ## Prüfung vor einem Release
+
+### Vorbereitung v1.10.0 vom 03.11.2026
+
+Der neue Minor-Release bündelt Betreiberanzeige, Sichtbarkeitsauswahl und Meldungsnavigation sowie die gezielten Korrekturen von Stopover-Datenverlust, paralleler Refreshrotation und fehlenden Android-Systemseiten. Der unveränderte lokale Code bestand 949 Android-Unit-Tests, 65 Offlineprüfungen, 16 lesende API-Anfragen, vollständiges Debug-Lint sowie Debug-/Release-Build. Reviews bestätigten den Stand ohne blockierende Befunde; praktische Geräteprüfungen und P12 bleiben getrennt offen.
+
+Für diese Veröffentlichung ist der vorhandene manuelle Signierworkflow mit `version_name=1.10.0` und leerem `version_code` vorgesehen. Remoteprüfung und Codeclaims weisen vor dem Start als Höchstcode 18 aus; der Workflow muss den nächsten gültigen Code selbst reservieren. Exakter Commit, erfolgreiche CI, tatsächliche Publikation und heruntergeladene APK werden vor einer Erfolgsmeldung erneut geprüft. Diese Vorbereitung ist noch kein Veröffentlichungsnachweis.
 
 `.github/workflows/api-compatibility.yml` prüft bei Pushes auf `main`, Pull Requests und manuellem Start Offline-Releaseguard-Tests, Android-Unit-Tests, vollständiges `lintDebug`, Debug-Build und Release-Build einschließlich Release-Lint. Signierungssecrets werden nicht benötigt. Die unsignierte Release-APK steht als `routely-release-unsigned-apk` bereit; Signierung und Veröffentlichung bleiben beim manuellen Workflow.
 
@@ -42,8 +61,8 @@ Der fehlgeschlagene Release-Lauf für `1.7.0` / Code `12` führte zur expliziten
 
 ## Offene Punkte
 
-- TODO: Den ersten realen signierten Lauf nach R1–R4 prüfen; Offline-Tests und unsignierte Builds belegen keine erfolgreiche Signierung oder reale GitHub-Publikation.
-- TODO: Play-Store-Release-Prozess dokumentieren, falls ein Store-Deployment vorgesehen ist.
+- Der erste reale signierte Lauf nach R1–R4 ist durch den obigen APK-/Tag-/Claim-/Assetnachweis geprüft. Weitere Releases benötigen jeweils denselben unabhängigen Nachweis.
+- Produktentscheidung: Ein Play-Store-Release ist im bestehenden Workflow nicht vorgesehen; die verifizierte Verteilung erfolgt als GitHub-APK. Für einen späteren neuen Play-Upload verlangt die am 03.11.2026 gelesene [offizielle Target-API-Vorgabe](https://developer.android.com/google/play/requirements/target-sdk) seit 31.08.2026 mindestens API 36; das derzeitige `targetSdk = 34` erfüllt dies nicht. Eine Storeeinführung benötigt daher zuerst eine ausdrücklich geplante Targetmigration einschließlich Foreground-Service-/Berechtigungsprüfung sowie AAB-/Signierungs-/Storekonfiguration. `compileSdk = 36` allein ersetzt die Targetmigration nicht. Ein vorhandener Storezugang oder Upload wird nicht behauptet.
 
 ## Verwandte Seiten
 

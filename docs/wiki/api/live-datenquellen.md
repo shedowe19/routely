@@ -70,7 +70,13 @@ Vorhandenes OkHttp, Gson und Coroutines; keine zusätzliche Android-Bibliothek, 
 - TODO: Neue Quelle auf echten Fahrten mit Gleiswechsel, Ausfall, Mitternacht und Rücknahmen mit Träwelling vergleichen. Eine einzelne erfolgreiche Tafel beweist weder Vollständigkeit noch einen festen Aktualitätsvorsprung.
 - TODO: Abdeckung und Belastung des öffentlichen Dienstes bei wachsender Zahl von Installationen bewerten; bei Bedarf die quelloffene Software selbst betreiben.
 - Unklar: Tatsächliches Produktionsalter der Träwelling-/IRIS-Prognosen; Client-Abrufzeit ist kein Provider-Aktualitätsbeleg.
-- TODO: Möglichen Datenverlust in der vorhandenen Stopover-Duplikatauswahl gesondert prüfen; aktuell bewertet sie nicht alle Echtzeitfelder.
+- Der vermutete Datenverlust in der Stopover-Duplikatauswahl wurde am 03.11.2026 bestätigt und korrigiert: Die bevorzugte Zeile konnte ergänzende Istzeiten, Echtzeitgleise, einen bekannten Ausfallwert sowie UUID und Stationsmetadaten der anderen Zeile verwerfen. `StopoverDeduplicationTest` zeigte vor der Korrektur drei Fehlschläge in sechs Fällen. Der korrigierte Merge ergänzt fehlende Felder nur bei bereits nachgewiesener gleicher Station und gleichen Planmarkern; verschiedene vorhandene Halt-UUIDs bleiben getrennt. Leere oder nur aus Leerraum bestehende Gleise gelten bei Auswahl und Merge wie in der UI als fehlend. Quellenmetadaten bleiben beim genau ausgewählten Echtzeitwert, bekannte widersprüchliche Werte behalten die bisherige Priorität. Zwei ergänzende Regressionen prüfen Stationsmetadaten und leere Gleise; der abschließende ausgeführte Prüfnachweis steht unter [Tests](../entwicklung/tests.md).
+
+## Quellenabgleich vom 03.11.2026
+
+Die aktuelle [DBF-Anbieterbeschreibung](https://dbf.finalrewind.org/) dokumentiert weiterhin die stabile JSON-Version 3 und begrenzt die Nutzung auf zehn Anfragen pro Minute sowie eine Anfrage je Station und Minute. Sie nennt keine Verfügbarkeitsgarantie. Die Limits im Client sind prozessweit umgesetzt; daraus folgt keine flottenweite Kapazitätszusage für viele Installationen. Ein eigener Betrieb oder eine Abstimmung mit dem Betreiber bleibt bei größerem Einsatz zu prüfen.
+
+`DbfBoard.fetchedAt` und `StopRealtimeInfo.fetchedAtMillis` belegen den erfolgreichen Clientabruf. Das verwendete v3-Schema liefert keinen verlässlichen Prognose-Änderungszeitpunkt, keine eindeutige Datums-/Stationsbindung in jedem einzelnen Row und keine hinreichenden separaten Teilausfallinformationen. Diese Daten werden deshalb nicht erfunden. Die aktuelle [Träwelling-Erklärung zu Transitous](https://help.traewelling.de/features/timetable/transitous/) beschreibt ebenfalls eine gemeinschaftliche Aggregation ohne vollständige Linien-/Stationsabdeckung. Die Frage, welche Quelle auf einer konkreten Fahrt tatsächlich früher oder vollständiger ist, bleibt nur mit zeitgleichen Vergleichsaufzeichnungen beantwortbar.
 
 ## Quellen
 

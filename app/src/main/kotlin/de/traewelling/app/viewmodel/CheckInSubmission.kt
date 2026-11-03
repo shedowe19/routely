@@ -4,6 +4,7 @@ import de.traewelling.app.data.model.CheckInRequest
 import de.traewelling.app.data.model.CheckInResult
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.StopStation
+import de.traewelling.app.data.model.StatusVisibility
 import de.traewelling.app.data.model.UpdateStatusRequest
 import de.traewelling.app.data.repository.apiResult
 import de.traewelling.app.data.repository.CheckInAcceptedException
@@ -16,6 +17,9 @@ internal data class CheckInCompletion(val result: CheckInResult?, val warning: S
 
 /** Planned markers identify the visits; manual real times belong only to the subsequent status PUT. */
 internal fun buildCheckInSubmission(state: CheckInUiState, origin: StopStation?): CheckInSubmission {
+    require(StatusVisibility.fromApiValue(state.visibility) != null) {
+        "Bitte wähle eine gültige Sichtbarkeit."
+    }
     val departure = requireNotNull(state.selectedDeparture) { "Bitte wähle eine Abfahrt." }
     val destination = requireNotNull(state.selectedDestination) { "Bitte wähle einen Zielhalt." }
     val startId = origin?.stationId ?: departure.station?.id ?: state.selectedStation?.id
@@ -51,7 +55,8 @@ internal fun buildCheckInSubmission(state: CheckInUiState, origin: StopStation?)
             tripId = departure.tripId, lineName = departure.line?.name.orEmpty(),
             startStationId = startId, destinationStationId = requireNotNull(destination.stationId),
             departure = requireNotNull(plannedDeparture), arrival = requireNotNull(plannedArrival),
-            body = state.statusBody.ifBlank { null }, business = state.travelReason.apiValue
+            body = state.statusBody.ifBlank { null }, business = state.travelReason.apiValue,
+            visibility = state.visibility
         ),
         timeCorrection = if (manualDeparture == null && manualArrival == null) null
             else UpdateStatusRequest(departure = manualDeparture, arrival = manualArrival)

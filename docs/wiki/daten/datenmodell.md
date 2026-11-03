@@ -39,7 +39,7 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `StatusListResponse`   | Wrapper für Liste von Statusen mit PaginationLinks                                                                                                                             |
 | `SingleStatusResponse` | Wrapper für einzelnen Status                                                                                                                                                   |
-| `Status`               | Check-in-Status: id, body, createdAt, likes, liked, visibility, business, user, checkin, event, tags                                                                           |
+| `Status`               | Check-in-Status: id, body, createdAt, likes, liked, visibility, business, user, checkin, event, tags und optional lockVisibility (JSON lock_visibility) |
 | `StatusUser`           | User-Kurzform für Status                                                                                                                                                       |
 | `CheckinInfo`          | Check-in-Details mit origin, destination, operator, numerischem trip, tripUuid, Plan-/Echtzeitdaten und manuellen Zeitkorrekturen |
 | `StopOperator`         | Betreiber: id als String (Legacy-Zahl oder UUID), bevorzugte uuid, name, identifiers |
@@ -58,7 +58,7 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 
 | Modell              | Beschreibung                                                                        |
 | ------------------- | ----------------------------------------------------------------------------------- |
-| `DepartureTrip`     | Abfahrt: tripId, line, direction, station, plannedWhen, realWhen (JSON when), platform, cancelled; berechnete delayMinutes |
+| `DepartureTrip`     | Abfahrt: tripId, line, direction, station, operator, plannedWhen, realWhen (JSON when), platform, cancelled; berechnete delayMinutes und bereinigter optionaler operatorName |
 | `HafasLine`         | Linieninfo: name, fahrtNr, product, mode; kein veraltetes line.operator |
 | `TripResponse`      | Wrapper für TripDetails                                                             |
 | `TripDetails`       | Trip: numerische id, uuid, Provider-tripId, lineName, category, operator, stopovers |
@@ -69,6 +69,7 @@ Die Modelle verwenden Gson. `@SerializedName` legt abweichende JSON-Feldnamen fe
 | Modell                | Beschreibung                                                                                                                 |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
 | `TravelReason`        | Enum für den Reisegrund beim Check-in: PRIVATE=0, BUSINESS=1, COMMUTE=2                                                      |
+| `StatusVisibility`    | Enum für die sechs Sichtbarkeitsstufen: PUBLIC=0, UNLISTED=1, FOLLOWERS=2, PRIVATE=3, AUTHENTICATED=4, TRUSTED=5 |
 | `CheckInRequest`      | Request für Check-in: tripId, lineName, startStationId, destinationStationId, departure, arrival, body, business, visibility |
 | `CheckInResponse`     | Antwort mit Status und Points                                                                                                |
 | `CheckInResult`       | Enthält Status und CheckInPoints                                                                                             |

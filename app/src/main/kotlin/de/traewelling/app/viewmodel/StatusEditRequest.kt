@@ -1,6 +1,10 @@
 package de.traewelling.app.viewmodel
 
 import de.traewelling.app.data.model.UpdateStatusRequest
+import de.traewelling.app.data.model.StatusVisibility
+
+internal val StatusDetailUiState.isEditVisibilityLocked: Boolean
+    get() = status?.lockVisibility == true || editInitialStatus?.lockVisibility == true
 
 /** Provider times shown in the editor stay provider times until explicitly changed. */
 internal fun buildStatusEditRequest(
@@ -16,8 +20,9 @@ internal fun buildStatusEditRequest(
         body = state.editBody.takeIf { it != (state.editInitialStatus ?: state.status)?.body.orEmpty() },
         // An unchanged opening value is not permission to restore visibility after a refresh.
         visibility = state.editVisibility.takeIf {
-            state.editVisibilityManuallyChanged &&
-                it != ((state.editInitialStatus ?: state.status)?.visibility ?: 0)
+            !state.isEditVisibilityLocked && state.editVisibilityManuallyChanged &&
+                StatusVisibility.fromApiValue(it) != null &&
+                it != (state.editInitialStatus ?: state.status)?.visibility
         },
         destination = destination?.stationId.takeIf { changedDestination },
         destinationArrivalPlanned = destination?.arrivalPlanned.takeIf { changedDestination },

@@ -213,7 +213,7 @@ Alle 61 Wiki-Seiten werden auf relative echte Linkziele und abschließende verwa
 - Die historischen 16 Codebefunde sind korrigiert und gezielt abgesichert. Keine Schutzgrenze wurde zugunsten alter unrealistischer Testpositionen gelockert.
 - Alle zwölf zusätzlichen Befunde G5–G7, D4–D8, U5–U7 und R4 sowie konkret bestätigte Folgefälle sind korrigiert. Die erneute Gegenprüfung ist Bestandteil dieses Umsetzungsdurchlaufs; reine und praktische Prüfgrenzen bleiben getrennt.
 - Alle acht zusätzlichen Befunde und die konkret bestätigten Folgefälle sind korrigiert und dauerhaft abgesichert. Historische Fehlerproben oben bleiben als Ausgangsnachweis erhalten; der aktuelle Umsetzungs-/Vollscanstand steht im neuen Abschnitt.
-- TODO: System-/Compose-/Backup-Restore-Prüfungen und ersten neuen signierten Release ergänzen; die optionalen Ausbauideen sind keine verbleibenden Codebefunde dieses Reviews.
+- TODO: System-/Compose-/Backup-Restore-Prüfungen ergänzen; die optionalen Ausbauideen sind keine verbleibenden Codebefunde dieses Reviews. Der erste neue signierte Release ist inzwischen durch den [APK-/Assetnachweis von v1.9.1](./deployment.md#verifizierte-veröffentlichung-v191) geprüft.
 - TODO: Reale GPS-/ETA-Güte, Samsung-Sperrbildschirm, Display-aus-/Doze-/Audiozustellung und Ressourcenverbrauch weiterhin auf einem Gerät prüfen. Der Review liefert hierfür keine Garantie.
 
 ## Verwandte Seiten

@@ -143,6 +143,39 @@ class StatusEditRequestTest {
         assertNull(buildStatusEditRequest(edited, departure, arrival).visibility)
     }
 
+    @Test fun moderationLockAtOpeningOrAfterRefreshPreventsVisibilityWrites() {
+        for (openingLocked in listOf(true, false)) {
+            val opening = status.copy(visibility = 3, lockVisibility = openingLocked)
+            val refreshed = opening.copy(lockVisibility = !openingLocked)
+            val edited = state.copy(editInitialStatus = opening, status = refreshed,
+                editVisibility = 0, editVisibilityManuallyChanged = true)
+            val request = buildStatusEditRequest(edited, departure, arrival)
+            assertNull(request.visibility)
+            assertFalse(JsonParser.parseString(gson.toJson(request)).asJsonObject.has("visibility"))
+        }
+    }
+
+    @Test fun unknownOrMissingOpeningVisibilityIsNotChangedWithoutExplicitSelection() {
+        for (original in listOf(null, 99)) {
+            val opening = status.copy(visibility = original)
+            val edited = state.copy(editInitialStatus = opening, status = opening, editVisibility = original)
+            assertNull(buildStatusEditRequest(edited, departure, arrival).visibility)
+        }
+    }
+
+    @Test fun anExplicitSupportedChoiceCanReplaceAnUnknownOpeningVisibility() {
+        val opening = status.copy(visibility = 99)
+        val edited = state.copy(editInitialStatus = opening, status = opening,
+            editVisibility = 3, editVisibilityManuallyChanged = true)
+        assertEquals(3, buildStatusEditRequest(edited, departure, arrival).visibility)
+    }
+
+    @Test fun unsupportedVisibilityIsNeverWrittenEvenIfMarkedAsUserEdited() {
+        val edited = state.copy(editInitialStatus = status,
+            editVisibility = 99, editVisibilityManuallyChanged = true)
+        assertNull(buildStatusEditRequest(edited, departure, arrival).visibility)
+    }
+
     @Test fun changingOnlyTheTimeDoesNotRestoreOlderTextAfterAnotherClientEditsIt() {
         val opening = status.copy(body = "opening text")
         val edited = state.copy(editInitialStatus = opening, status = opening.copy(body = "new server text"),

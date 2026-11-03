@@ -38,7 +38,7 @@ Ein Uhrzeit-only Fortschritt, pauschales Zusammenlegen naher Stationsnamen, Wied
 Produktive Bibliothekspins bleiben unverändert. Nur `kotlinx-coroutines-test` wird als Testabhängigkeit in derselben Version wie Coroutines ergänzt. Releaseguards benötigen Python 3 mit Standardbibliothek und GitHub REST; es gibt keine neue produktive Drittanbieterabhängigkeit.
 
 - TODO: Display-aus-/Doze-, Uhrsprung-, Standort-/TTS-Fehler- und Backup-Restore-Matrix auf Android/Samsung prüfen.
-- TODO: Ersten neuen signierten Release samt tatsächlichen veröffentlichten Assets prüfen.
+- Erledigt am 03.11.2026: Signaturen, Manifest, SHA-256, veröffentlichte Assets und Tag-/Claim-/Commitbindung von `v1.9.1` wurden tatsächlich geprüft; siehe [Deployment-Nachweis](../entwicklung/deployment.md#verifizierte-veröffentlichung-v191).
 
 ## Verwandte Seiten
 

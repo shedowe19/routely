@@ -50,6 +50,12 @@ Die [DBF-/IRIS-Ergänzung](../api/live-datenquellen.md) liefert optionale zusät
 - TODO: Reale Änderungen und deren Android-/TTS-Zustellung prüfen, insbesondere mehrere Ereignisse im selben Polling und konkurrierende Stationsansagen.
 - Datenabhängige Grenze: Ohne frische oder eindeutige API-Felder ist keine verlässliche Änderungsmeldung möglich. Eine bereits beim Trackingstart vorhandene Verspätung wird als Ausgangslage behandelt.
 
+## Prüfung der offenen Zustellungsfragen vom 03.11.2026
+
+`TripChangeMonitorTest` bestätigt die Vergleichslogik für mehrere Änderungen eines Pollings, gestrichene nächste Halte, Rücknahmen, Quellwechsel, fehlende Felder, Wiederanlauf und doppelte Snapshots. `SpeechDeliveryQueueTest` trennt Stations- und Änderungsansagen samt verspäteten Callbacks. Fehlende oder nicht eindeutige Providerwerte können daher weiterhin bewusst keine Meldung erzeugen; dies ist eine Datenbedingung und kein durch eine Gerätemessung heilbarer API-Beleg.
+
+Für die verbleibende Zustellungsprüfung einen kontrollierten Gleiswechsel und Ausfall/Wiederherstellung im laufenden Check-in verwenden: Snapshotzeit, erzeugte Ereignisse, angezeigte Android-Meldung sowie TTS-Start/-Ende vergleichen. Dabei Benachrichtigungskanal einmal zulassen und einmal sperren, mehrere Änderungen im selben Polling auslösen und eine Stationsansage gleichzeitig vormerken. Bei gesperrtem Kanal muss die App weiter funktionieren; ein verlorener oder später Callback einer alten Fahrt darf keine neue Stationsansage freigeben. Ein solcher Android-/Audio-Lauf wurde hier nicht ausgeführt.
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

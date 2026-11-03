@@ -47,8 +47,8 @@ Wir haben den App-Namen in der Codebasis, den Manifest-Dateien, Gradle-Konfigura
 
 ## Offene Fragen
 
-- Müssen in Zukunft OAuth-Client-Anmeldungen oder Redirect-URIs beim Backend bezüglich der neuen App-Identität angepasst werden? (Aktuell funktioniert alles mit den alten).
-- Wird ein Domainwechsel für Kontakt oder App-Website folgen?
+- Geklärt am 03.11.2026: Der Anzeigename `Routely` ändert weder `applicationId`/Namespace `de.traewelling.app` noch den bestehenden Callback `traewelling://oauth-callback`. Der erreichbare manuelle Tokenlogin verwendet keine OAuth-Clientregistrierung. Allein aus der Umbenennung ergibt sich daher keine notwendige Backendanpassung. Vor einem späteren Browserlogin muss der gewählte Client beim jeweiligen Server mit dem tatsächlich verwendeten Callback registriert und der vollständige PKCE-/State-Vertrag umgesetzt werden; siehe [OAuth](../module/auth-pkce.md).
+- Ein Domainwechsel für Kontakt oder App-Website ist eine optionale Produktentscheidung. Aus dem aktuellen Code ergibt sich dafür kein technischer Migrationsbedarf; eine neue Domain wird nicht angenommen.
 
 ## Verwandte Seiten
 

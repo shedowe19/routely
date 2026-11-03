@@ -60,7 +60,9 @@ Systemgrundlagen: [Android Doze und App Standby](https://developer.android.com/t
 
 Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../konfiguration/preferences-manager.md).
 
-`Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Der Start wird direkt versucht, damit eingeschränkte Paketsichtbarkeit nicht fälschlich auf eine fehlende Activity schließen lässt. Bei `ActivityNotFoundException` folgt zunächst die allgemeine App-Benachrichtigungseinstellung und danach die App-Detailseite. Auf älteren Geräten beginnt diese Rückfallfolge bei der allgemeinen Benachrichtigungseinstellung. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
+`Android-Anzeigeeinstellungen` öffnet über `MainActivity` ab API 36 die systemspezifische Freigabe über `Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS` mit `Settings.EXTRA_APP_PACKAGE`. Der Start wird direkt versucht, damit eingeschränkte Paketsichtbarkeit nicht fälschlich auf eine fehlende Activity schließen lässt. Bei fehlender oder verweigerter Activity folgen App-Benachrichtigungseinstellung, App-Detailseite und allgemeine Android-Einstellungen. Auf älteren Geräten beginnt diese Rückfallfolge bei der App-Benachrichtigungseinstellung. Sind alle Starts erfolglos, erscheint eine manuelle Anleitung. Ortungs- und dauerhaft abgelehnte Standortfreigaben verwenden dieselbe sichere Startbehandlung mit passenden Rückfallseiten. Eine Freigabe allein garantiert keine Hervorhebung durch das System.
+
+Der Audit vom 03.11.2026 hat hier einen konkreten Fehlerpfad korrigiert: Der letzte frühere App-Detailstart und verweigerte Starts konnten eine Exception auslösen. `SystemSettingsNavigationTest` prüft die Reihenfolge, den Stopp nach erfolgreichem Öffnen und den vollständigen Fehlerfall. Die Prüfung verwendet injizierte Startergebnisse und ersetzt keine tatsächlich geöffnete Android- oder Samsung-Systemseite.
 
 ### TTS-Wiederanlauf und zugängliche Aktionen
 
@@ -76,7 +78,7 @@ Die fünf DataStore-Keys und Standardwerte stehen im [PreferencesManager](../kon
 
 ## Offene Fragen
 
-- Fehlerbehandlung in PreferencesManager — offen — @dev
+- Speicherfehler sind unter [PreferencesManager: Fehlergrenzen](../konfiguration/preferences-manager.md#lese--und-schreibfehler) konkret eingeordnet. Es gibt keine automatische Rücksetzung bei Lesefehlern; ein umfassender sichtbarer Recoveryablauf bleibt eine eigene Änderung.
 - TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.
 - TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.
 

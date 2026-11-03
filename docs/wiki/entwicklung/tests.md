@@ -20,6 +20,37 @@ Dokumentiert, wie die App getestet wird.
 - Unit-Tests liegen unter `app/src/test`; Instrumentierungstests unter `app/src/androidTest` sind noch nicht vorhanden.
 - API-nahe Tests mit echten Tokens sind derzeit nicht als automatisierte Tests eingerichtet. Falls sie ergänzt werden, müssen Tokens lokal und nicht versioniert bereitgestellt werden.
 
+## API-Bestandsprüfung vom 03.11.2026
+
+- Routely-Prüfstand: `main` / `9b975497f2124d56e2336861d4213e6dae3d3ed2`. Der Quellbestand enthält 905 Kotlin-Testmethoden in 71 Testklassen; diese Zählung ersetzt keinen ausgeführten JUnit-Bericht.
+- Für genau diesen Commit sind der [API-Compatibility-Lauf 38074431518](https://github.com/shedowe19/routely/actions/runs/38074431518) und der [signierte Release-Lauf 38074500896](https://github.com/shedowe19/routely/actions/runs/38074500896) vom 10.10.2026 erfolgreich. Der offene Dokumentations-PR #40 ist ein separater historischer Validierungsnachtrag.
+- Während der Bestandsprüfung ausgeführt: `python -m unittest discover -s .github/tests -p test_release_guard.py`, alle 56 Offline-Releaseguardtests bestanden. Ein Android-Lauf war zunächst wegen fehlendem SDK 36 und Build Tools 35.0.0 nicht möglich; beide Komponenten wurden für die anschließende Umsetzung eingerichtet. Es fand kein Gerätetest statt.
+- Heute zusätzlich: 16 authentifizierte GET-Anfragen gegen Träwelling, alle HTTP 200. Geprüft wurden Strukturen und aktuelle Feldnamen, verschachtelte Stationen, UUID-Zuordnung von Einstieg/Ziel, Stopovers-Map, Fahrtdetails und GeoJSON-Polyline. Token und persönliche Antwortdaten wurden nicht gespeichert. Endpunktumfang, Upstream-SHA und Einzelbefunde stehen in der [API-Kompatibilität](../api/traewelling-kompatibilitaet.md#aktueller-abgleich-vom-03112026).
+- Keine schreibenden Liveaufrufe. Die ursprünglichen 27 Modell-Kompatibilitätstests und der Abfahrts-Routentest prüfen lokale Fixtures beziehungsweise Annotationen. Die unten beschriebenen neuen Repositorytests und der lesende CLI-Check ergänzen diesen historischen Prüfumfang.
+
+## Funktionsausbau und offene Fragen vom 03.11.2026
+
+Der anschließende Arbeitsstand ergänzt Betreiberanzeige, Sichtbarkeitsauswahl, Meldungsnavigation sowie gezielte Korrekturen der Refreshkoordination, Systemsettings-Fallbacks und Stopover-Deduplizierung. Die [Fragenprüfung](./offene-fragen-2026-11-03.md) trennt Code-/Quellbelege von weiter benötigten Geräte- und Fahrtprüfungen.
+
+### Wiederholbare lesende API-Prüfung
+
+- Aufruf: `python .github/scripts/check_api_readonly.py`; abweichende Instanz mit `--server https://example.org`.
+- Zugangsdaten ausschließlich extern über `TRAEWELLING_API_TOKEN` oder mit `--token-stdin` über Standardeingabe zuführen. Keine Tokens in Befehlsargumente, Dateien oder Versionskontrolle schreiben.
+- Der Check führt höchstens 16 GET-Anfragen aus. Er prüft aktuelle Auth-/Status-/Abfahrtsfelder und verschachtelte Stationen. Fehlende Stichproben bei gültigen leeren Listen werden ausdrücklich als `skipped` gemeldet; fehlerhafte Antworten als `failed`.
+- Keine Redirectweitergabe von Credentials; HTTPS-Serverprüfung, identifizierbare Clientkennung, 20 Sekunden je Anfrage und acht MiB Antwortgrenze. HTTP-/Parserfehler enthalten keine Rohantwort oder private Ziel-URL.
+- Der aktuelle CLI-Stand wurde live mit **16 passed, 0 failed, 0 skipped** geprüft. Das ist eine Momentaufnahme, kein fortlaufender Monitor und kein Schreibtest.
+- Offline: `python -B -m unittest discover -s .github/tests -p 'test_*.py'`, **65 Tests bestanden** (56 Releaseguards und neun API-Checktests). CI führt diese fiktiven Antworten aus und benötigt keinen Kontotoken.
+
+### Zusätzliche Android-Regressionen
+
+- Drei Betreiberfälle, zehn Meldungsziel-Fälle, vier Check-in- und vier Statuseditorfälle sichern die gewünschten Funktionen ab.
+- Vier Repositoryfälle prüfen aktuelle vollständige HTTP-409-Konflikte, ungültige Fehlerantworten, andere HTTP-Fehler und einen Sitzungswechsel während der Antwort.
+- Sechs Refreshfälle prüfen gemeinsame Rotation, unterschiedliche Sitzungen, verspätete ungültige Grants sowie Owner-/Waiter-Abbruch und anschließenden Retry.
+- Fünf Systemsettings-Fälle prüfen Zielprioritäten, API-Grenzen und vollständigen Fehlschlag; tatsächliche Android-Aktivitäten sind damit nicht ausgeführt.
+- Acht Deduplizierungsfälle prüfen ergänzende Zeiten/Gleise/Quellen, explizites `false`, UUID/Stationsmetadaten, Blank-Gleise und Besuchsgrenzen. Gegen die unveränderte Produktion scheiterten zunächst drei von sechs neuen Fällen; erst danach wurde der Merge korrigiert.
+
+Der abschließende lokale Lauf bestand am 03.11.2026 in **2 min 34 s**: **949 Android-Unit-Tests in 76 Klassen**, keine Fehlschläge, Fehler oder übersprungenen Fälle. Das sind 44 zusätzliche Regressionen gegenüber dem Ausgangsstand. Vollständiges Debug-Lint bestand mit **0 Fehlern und 55 Warnungen**, Release-Vital-Lint sowie Debug- und unsignierter Release-Build waren erfolgreich. Die vier Aufgaben wurden mit deaktiviertem Kotlin-Inkrementalmodus und ohne Buildcache ausgeführt; 108 Aufgaben, davon 26 ausgeführt und 82 unverändert aktuell. SHA-256 bestätigte während des Endlaufs unveränderte Inhalte aller 221 erfassten Quell-, Test-, Ressourcen- und Konfigurationsdateien. Die 65 Offlineprüfungen und der verschärfte lesende CLI-Lauf mit 16 Erfolgen bestanden ebenfalls. Unabhängige Reviews haben keine offenen blockierenden Befunde. Frühere Zwischenläufe und der vor der Korrektur bewusst rote Deduplizierungstest sind keine Endnachweise. Es fand kein Geräte-, TalkBack-, Fahrt- oder schreibender Live-API-Test statt.
+
 ## Voraussetzungen
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.

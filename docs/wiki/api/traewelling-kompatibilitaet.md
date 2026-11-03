@@ -2,9 +2,51 @@
 
 ## Zweck
 
-Dokumentiert die Prüfung der von Routely verwendeten Träwelling-Endpunkte und Antwortfelder sowie die Migration auf den API-Vertrag vom 05.10.2026.
+Dokumentiert die Prüfung der von Routely verwendeten Träwelling-Endpunkte und Antwortfelder. Der aktuelle Abgleich vom 03.11.2026 ergänzt die historische Migration vom 05.10.2026.
 
-## Kontext und Prüfstand
+## Aktueller Abgleich vom 03.11.2026
+
+- Routely: `main`, Commit `9b975497f2124d56e2336861d4213e6dae3d3ed2` vom 10.10.2026; neuester veröffentlichter Release `v1.9.1`.
+- Träwelling: `develop`, Commit `6051078ef10246d931a34c72d12ad3f96c8a53bc` vom 29.10.2026; Changelog-Blob `4035dadd77fc2fe692396aa4e9a5dcea5a1a6c67`.
+- Gegenüber dem bisherigen Upstream-Prüfstand liegen 35 weitere Commits vor. Geprüft wurden der vollständige Changelog und Commitvergleich, betroffene Routen, Controller, Requests und Ressourcen sowie die vorhandenen Routely-Consumer. Zum Clientumfang gehört auch der direkte OkHttp-Aufruf von `polyline/{parameters}` in `TransitRouteRepository`, außerhalb des Retrofit-Service.
+- Ergebnis: Keine neue Pflichtmigration der vorhandenen Routely-Funktionen festgestellt. Die Migration vom 05.10. verwendet bereits die weiterhin gültigen Felder und Stationsreferenzen.
+
+| Upstream-Änderung / Frist | Befund für Routely |
+| --- | --- |
+| 17.10.: alte Abfahrtsfelder wie `delay`, `destination`, `stop` und `line.productName` entfernt | Bereits ersetzt durch `when`/`plannedWhen`, `direction`, `station` und `line.name`. |
+| 17.10.: Stopover-`arrival`/`departure`, alte Stationskennungen und `OperatorResource.identifier` entfernt | Plan-/Echtzeitfelder und verschachtelte Stationskennungen werden bereits verwendet. |
+| 17.10.: altes Punktefeld, Webhook-/Eventfelder und Report-/Privacy-Routen entfernt | Keine Abhängigkeit von den entfernten Feldern/Routen. Der Changelog nennt nun ebenfalls den gültigen Privacy-Zustimmungspfad `privacy-policies/{id}/acceptance`. |
+| 17.10.: neues nullable `DepartureResource.operator` | Im anschließenden Funktionsausbau übernommen: Abfahrten zeigen einen vorhandenen, nicht leeren Betreibernamen direkt an. Fehlende Betreiber bleiben ohne Zusatzzeile. |
+| 31.10.: Kompatibilitätsfrist für alte HTTP-409-Konfliktfelder abgelaufen | Repository verwendet bereits `data.conflicts`; der aktuelle Upstream-Controller liefert die alten Felder noch, ohne weitere Garantie. |
+| 30.11.: Stopover-`id` erhält künftig Halt- statt Stationsidentität; flache `name`/`identifiers` entfallen | Routely bezieht die Station aus `station` und erkennt Besuche bevorzugt per UUID. `stopoverId` ist nicht modelliert; die ebenfalls als auslaufend markierten optionalen DTO-Felder `isArrivalDelayed` und `isDepartureDelayed` werden für das App-Verhalten nicht ausgewertet. |
+| Operator-ID: UUID-Migration nach abgelaufener Frist | Clientmodell erlaubt String-IDs und hält `uuid` separat bereit; geprüfter Quellcode und Live-Stichprobe liefern noch die numerische Legacy-ID. Ein tatsächlicher vollständiger ID-Wechsel ist damit nicht belegt. |
+
+Zusätzlich ändern die seit dem letzten Audit eingegangenen Controller-Commits die Eventzuweisung für ausgeschlossene Nutzer und OpenAPI-Beschreibungen. Routely hat keine Eventzuweisung im Requestmodell. Der tatsächliche Check-in-Erfolg bleibt unter `data` verschachtelt, passend zum vorhandenen Clientmodell.
+
+### Lesende Live-Prüfung
+
+Am 03.11.2026 wurden mit einem bereitgestellten Testzugang 16 GET-Anfragen gegen `https://traewelling.de` ausgeführt, alle mit HTTP 200: Authprofil, Dashboard, globale Statusliste, Statistik, Meldungen und Ungelesenzahl, Stationssuche, Stations-Bounding-Box, Nutzerprofil, Nutzerstatus, Nutzersuche, Einzelstatus mit Kennungen, Stopovers-Map, Polyline, Abfahrten und Fahrtdetails.
+
+Die Stichprobe bestätigt `user`/`checkin` ohne `train`/`userDetails`, die neuen Abfahrtsfelder einschließlich `operator`, verschachtelte Stationen und fehlende alte Stopover-Zeitfelder. Einstieg und Ziel eines geprüften Status sind per UUID in derselben Haltliste auffindbar. Der Polyline-Abruf liefert eine GeoJSON-FeatureCollection. Es wurden ausschließlich anonymisierte Strukturprüfergebnisse festgehalten, keine Tokens oder persönlichen Antwortdaten.
+
+`continuationTrip` bleibt eine Abweichung zwischen Changelog und geprüftem Vertrag: Das Feld ist im gepinnten `TripResource` nicht ausgegeben und fehlt auch in der Live-Stichprobe. Eine Durchbindungsfunktion sollte deshalb erst nach erneuter Vertragsprüfung geplant werden; eine einzelne Stichprobe beweist keine allgemeine Abwesenheit auf anderen Serverständen.
+
+### Anschließend umgesetzte Funktionen
+
+- Die Abfahrtsliste verwendet `DepartureTrip.operator` und zeigt dessen bereinigten Namen an. Bestehende Serverantworten ohne Betreiber bleiben gültig.
+- Check-in und Statuseditor bieten die sechs Sichtbarkeitswerte `0` öffentlich, `1` nicht gelistet, `2` Follower, `3` privat, `4` angemeldete Nutzer und `5` vertraute Personen. Der Check-in behält die ausdrückliche Vorauswahl `0`; der Editor lässt unveränderte oder unbekannte Werte im PUT weg und beachtet `lock_visibility`.
+- Wichtig: Ein optionales Check-in-Feld bedeutet keinen Profilstandard. Der geprüfte `CheckinRequestHydrator` setzt bei fehlender Sichtbarkeit ausdrücklich `PUBLIC`; `defaultStatusVisibility` aus dem Authprofil wird dort nicht übernommen. Die UI behauptet daher keinen Profilstandard.
+- Meldungen können bestätigte Status- und Profilpfade desselben konfigurierten Servers intern öffnen. Einstellungs-/Eventziele bleiben bei der Gelesenmarkierung. Fremde oder ungültige Links werden nicht als Appziele übernommen. Einzelheiten: [Meldungen](../module/notifications.md).
+
+### Validierungsgrenzen
+
+Während der Bestandsprüfung bestanden zunächst 56 Offline-Releaseguardtests. Der Ausgangsbestand enthielt 905 Kotlin-Testmethoden in 71 Klassen. Für exakt den geprüften Routely-Main-Commit sind [API Compatibility](https://github.com/shedowe19/routely/actions/runs/38074431518) und der [signierte Releaseworkflow](https://github.com/shedowe19/routely/actions/runs/38074500896) vom 10.10.2026 erfolgreich. Für die anschließende Funktionsumsetzung wurden die anfangs fehlenden Komponenten SDK 36 und Build Tools 35.0.0 lokal eingerichtet; deren neuer Test-/Buildnachweis steht unter [Tests](../entwicklung/tests.md).
+
+Check-in 201/409, Status-PUT, Folgen, Likes, Lesemarkierungen und Logout wurden nicht live ausgelöst. Zusätzlich zu den Modellfixtures sichern nun vier Repositorytests den HTTP-409-Zweig einschließlich fehlerhafter Antworten und Sitzungswechsel ab. `.github/scripts/check_api_readonly.py` macht die lesende Prüfung mit externem Token wiederholbar; der aktuelle Stand mit den strengeren Antwortschemas bestand erneut mit 16 erfolgreichen Anfragen ohne Fehler oder übersprungene Stichproben. Redirects werden nicht verfolgt, Antwortgrößen begrenzt und ausschließlich anonymisierte Ergebnisse ausgegeben. Ein Gerätetest fand nicht statt.
+
+Primärquellen: [gepinnter API-Changelog](https://github.com/Traewelling/traewelling/blob/6051078ef10246d931a34c72d12ad3f96c8a53bc/API_CHANGELOG.md), [Commitvergleich](https://github.com/Traewelling/traewelling/compare/4d602796da8409017314cc771b1127d169155f02...6051078ef10246d931a34c72d12ad3f96c8a53bc), [Routen](https://github.com/Traewelling/traewelling/blob/6051078ef10246d931a34c72d12ad3f96c8a53bc/routes/api.php), [Abfahrten](https://github.com/Traewelling/traewelling/blob/6051078ef10246d931a34c72d12ad3f96c8a53bc/app/Http/Resources/DepartureResource.php), [Stopovers](https://github.com/Traewelling/traewelling/blob/6051078ef10246d931a34c72d12ad3f96c8a53bc/app/Http/Resources/StopoverResource.php), [Fahrten](https://github.com/Traewelling/traewelling/blob/6051078ef10246d931a34c72d12ad3f96c8a53bc/app/Http/Resources/TripResource.php).
+
+## Historischer Kontext und Migration vom 05.10.2026
 
 - Routely-Ausgangsstand: `main`, Commit `467ef1264c1e846c72fc51e4375b04b3feb2fee8`.
 - Geprüfter Träwelling-Stand: `develop`, Commit `4d602796da8409017314cc771b1127d169155f02`.
@@ -72,7 +114,7 @@ Alle folgenden Pfade haben das Präfix `/api/v1/`; OAuth verwendet `/oauth/token
 | Haltzeiten | Abhängigkeit von `arrival` und `departure` | `effectiveArrival = arrivalReal ?: arrivalPlanned`, `effectiveDeparture = departureReal ?: departurePlanned` |
 | Abfahrtsverspätung | Legacy-Feld `delay` | `delayMinutes` aus `when - plannedWhen`; Planzeit als Anzeige-Rückfall bei fehlender Echtzeit |
 | Abfahrtsstation | Die gesuchte Station konnte von der tatsächlichen Abfahrtsstation abweichen | `DepartureTrip.station` ist maßgeblich für den Einstieg, wenn die Abfahrt eine eigene Station liefert |
-| Betreiber der Abfahrt | Veraltetes `line.operator` | Entfernt; Betreiber aus `TripDetails.operator` beziehungsweise `CheckinInfo.operator` |
+| Betreiber der Abfahrt | Veraltetes `line.operator` | Entfernt; Fahrtdetails verwenden `TripDetails.operator` beziehungsweise `CheckinInfo.operator`, die Abfahrtsliste das am 17.10. ergänzte direkte Feld `DepartureTrip.operator`. |
 | Operator-ID | `id` als `Int?` konnte eine UUID nicht lesen | `String?` akzeptiert numerische Legacy-IDs und UUIDs; `uuid` ist die bevorzugte stabile Kennung |
 | Check-in-Punkte | Nicht zum geprüften Vertrag passendes Berechnungsfeld `bonus` | `calculation.reason`; `points.additional` wird nicht vorausgesetzt |
 | HTTP-409-Konflikt | Rohes Fehler-JSON wurde als Fehlermeldung weitergereicht | `data.conflicts` als vollständige Status-Liste und `CheckInConflictException` |
@@ -109,9 +151,9 @@ Diese Ergänzungen sind keine Pflichtmigration vorhandener Funktionen. Sie werde
 | `GET /status` mit Datumsfenster | Nicht verwendet; Feed nutzt `dashboard` und `statuses`, Profile nutzen `user/{username}/statuses` |
 | Abfahrts-Metadaten `availableTravelTypes` | Nicht ausgewertet; leere `data`-Listen werden weiterhin als leere Abfahrtsliste behandelt |
 | Lokale Stationscodes `local_code` | Autocomplete bleibt serverseitig nutzbar; der generische Kennungstyp erlaubt zusätzliche Typen |
-| `continuationTrip` | Optionale Erweiterung laut Changelog; im geprüften `TripResource` nicht enthalten, kein bestehender Consumer |
+| `continuationTrip` | Optionale Erweiterung laut Changelog; auch im am 03.11. gepinnten `TripResource` nicht enthalten und in der Live-Stichprobe nicht vorhanden, kein bestehender Consumer |
 
-Der Changelog nennt für die Privacy-Zustimmung einen abweichenden Pfad. Maßgeblich für eine zukünftige Implementierung sind die geprüfte Upstream-Route und deren Requestvertrag, nicht allein dieser Changelog-Eintrag.
+Der historische Changelog nannte für die Privacy-Zustimmung einen abweichenden Pfad. Der Eintrag vom 17.10. nennt inzwischen die geprüfte Route `privacy-policies/{id}/acceptance`. Maßgeblich bleibt für eine zukünftige Implementierung der tatsächliche Requestvertrag.
 
 Die im separaten Transitous-PR #35 hinzugefügten Kotlin-Dateien wurden zusätzlich auf Träwelling-Verwendung geprüft: Sie verwenden weder dessen API-Service noch die betroffenen Modelle und benötigen deshalb keine eigene Träwelling-Migration.
 

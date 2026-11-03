@@ -42,6 +42,8 @@ Der sichtbare Main-Eintrag schützt einen laufenden Check-in auch nach Tabwechse
 
 ## Benachrichtigungsnavigation
 
+Der Meldungstab löst API-Links über `NotificationTargetResolver` gegen den aktuellen Server auf. Gültige `/status/{id}`- und `/@{username}`-Ziele öffnen Fahrtdetail beziehungsweise Profil mit normalem Rückweg zum Meldungstab. HTTPS, Host, Port und ein möglicher Installationspfad müssen zur aktiven Instanz passen. Einstellungen, Events und ungültige Ziele erhalten keine falsche Appnavigation; die Gelesenmarkierung funktioniert davon unabhängig. Die betroffenen Zeilen kennzeichnen ein unterstütztes Ziel durch einen Öffnungspfeil und eine benannte Bedienaktion.
+
 `MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Ein bereits abgeschickter CONFIRM-POST beziehungsweise seine laufende SUCCESS-Zeitkorrektur wird dabei nicht zurückgesetzt. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Ein Request mit optionaler `authSessionRevision` wird nur in derselben aktuellen Zugangsgeneration geöffnet; ein alter Hinweis darf nach Kontowechsel nicht dieselbe numerische Status-ID des neuen Kontos öffnen. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
 
 ## Zustandsdarstellung

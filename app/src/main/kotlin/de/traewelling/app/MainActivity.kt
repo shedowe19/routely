@@ -36,6 +36,7 @@ import androidx.lifecycle.ViewModelProvider
 import de.traewelling.app.util.PreferencesManager
 import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.SessionViewModelStore
+import de.traewelling.app.util.SystemSettingsNavigation
 import de.traewelling.app.viewmodel.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -259,21 +260,37 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun openLiveUpdateSettings() {
-        if (Build.VERSION.SDK_INT >= 36) {
-            try {
-                startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
-                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
-                return
-            } catch (_: ActivityNotFoundException) {
-                // Some manufacturers omit the promoted-notification settings page.
+        if (!SystemSettingsNavigation.liveUpdates(Build.VERSION.SDK_INT, ::launchSystemSettings)) {
+            showSettingsHelp("Öffne die Android-Einstellungen und wähle Apps → Routely → Benachrichtigungen.")
+        }
+    }
+
+    private fun launchSystemSettings(page: SystemSettingsNavigation.Page): Boolean {
+        val intent = when (page) {
+            SystemSettingsNavigation.Page.LIVE_UPDATES -> {
+                if (Build.VERSION.SDK_INT < 36) return false
+                Intent(Settings.ACTION_APP_NOTIFICATION_PROMOTION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
             }
+            SystemSettingsNavigation.Page.NOTIFICATIONS -> Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
+            SystemSettingsNavigation.Page.APP_DETAILS ->
+                Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+            SystemSettingsNavigation.Page.LOCATION -> Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS)
+            SystemSettingsNavigation.Page.GENERAL -> Intent(Settings.ACTION_SETTINGS)
         }
-        try {
-            startActivity(Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
-                .putExtra(Settings.EXTRA_APP_PACKAGE, packageName))
+        return try {
+            startActivity(intent)
+            true
         } catch (_: ActivityNotFoundException) {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            false
+        } catch (_: SecurityException) {
+            false
         }
+    }
+
+    private fun showSettingsHelp(message: String) {
+        android.widget.Toast.makeText(this, message, android.widget.Toast.LENGTH_LONG).show()
     }
 
     private fun hasPreciseLocationPermission(): Boolean =
@@ -289,7 +306,9 @@ class MainActivity : ComponentActivity() {
         permissionAskedForStatusId = visibleTrackingStatusId
         if (hasPreciseLocationPermission()) {
             if (!locationServicesEnabled()) {
-                startActivity(Intent(Settings.ACTION_LOCATION_SOURCE_SETTINGS))
+                if (!SystemSettingsNavigation.location(::launchSystemSettings)) {
+                    showSettingsHelp("Öffne die Android-Einstellungen und aktiviere den Standort.")
+                }
             } else {
                 permissionRevision.value += 1
             }
@@ -298,7 +317,9 @@ class MainActivity : ComponentActivity() {
         if (fromSettings && hasRequestedLocationPermission &&
             !ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.ACCESS_FINE_LOCATION)
         ) {
-            startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
+            if (!SystemSettingsNavigation.permissions(::launchSystemSettings)) {
+                showSettingsHelp("Öffne die Android-Einstellungen und erlaube unter Apps → Routely den genauen Standort.")
+            }
             return
         }
         permissionRequestInFlight = true

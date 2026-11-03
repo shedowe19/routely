@@ -39,7 +39,7 @@ Regressionen verwenden plausible synthetische GPS-Folgen, virtuelle Coroutinezei
 
 Es gibt keine neue produktive Bibliothek oder Datenbankmigration. Profilcontroller und TTS-Initialisierung besitzen Android-freie Testgrenzen; die UI behält ihre bisherigen Anwendungskonstruktoren. Claims verwenden GitHub-Git-Tagobjekte und Create-ref mit vorhandenen `contents: write`-Rechten.
 
-- TODO: Geräte-/OEM-/TalkBack-/Rotation-/Restore-Matrix und ersten signierten Workflow praktisch ausführen.
+- TODO: Geräte-/OEM-/TalkBack-/Rotation-/Restore-Matrix praktisch ausführen. Die getrennte Frage nach dem ersten signierten Workflow ist durch den am 03.11.2026 geprüften [Release v1.9.1](../entwicklung/deployment.md#verifizierte-veröffentlichung-v191) geschlossen.
 - TODO: Weitere Ausbauideen des Reviews getrennt bewerten; sie sind keine verbleibenden bestätigten Codebefunde.
 
 ## Verwandte Seiten

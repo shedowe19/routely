@@ -14,6 +14,7 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusDetailViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/RealtimePresentation.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/StatusEditRequest.kt`
+- `app/src/main/kotlin/de/traewelling/app/ui/components/StatusVisibilitySelector.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/DeletedStatusCompletion.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
@@ -77,6 +78,10 @@ Für diese Ersatzbusfahrten nennt die Ansicht zusätzlich OSRM und OpenStreetMap
 - `startEditing()`: Setzt Bearbeitungszustand
 - `saveStatusEdit()`: Sendet PUT `/api/v1/status/{id}` mit UpdateStatusRequest
 - Bei einem Zielwechsel speichert `editDestinationStop` den ausgewählten Halt. Der Request enthält dann dessen `stationId` als `destinationId` und `arrivalPlanned` als `destinationArrivalPlanned`, da Upstream beide Felder gemeinsam verlangt. Reine Text- oder Zeitkorrekturen übertragen kein Zielpaar.
+
+Seit 03.11.2026 ist die Sichtbarkeit im Bearbeitungsdialog auswählbar. Der Dialog übernimmt den tatsächlichen Wert des geöffneten Status und bietet dieselben sechs Optionen wie der [Check-in](./checkin.md#sichtbarkeit). Fehlende oder unbekannte Werte erscheinen als unbekannte Sichtbarkeit; sie werden nicht stillschweigend in Öffentlich umgewandelt. Nur eine ausdrückliche, vom ursprünglichen Wert abweichende Auswahl ergänzt `visibility` im PUT. Zurückwählen zum ursprünglichen Wert lässt das Feld wieder weg, damit ein zwischenzeitlicher Serverrefresh nicht unbeabsichtigt rückgängig gemacht wird.
+
+`Status.lockVisibility` liest das optionale Eigentümerfeld `lock_visibility`. Ist die Sichtbarkeit beim Öffnen oder im aktuellen Snapshot durch Moderation gesperrt, zeigt die deaktivierte Auswahl den Sperrhinweis. ViewModel und Requestaufbau unterbinden die Änderung ebenfalls; Text-, Ziel- und Zeitbearbeitung bleiben nach ihren bisherigen Regeln möglich. `StatusEditRequestTest` prüft neu eintreffende und bereits beim Öffnen vorhandene Sperren, unbekannte Werte und ausdrückliche zulässige Änderungen. Ein Gerätetest der Dropdown-Auswahl steht noch aus.
 
 `buildStatusEditRequest` vergleicht die Formularzeiten mit den beim Öffnen aufgelösten Anfangswerten. Unveränderte Ankunft/Abfahrt werden im Request ausgelassen, damit eine reine Textänderung die damalige Providerzeit nicht versehentlich als manuelle Istzeit festschreibt. Eine bewusst geleerte Zeit wird als leerer String übertragen. Auch ein anderer Besuch derselben Station gilt als Zielwechsel; eine reine Echtzeitänderung desselben Besuchs nicht. Ein neues Ziel muss nach dem eindeutig zugeordneten Einstieg liegen und darf nicht gestrichen sein. Der GPS-freie Formularresolver bleibt erhalten.
 
@@ -166,7 +171,7 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 
 - D9 wird durch die gemeinsame Mutationsrevision und den aktiven Serviceverbraucher abgesichert: Ein bestätigter Ziel-PUT ist für die Begleitung eine neue Fahrtbasis. `StatusDetailRead` trägt die typisierte Revision über den nachfolgenden Halteabruf; eine dort inzwischen bestätigte Check-in-Zeitkorrektur führt zu einem begrenzten neuen Abruf statt Veröffentlichung des alten Status. Höchstens zwei Versuche verhindern eine unendliche Ladung bei fortlaufenden Änderungen. Haltefehler behalten den kompatiblen Rückfall, Sitzungsabbruch bleibt Cancellation. Regression: `StatusDetailReadTest`. Vor der Mutation begonnene Detailantworten werden nicht übernommen. Detaildarstellung und aktive Halt-/Geometrie-/Abschlussbasis werden getrennt geprüft; der genaue Servicevertrag steht unter [TripTracking](./trip-tracking.md).
 
-- TODO: EditStatusDialog Layout dokumentieren
+- Das `EditStatusDialog` enthält eine vertikal scrollbare Spalte: Fehlerhinweis, Ausstiegsauswahl, Abfahrt/Ankunft nebeneinander, Sichtbarkeitsauswahl und Status-Text. Speichern und Abbrechen stehen in den AlertDialog-Aktionen. Während des Speicherns sind Eingaben und Abbrechen gesperrt; eine Moderationssperre deaktiviert unabhängig davon die Sichtbarkeitsauswahl. Große Schrift, kleine Displays und Bedienungshilfen bleiben eine Geräteprüfung, keine offene Layoutdokumentation.
 
 ## Verwandte Seiten
 

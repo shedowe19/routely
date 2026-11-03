@@ -205,6 +205,20 @@ Falsche Bezugspunkte können Ankunft, Aufenthalt, Abfahrt und Ansage beeinträch
 - TODO: Den Nutzerbericht vom 06.10.2026 zur flackernden Quellenanzeige auf der S28 mit dem stabilisierten Prognosezustand und der aktuellen UI-Vergleichszeit erneut prüfen. Die nachgereichte Bildschirmaufnahme bei eingeschaltetem Display zeigt wechselnde GPS-/API-Quellen für denselben Besuch und Folgehalte, enthält aber keinen Standort- oder Audioverlauf. Insbesondere Bremsen, Ankunft und kurze Haltwechsel dürfen einen noch gültigen passenden Wert nicht unnötig verwerfen; echter Signalverlust muss weiterhin auf API/Plan zurückfallen. Prognosegüte bei Verfrühung, Verspätung, längerem Aufenthalt, Tunnel, Kurven und eng benachbarten Halten bleibt offen.
 - TODO: Einheitliche Quellen-/Zeitdarstellung in Fahrtdetail, Widget und Samsung-Sperrbildschirm bei Display-aus-Betrieb und wiederkehrendem Signal prüfen. Reine Kotlin-Tests belegen keine reale ETA-Güte.
 
+## Abgleich der offenen Praxisfragen vom 03.11.2026
+
+Quellcode und vorhandene Regressionen wurden erneut gegen die offenen Nutzerberichte gelesen. Die folgende Trennung verhindert, dass ein synthetischer Ablauf als nachgewiesene Fahrt ausgegeben wird:
+
+| Frage | Belegter Codezustand | Noch benötigter Nachweis |
+| --- | --- | --- |
+| Tunnel und Rückkehr hinter mehreren Halten | `TunnelGpsRecoveryTest` prüft Ablauf der alten Prognose, erneute Besuchsbindung, restaurierten Cursor, ausbleibende nachträgliche Tunnelereignisse und neue Bewegung auf dem Folgeabschnitt. `TrackingLocationRecoveryAdapterTest` trennt ungenaue Fixes und Replays von frischen Wiederfindungsbelegen. | Reale Fahrt Essen Hbf → Bismarckplatz → Savignystraße mit Fixzeit, Genauigkeit, Cursorwechsel, Quellenanzeige und Audiozeitpunkt aufzeichnen. Die Zielankunft muss physisch bestätigt werden; Wiederfinden allein darf sie nicht erzeugen. |
+| S28-Quellenwechsel | `GpsJourneyTimeEstimatorTest` prüft häufige Fixes, Bremsen und kurze Halte; ein beibehaltener Forecast erhält keine verlängerte Ablaufzeit. Fehlende, alte oder ungenaue Fixes erzwingen weiterhin den Rückfall. | Dieselben Ereignisse bei Verfrühung, Verspätung und Signalflattern auf einer Fahrt mit API-/GPS-Zeit und deren Gültigkeitsende vergleichen; die Aufnahme von 06.10. enthält dafür keinen Fixverlauf. |
+| Beobachtete Abfahrt ohne Zukunfts-ETA | `GpsOrderedDepartureRegressionTest` trennt belegte physische Abfahrt von fehlender nächster Planankunft beziehungsweise zu langem Forecastintervall. | Kurzen realen Halt und anschließende Abfahrt mit tatsächlichem Aufenthalt, Bewegung und angezeigt beobachteter Zeit vergleichen. |
+| Native Linienzüge | `TransitRouteTrackingTest`, `GpsRailGeometryTest` und `RailStationTrackingEngineTest` prüfen Besuchsbindung, Quellenwechsel, abgelaufene Formen und konservativen Rückfall. Der Quellabruf enthält Statusreferenz, keine Gerätefixes. | Kurven, parallele Gleise, Umleitung und Rundfahrt mit realer Position prüfen; nach 15 Minuten ohne Netz darf keine abgelaufene Form weiter als gültig gelten. Laufzeit und Speicher müssen auf dem Gerät gemessen werden. |
+| SEV-Straßenweg und gemeinsamer Restweg | `GpsRoadConsensusTest`, `GpsRoadRouteValidationTest` und `TrackingRouteGeometryRemainingPathTest` prüfen falsche Wege, Schleifen, Kreuzungen, Streuungsgrenze und frischen Bewegungsbeleg. | Tatsächlichen Busweg, mögliche Umleitung, Neustart und Signalrückkehr zwischen bestätigten Ersatzhaltpunkten aufnehmen; Pkw-Routing allein bestätigt keine Busführung oder ETA-Güte. |
+
+Die automatisch prüfbaren Grenzen sind im Code vorhanden; die genannten Geräte- und Fahrtnachweise bleiben offen. Diese Bestandsprüfung verändert keine Radien, Genauigkeitsgrenzen oder Zeitgültigkeit. Details zur aktuellen Quellenstruktur und zu den Anbieterbedingungen stehen bei den [SEV-Haltestellen](./sev-haltestellen.md#abgleich-der-quellenfragen-vom-03112026).
+
 ## Verwandte Seiten
 
 - [TripTracking](./trip-tracking.md)

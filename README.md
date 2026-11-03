@@ -19,7 +19,7 @@ Der Haltestellenverlauf wurde komplett neu gestaltet, um maximale Orientierung z
 -   **Disruptions-Management:** Entfallene Haltestellen werden rot durchgestrichen und mit einem prominenten "HALT ENTFÄLLT" Badge versehen.
 
 ### ⚡ Live-Status & Performance
--   Ein dezenter **Live-Indikator** in der TopAppBar zeigt dir bei Fahrten am aktuellen Tag sofort an, dass du dich gerade im "Live-Modus" befindest.
+-   Eine gemeinsame **Datenquellenanzeige** zeigt Quelle und Abrufalter. Anonyme DBF-/IRIS-Bahndaten ergänzen eindeutig passende Fahrten; Plan-/Ist-Gleise bleiben vergleichbar.
 -   Optimierte Ladezeiten für umfangreiche Haltestellenlisten durch effizientes Daten-Merging im ViewModel.
 
 ### 🧭 Reisebegleitung

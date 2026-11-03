@@ -38,6 +38,12 @@ Höhere Releases werden nicht pauschal übernommen: Core 1.19.1, Lifecycle 2.11,
 
 Primärquellen: [AndroidX-Versionen](https://developer.android.com/jetpack/androidx/versions), [Compose BOM](https://developer.android.com/develop/ui/compose/bom/bom-mapping), [Android-Kotlin-/R8-Tabelle](https://developer.android.com/build/kotlin-support), [AGP 8.13](https://developer.android.com/build/releases/agp-8-13-0-release-notes), [KSP-Releases](https://github.com/google/ksp/releases), [Coil-3-Migration](https://coil-kt.github.io/coil/upgrading_to_coil3/) sowie Publisher-Artefakte aus Google Maven und Maven Central. Die AAR-Metadaten von [OkHttp Android 5.4.0](https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-android/5.4.0/okhttp-android-5.4.0.aar) beziehungsweise [5.5.0](https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-android/5.5.0/okhttp-android-5.5.0.aar) enthalten `minCompileSdk=36` beziehungsweise `37`. [Build](../entwicklung/build.md) erklärt Compilerplugin und API-Migration.
 
+## Erneute Kompatibilitätsprüfung vom 03.11.2026
+
+Die erneut gelesenen offiziellen AGP-/Kotlin-Quellen bestätigen AGP 8.13.2 mit R8 8.13.19 für Kotlin 2.3 sowie JDK 17, Build Tools 35.0.0 und mindestens Gradle 8.13. Die aktuelle Auswahl mit Gradle 8.14.5 passt dazu. Tatsächlich lokal aufgelöste AARs wurden zusätzlich aus ihrem `aar-metadata.properties` gelesen: OkHttp Android 5.4.0 verlangt minCompileSdk 36; Core KTX 1.18.0 verlangt 36 und mindestens AGP 8.9.1; Fragment 1.9.1 verlangt 34/AGP 8.1.1; Coil Compose Android 3.4.0 verlangt 35. Diese geprüften Anforderungen werden von compileSdk 36/AGP 8.13.2 erfüllt. Das ist keine Aussage, dass beliebige zukünftige Bibliotheksupdates mit denselben Pins kompatibel wären.
+
+Die SDK-/AAR-Frage ist damit für den vorhandenen Stand beantwortet. Bildcache-, Refresh-, TTS-, Standort- und Layoutverhalten auf einem realen Gerät bleiben getrennte praktische Prüfungen; die tatsächlich ausgeführten Build-/Testnachweise stehen unter [Tests](../entwicklung/tests.md).
+
 ## Standortnutzung beim Stationsalarm
 
 Der [GPS-Stationsalarm](../module/trip-tracking.md) verwendet `FusedLocationProviderClient` mit eigenen Callbacks. Der gewünschte Abstand beträgt 12 Sekunden unterwegs und 3 Sekunden bis 3 km zum aktuellen Halt; die Vorgaben garantieren keine tatsächliche Zustellrate. `StationTrackingEngine` wertet die Positionen als reine Kotlin-Logik aus und ist unabhängig von Android und Netzwerk getestet.

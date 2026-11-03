@@ -23,12 +23,19 @@ import androidx.compose.ui.unit.dp
 import de.traewelling.app.data.model.Notification
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
+import de.traewelling.app.ui.navigation.NotificationTarget
+import de.traewelling.app.ui.navigation.NotificationTargetResolver
 import de.traewelling.app.ui.theme.TealDark
 import de.traewelling.app.viewmodel.NotificationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NotificationScreen(viewModel: NotificationViewModel) {
+fun NotificationScreen(
+    viewModel: NotificationViewModel,
+    serverUrl: String,
+    onStatusClick: (Int) -> Unit = {},
+    onUserClick: (String) -> Unit = {}
+) {
     val uiState     by viewModel.uiState.collectAsState()
     val listState   = rememberLazyListState()
     // Trigger initial load
@@ -107,11 +114,20 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
                 else -> {
                     LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
                         items(uiState.notifications, key = { it.id }) { notification ->
+                            val target = remember(notification.link, serverUrl) {
+                                NotificationTargetResolver.resolve(notification.link, serverUrl)
+                            }
                             NotificationItem(
                                 notification = notification,
+                                target = target,
                                 onClick = {
                                     if (notification.readAt == null) {
                                         viewModel.markAsRead(notification.id)
+                                    }
+                                    when (target) {
+                                        is NotificationTarget.Status -> onStatusClick(target.id)
+                                        is NotificationTarget.UserProfile -> onUserClick(target.username)
+                                        null -> Unit
                                     }
                                 }
                             )
@@ -125,7 +141,7 @@ fun NotificationScreen(viewModel: NotificationViewModel) {
 }
 
 @Composable
-private fun NotificationItem(notification: Notification, onClick: () -> Unit) {
+private fun NotificationItem(notification: Notification, target: NotificationTarget?, onClick: () -> Unit) {
     val isUnread = notification.readAt == null
     val icon = when {
         notification.type?.contains("Liked", ignoreCase = true) == true -> Icons.Default.Favorite
@@ -147,7 +163,15 @@ private fun NotificationItem(notification: Notification, onClick: () -> Unit) {
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 6.dp)
-            .clickable { onClick() },
+            .clickable(
+                enabled = isUnread || target != null,
+                onClickLabel = when (target) {
+                    is NotificationTarget.Status -> "Fahrt öffnen"
+                    is NotificationTarget.UserProfile -> "Profil öffnen"
+                    null -> "Als gelesen markieren"
+                },
+                onClick = onClick
+            ),
         shape = RoundedCornerShape(20.dp),
         elevation = CardDefaults.cardElevation(if (isUnread) 5.dp else 2.dp),
         border = BorderStroke(1.dp, iconTint.copy(alpha = if (isUnread) 0.20f else 0.08f)),
@@ -196,18 +220,31 @@ private fun NotificationItem(notification: Notification, onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
                     )
                 }
-                if (isUnread) {
-                    Surface(
-                        color = TealDark.copy(alpha = 0.12f),
-                        shape = RoundedCornerShape(999.dp)
-                    ) {
-                        Text(
-                            "Neu",
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TealDark,
-                            fontWeight = FontWeight.Bold
-                        )
+                if (isUnread || target != null) {
+                    Spacer(Modifier.width(8.dp))
+                    Column(horizontalAlignment = Alignment.End) {
+                        if (isUnread) {
+                            Surface(
+                                color = TealDark.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(999.dp)
+                            ) {
+                                Text(
+                                    "Neu",
+                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = TealDark,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                        if (target != null) {
+                            Icon(
+                                Icons.Default.ChevronRight,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(top = if (isUnread) 8.dp else 0.dp).size(20.dp)
+                            )
+                        }
                     }
                 }
             }

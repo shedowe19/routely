@@ -6,6 +6,7 @@ import de.traewelling.app.data.api.RetrofitClient
 import de.traewelling.app.data.api.TraewellingApiService
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import retrofit2.HttpException
@@ -73,6 +74,38 @@ class AuthRepository internal constructor(
 
     suspend fun refreshAccessToken(): Result<Unit> = apiResult {
         val credentials = store.refreshCredentials()
+        // Repositories backed by the same session must not rotate one refresh token twice.
+        val (flight, ownsFlight) = synchronized(inFlightRefreshes) {
+            val existing = inFlightRefreshes[credentials]
+            if (existing != null) existing to false else {
+                val pending = CompletableDeferred<Result<Unit>>()
+                inFlightRefreshes[credentials] = pending
+                pending to true
+            }
+        }
+        if (!ownsFlight) {
+            return@apiResult flight.await().getOrThrow()
+        }
+        try {
+            val result = apiResult { refreshCapturedCredentials(credentials) }
+            flight.complete(result)
+            result.getOrThrow()
+        } catch (failure: Throwable) {
+            flight.completeExceptionally(failure)
+            throw failure
+        } finally {
+            synchronized(inFlightRefreshes) {
+                if (inFlightRefreshes[credentials] === flight) {
+                    inFlightRefreshes.remove(credentials)
+                }
+            }
+        }
+    }
+
+    private suspend fun refreshCapturedCredentials(credentials: RefreshCredentials) {
+        if (store.refreshCredentials() != credentials) {
+            throw CancellationException("Session changed before token refresh")
+        }
         val session = credentials.session
         val clientId = credentials.clientId?.takeIf { it.isNotBlank() } ?: error("No client ID saved")
         val refreshToken = credentials.refreshToken?.takeIf { it.isNotBlank() } ?: error("No refresh token")
@@ -86,7 +119,9 @@ class AuthRepository internal constructor(
             // Client/request/scope failures do not establish that the user's grant is invalid.
             val invalidGrant = OAuthRefreshError.isInvalidGrant(response)
             currentCoroutineContext().ensureActive()
-            if (invalidGrant) store.clearIfMatches(session)
+            if (invalidGrant) {
+                store.clearIfMatches(session)
+            }
             throw HttpException(response)
         }
         val body = response.body() ?: error("Empty refresh response")
@@ -105,10 +140,17 @@ class AuthRepository internal constructor(
     /** Local logout precedes networking and cannot erase a later login. */
     suspend fun logout(): Result<Unit> = apiResult {
         val session = store.session()
-        if (!store.clearIfMatches(session)) return@apiResult
+        if (!store.clearIfMatches(session)) {
+            return@apiResult
+        }
         session.accessToken?.takeIf { it.isNotBlank() }?.let { token ->
             apiResult { apiFactory(session.serverUrl, token).logout() }
         }
         Unit
+    }
+
+    private companion object {
+        // Entries live only for the pending request and are never persisted or logged.
+        val inFlightRefreshes = mutableMapOf<RefreshCredentials, CompletableDeferred<Result<Unit>>>()
     }
 }

@@ -71,7 +71,8 @@ data class Status(
     val user: StatusUser?,
     val checkin: CheckinInfo?,                                // NOT "train"
     val event: StatusEvent?,
-    val tags: List<StatusTag>?
+    val tags: List<StatusTag>?,
+    @SerializedName("lock_visibility") val lockVisibility: Boolean? = null
 )
 
 data class StatusUser(
@@ -223,8 +224,11 @@ data class DepartureTrip(
     val platform: String?,
     @SerializedName("plannedPlatform") val plannedPlatform: String?,
     val cancelled: Boolean?,
-    val station: TrainStation? = null
+    val station: TrainStation? = null,
+    val operator: StopOperator? = null
 ) {
+    val operatorName: String? get() = operator?.name?.trim()?.takeIf { it.isNotEmpty() }
+
     val delayMinutes: Int? get() = runCatching {
         if (realWhen == null || plannedWhen == null) return null
         Duration.between(Instant.parse(plannedWhen), Instant.parse(realWhen)).toMinutes().toInt()
@@ -361,7 +365,8 @@ data class StopoversResponse(
  * Deduplicates a list of stops. The API sometimes returns duplicate consecutive stops
  * (e.g. "Nettetal Kaldenkirchen Bf" and "Kaldenkirchen" with the same times).
  * This function merges consecutive visits to the same station with matching planned times, preferring the
- * entry that has platform information or a shorter name.
+ * entry that has platform information or a shorter name, while retaining complementary
+ * fields and the read provenance of the exact real-time values selected.
  */
 fun List<StopStation>.deduplicate(): List<StopStation> {
     if (isEmpty()) return this
@@ -379,25 +384,64 @@ fun List<StopStation>.deduplicate(): List<StopStation> {
         val compatibleIdentity = stop.uuid == null || last?.uuid == null || stop.uuid == last.uuid
 
         if (last != null && sameStation && compatibleIdentity && hasTimes && arrivalMatch && departureMatch) {
-            val lastHasPlatform = last.platform != null || last.arrivalPlatformPlanned != null || last.departurePlatformPlanned != null
-            val stopHasPlatform = stop.platform != null || stop.arrivalPlatformPlanned != null || stop.departurePlatformPlanned != null
-
-            if (!lastHasPlatform && stopHasPlatform) {
-                // Replace with the one that has a platform
-                result[result.size - 1] = stop
-            } else if (lastHasPlatform == stopHasPlatform) {
-                // If both or neither have platform, prefer the shorter name
-                val lastNameLen = last.stationName?.length ?: Int.MAX_VALUE
-                val stopNameLen = stop.stationName?.length ?: Int.MAX_VALUE
-                if (stopNameLen < lastNameLen) {
-                    result[result.size - 1] = stop
-                }
-            }
+            fun StopStation.hasPlatform() = listOf(platform, arrivalPlatformPlanned,
+                departurePlatformPlanned, arrivalPlatformReal, departurePlatformReal).any { !it.isNullOrBlank() }
+            val lastHasPlatform = last.hasPlatform()
+            val stopHasPlatform = stop.hasPlatform()
+            val preferStop = !lastHasPlatform && stopHasPlatform || lastHasPlatform == stopHasPlatform &&
+                (stop.stationName?.length ?: Int.MAX_VALUE) < (last.stationName?.length ?: Int.MAX_VALUE)
+            val preferred = if (preferStop) stop else last
+            val other = if (preferStop) last else stop
+            result[result.size - 1] = mergeDuplicateStopover(preferred, other)
         } else {
             result.add(stop)
         }
     }
     return result
+}
+
+/** Missing fields may complement a proven visit; conflicting values keep the existing preference. */
+private fun mergeDuplicateStopover(preferred: StopStation, other: StopStation): StopStation {
+    fun <T> readInfo(value: T?, fallback: T?, info: StopRealtimeInfo?, fallbackInfo: StopRealtimeInfo?) = when {
+        value == null && fallback != null -> fallbackInfo
+        value == fallback -> info ?: fallbackInfo
+        else -> info
+    }
+    fun platform(value: String?) = value?.takeUnless(String::isBlank)
+    val station = requireNotNull(preferred.station)
+    val otherStation = requireNotNull(other.station)
+    return preferred.copy(
+        id = preferred.id ?: other.id,
+        uuid = preferred.uuid ?: other.uuid,
+        station = station.copy(
+            uuid = station.uuid ?: otherStation.uuid,
+            name = preferred.stationName ?: other.stationName,
+            latitude = station.latitude ?: otherStation.latitude,
+            longitude = station.longitude ?: otherStation.longitude,
+            identifiers = listOfNotNull(station.identifiers, otherStation.identifiers).flatten()
+                .distinct().takeIf { it.isNotEmpty() }
+        ),
+        arrivalReal = preferred.arrivalReal ?: other.arrivalReal,
+        departureReal = preferred.departureReal ?: other.departureReal,
+        platform = platform(preferred.platform) ?: platform(other.platform),
+        arrivalPlatformPlanned = platform(preferred.arrivalPlatformPlanned) ?: platform(other.arrivalPlatformPlanned),
+        departurePlatformPlanned = platform(preferred.departurePlatformPlanned) ?: platform(other.departurePlatformPlanned),
+        arrivalPlatformReal = platform(preferred.arrivalPlatformReal) ?: platform(other.arrivalPlatformReal),
+        departurePlatformReal = platform(preferred.departurePlatformReal) ?: platform(other.departurePlatformReal),
+        cancelled = preferred.cancelled ?: other.cancelled,
+        isArrivalDelayed = preferred.isArrivalDelayed ?: other.isArrivalDelayed,
+        isDepartureDelayed = preferred.isDepartureDelayed ?: other.isDepartureDelayed,
+        arrivalRealtimeInfo = readInfo(preferred.arrivalReal, other.arrivalReal,
+            preferred.arrivalRealtimeInfo, other.arrivalRealtimeInfo),
+        departureRealtimeInfo = readInfo(preferred.departureReal, other.departureReal,
+            preferred.departureRealtimeInfo, other.departureRealtimeInfo),
+        cancellationRealtimeInfo = readInfo(preferred.cancelled, other.cancelled,
+            preferred.cancellationRealtimeInfo, other.cancellationRealtimeInfo),
+        arrivalPlatformRealtimeInfo = readInfo(platform(preferred.arrivalPlatformReal), platform(other.arrivalPlatformReal),
+            preferred.arrivalPlatformRealtimeInfo, other.arrivalPlatformRealtimeInfo),
+        departurePlatformRealtimeInfo = readInfo(platform(preferred.departurePlatformReal), platform(other.departurePlatformReal),
+            preferred.departurePlatformRealtimeInfo, other.departurePlatformRealtimeInfo)
+    )
 }
 
 // ─── Notifications ────────────────────────────────────────────────────────────

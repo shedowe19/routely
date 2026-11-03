@@ -259,6 +259,14 @@ Beim Beenden werden CPU-WakeLock-Erneuerung, Location-Callbacks, Polling und TTS
 
 G6 des [Nachreviews](../entwicklung/main-review-2026-10-06.md) ist korrigiert: Jede vom monotonen Clockadapter als neu gelieferte Standortbeobachtung erreicht die Stationsengine, auch bei unbrauchbarer Genauigkeit. Diese Beobachtung unterbricht den transienten Wiederverankerungsbeleg; sie erzeugt keine GPS-Zeitprognose. Alte, zu alte und wiederholte Providerwerte bleiben am Clockadapter ausgeschlossen. Reine Regressionen prüfen 80/150 Meter sowie NaN/unendliche Genauigkeit und die Wiederaufnahme mit einer neuen vollständigen Fixfolge. Android-Service-/FLP-Zustellung wurde damit nicht ausgeführt.
 
+## Prüfung der offenen Ansagefragen vom 03.11.2026
+
+Die Rathaus-/S28-Berichte sind weiterhin nicht durch einen aufgezeichneten Standort- und Audioverlauf rekonstruierbar. Die bereits korrigierte Logik ist konkret abgesichert: `StationTrackingEngineTest` und `GpsOrderedDepartureRegressionTest` behandeln frühe Übergabe bei nahen Halten, `StationTrackingJumpTest` unplausible Sprünge vor Fortschritt oder Ansagereservierung, und `TunnelGpsRecoveryTest` die Wiederverankerung nach mehreren verlorenen Halten. Die Einstiegsansage verlangt einen belegten Wartezustand vor der gültigen Abfahrt; die gemeinsame Zustellung prüft den Wartezustand auch beim späteren Versuch erneut.
+
+Für den verbleibenden Praxisnachweis sind zwei getrennte Fahrten beziehungsweise kontrollierte Sequenzen nötig: Maubisstraße → Rathaus etwa zwei Minuten vor Plan mit engem Haltabstand sowie S28 mit längerem Warten und einer konkurrierenden Änderungsansage unmittelbar vor Abfahrt. Aufzuzeichnen sind Zeit/Genauigkeit und Annahme jedes Fixes, aktueller Besuch, Ansagereservierung, tatsächlicher TTS-Start/-Abschluss und Bewegung beim Abfahrtsbeginn. Ein ausgebliebener Versuch darf erneut zugestellt werden; ein nach Verlassen der Wartephase überholter Einstiegsversuch muss ausbleiben.
+
+Display-aus-/Samsung-/Doze-, Audiofokus- und FLP-Wiederanlaufprüfungen bleiben davon getrennt. Ein bestandener Engine-Test belegt keinen Android-Lieferzeitpunkt; eine erzwungene Diagnose ohne physisches Gerät wurde nicht vorgetäuscht. Der [GPS-Fragenabgleich](./gps-zeiten.md#abgleich-der-offenen-praxisfragen-vom-03112026) beschreibt Tunnel, Quellenwechsel und ETA-Messung.
+
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)

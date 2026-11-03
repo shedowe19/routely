@@ -29,6 +29,7 @@ import androidx.annotation.RequiresPermission
 import com.google.android.gms.tasks.CancellationTokenSource
 import de.traewelling.app.data.model.*
 import de.traewelling.app.ui.components.StateMessage
+import de.traewelling.app.ui.components.StatusVisibilitySelector
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.service.RideRecognitionPhase
 import de.traewelling.app.ui.theme.SuccessGreen
@@ -369,6 +370,13 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
         supportingContent = {
             Column {
                 Text("→ $direction")
+                departure.operatorName?.let { operatorName ->
+                    Text(
+                        "Betreiber: $operatorName",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(times.time, style = MaterialTheme.typography.bodySmall,
                         color = when {
@@ -505,6 +513,12 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                 TravelReasonSelector(
                     selected = uiState.travelReason,
                     onSelected = viewModel::updateTravelReason,
+                    enabled = !uiState.isLoading
+                )
+                Spacer(Modifier.height(16.dp))
+                StatusVisibilitySelector(
+                    selectedValue = uiState.visibility,
+                    onSelected = viewModel::updateVisibility,
                     enabled = !uiState.isLoading
                 )
                 Spacer(Modifier.height(16.dp))

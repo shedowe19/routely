@@ -102,9 +102,15 @@ Für nicht-reaktive Kontexte gibt es suspend-Funktionen:
 - `getTrackingState(): String?`
 - etc.
 
+## Lese- und Schreibfehler
+
+Der Audit vom 03.11.2026 bestätigt: Die DataStore-Leseflows und direkten `first()`-Getter besitzen keine eigene IOException-Wiederholung oder Corruption-Recovery. Schreiboperationen sind DataStore-Transaktionen; aufrufende Auth-/Repositorypfade behandeln teilweise Fehler als Ergebnis, während die Settings-Collector und Setter noch keinen gemeinsamen sichtbaren Speicherfehlerzustand anbieten. Ein Schreib- oder Lesefehler ist deshalb nicht als erfolgreich gespeicherte Einstellung zu behandeln.
+
+Eine pauschale Fehlerbehandlung mit `emptyPreferences()` oder automatisch ersetzter Datei wird bewusst nicht ergänzt: Dieselbe Datei enthält Zugangsdaten, Sessionrevision und aktive Fahrt. Leere Ersatzwerte könnten einen Speicherfehler als Abmeldung oder Änderung einer aktiven Fahrt erscheinen lassen. Eine getrennte Recoveryänderung muss den letzten bestätigten Zustand erhalten, vorübergehende IO-Fehler von beschädigtem Inhalt unterscheiden, begrenzte Wiederholung und sichtbare Wiederholungsaktion anbieten sowie schreibende Aktionen bis zu sicherem Speicherzugriff kontrollieren. Ein Zurücksetzen beschädigter Zugangsdaten benötigt eine ausdrückliche Nutzeraktion. Dies ist eine bestätigte fehlende Fehlerbehandlung, kein behaupteter Geräteabsturz im Normalbetrieb.
+
 ## Offene Fragen
 
-- Keine spezifischen aktuell.
+- TODO: Den beschriebenen sichtbaren Storage-Recoveryablauf mit injizierten Lese-/Schreibfehlern prüfen; keine stillen Defaults oder automatisches Löschen von Zugangsdaten.
 
 ## Verwandte Seiten
 

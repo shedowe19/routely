@@ -58,8 +58,8 @@ Die App startet standardmäßig im Light Mode. Wenn der Nutzer über die Einstel
 
 ## Offene Fragen
 
-- Weitere Anpassung individueller Farbskalen bei künftigen Features — offen — @dev
-- Mögliche automatische Anpassung des Themes nach System-Einstellungen (Day/Night) — offen — @dev
+- Geprüft am 03.11.2026: Die drei festen Farbschemata sind in `Theme.kt` umgesetzt. Weitere individuelle Farbskalen wären eine optionale Designentscheidung; es fehlt kein für den bestehenden Themevertrag benötigtes Schema. Kontrast und Zustände müssen zusätzlich visuell und mit Bedienungshilfen geprüft werden.
+- Geprüft am 03.11.2026: Automatischer System-Day/Night-Wechsel ist nicht implementiert. `TraewellingTheme` folgt ausschließlich der gespeicherten Auswahl `LIGHT`, `DARK` oder `AMOLED`; Hell bleibt der Standard. Ein zusätzlicher Systemmodus ist eine optionale Produkterweiterung, keine ungeklärte aktuelle Funktionsweise.
 
 ## Verwandte Seiten
 

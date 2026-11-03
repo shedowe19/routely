@@ -13,6 +13,8 @@ Der Check-in Prozess führt den Nutzer schrittweise von der Ortung/Suche bis zur
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/CheckInScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/CheckInSelection.kt`
+- `app/src/main/kotlin/de/traewelling/app/ui/components/StatusVisibilitySelector.kt`
+- `app/src/main/kotlin/de/traewelling/app/data/model/StatusVisibility.kt`
 
 ## Verhalten und Ablauf
 
@@ -80,6 +82,14 @@ Im Bestätigungsschritt zeigt `CheckInScreen` eine Chip-Auswahl für den Reisegr
 `CheckInViewModel` hält den Wert im `CheckInUiState.travelReason` und übergibt ihn beim Absenden an `CheckInRequest.business`.
 
 Die Reisegrund-Auswahl nutzt `FilterChip`-Elemente statt eines Dropdowns, damit die drei Optionen direkt sichtbar und auf mobilen Geräten schneller erreichbar sind.
+
+## Sichtbarkeit
+
+Seit der Erweiterung vom 03.11.2026 bietet der Bestätigungsschritt eine gemeinsame Dropdown-Auswahl mit Kurzbeschreibung: Öffentlich (`0`), Nicht gelistet (`1`), Follower (`2`), Privat (`3`), Angemeldete Nutzer (`4`) und Vertraute Personen (`5`). Die Werte entsprechen dem geprüften Upstream-Enum `StatusVisibility`.
+
+Die Vorauswahl bleibt wie bisher Öffentlich (`0`), ist nun aber ausdrücklich sichtbar und änderbar. `CheckInUiState.visibility` wird vom Bestätigungsschritt bis `CheckInRequest.visibility` durchgereicht. Zurück innerhalb der Auswahl erhält den Entwurf, ein vollständiger Reset stellt die ursprüngliche Vorauswahl wieder her. Während der Erstellung ist die Auswahl gesperrt. Ein Weglassen des Feldes würde im geprüften Backend ebenfalls Öffentlich ergeben; die App verspricht deshalb keinen automatisch übernommenen Profilstandard.
+
+Regressionen in `CheckInSubmissionTest` sichern die bisherige Public-Vorauswahl, alle sechs ausdrücklichen Werte, Erhalt beim Zurückgehen, Rücksetzen und Ablehnung unbekannter Werte vor der Erstellung ab. Eine schreibende Live-Prüfung wurde dafür nicht ausgeführt.
 
 Lade-, Fehler- und Empty-States im Check-in verwenden `StateMessage`, um dieselbe visuelle Zustandsdarstellung wie Feed und StatusDetail zu nutzen.
 

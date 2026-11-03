@@ -37,6 +37,7 @@ data class CheckInUiState(
     val statusBody: String = "",
     // Travel reason sent as API field "business" (0=private, 1=business, 2=commute)
     val travelReason: TravelReason = TravelReason.PRIVATE,
+    val visibility: Int = StatusVisibility.PUBLIC.apiValue,
     // Manual times
     val manualDeparture: String = "",
     val manualArrival: String = "",
@@ -333,6 +334,11 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateTravelReason(reason: TravelReason) {
         if (!_uiState.value.hasPendingSubmission) _uiState.update { it.copy(travelReason = reason) }
+    }
+
+    fun updateVisibility(visibility: Int) {
+        if (StatusVisibility.fromApiValue(visibility) == null) return
+        if (!_uiState.value.hasPendingSubmission) _uiState.update { it.copy(visibility = visibility) }
     }
 
     // ─── Step 5: Confirm check-in ─────────────────────────────────────────────

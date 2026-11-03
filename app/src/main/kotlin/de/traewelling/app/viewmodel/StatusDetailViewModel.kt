@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.model.SevStopInfo
 import de.traewelling.app.data.model.CheckinInfo
 import de.traewelling.app.data.model.Status
+import de.traewelling.app.data.model.StatusVisibility
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.TrainStation
 import de.traewelling.app.data.repository.TraewellingRepository
@@ -52,7 +53,7 @@ data class StatusDetailUiState(
     val editDestinationId: Int? = null,
     val editDestinationStop: StopStation? = null,
     val editInitialStatus: Status? = null,
-    val editVisibility: Int = 0,
+    val editVisibility: Int? = null,
     val editVisibilityManuallyChanged: Boolean = false
 )
 
@@ -370,7 +371,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
                 editDestinationStop = status.checkin?.destination,
                 editInitialStatus = status,
                 editArrivalManuallyChanged = false,
-                editVisibility = status.visibility ?: 0,
+                editVisibility = status.visibility,
                 editVisibilityManuallyChanged = false
             )
         }
@@ -419,7 +420,9 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     }
 
     fun updateEditVisibility(visibility: Int) {
-        if (_uiState.value.isUpdating || visibility !in 0..5) return
+        val state = _uiState.value
+        if (!state.isEditing || !state.isOwnStatus || state.isUpdating || state.isEditVisibilityLocked ||
+            StatusVisibility.fromApiValue(visibility) == null) return
         _uiState.update { it.copy(editVisibility = visibility, editVisibilityManuallyChanged = true) }
     }
 

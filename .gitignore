@@ -4,6 +4,7 @@ bin/
 gen/
 out/
 .gradle/
+.kotlin/
 local.properties
 .env
 .env.*

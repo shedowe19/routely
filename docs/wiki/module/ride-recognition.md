@@ -53,6 +53,12 @@ Die Berechnung verwendet einen lokalen Korridor zwischen zwei Stationskoordinate
 - TODO: Erkennung auf realen Bus-/Bahnfahrten, parallelen Linien, Kurven und nach Standortunterbrechungen prüfen.
 - TODO: GPS- und API-Verbrauch während längerer aktivierter Suche auf einem Gerät messen. Synthetische Engine-Tests belegen weder Android-Freigaben noch reale Erkennungsgüte.
 
+## Prüfung der offenen Fragen vom 03.11.2026
+
+Die offenen Fragen enthalten zwei unterschiedliche Nachweise. Die automatische Logik ist durch `RideRecognitionEngineTest` für gerichtete Bewegung, stationären Jitter, Gehen, Gegenrichtung, mehrere ähnliche Linien, entfallene Abfahrten und ungültige Fixes abgedeckt. `RideDiscoveryRequestsTest` und die Generationen im Service verhindern, dass eine gescheiterte oder abgelöste Suche später Vorschläge veröffentlicht. Ein Durchlauf bleibt auf zwei nahe Stationen, sechs Abfahrtskandidaten und 45 Sekunden begrenzt; das Polling wartet danach 90 Sekunden. Kandidaten und Fixhistorie bleiben im RAM.
+
+Offen ist ein Geräteprotokoll mit mindestens einer passenden Fahrt, einer parallelen Linie und einer Kurve beziehungsweise GPS-Lücke: Vorschläge vor/nach der Unterbrechung, Fixalter/-genauigkeit und Zeitpunkt des manuellen Bestätigens vergleichen. Logout und Beginn eines aktiven Check-ins müssen die Suche sichtbar beenden beziehungsweise pausieren. Für Verbrauchswerte zusätzlich eine längere aktivierte Suche mit Android-Energie- und Requestzählung messen. Die reinen Grenzwerte liefern weder Erkennungsquote noch Akkulaufzeit; die Bounding-Box-Übertragung an den gewählten Träwelling-Server bleibt Teil dieses ausdrücklich aktivierten Ablaufs.
+
 ## Verwandte Seiten
 
 - [Check-in](./checkin.md)

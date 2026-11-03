@@ -31,6 +31,7 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 - [Setup](./entwicklung/setup.md)
 - [Lokale Entwicklung](./entwicklung/lokale-entwicklung.md)
 - [Tests](./entwicklung/tests.md)
+- [Audit aller offenen Fragen vom 03.11.2026](./entwicklung/offene-fragen-2026-11-03.md)
 - [Erneuter Main-Review nach der Streckenmigration](./entwicklung/main-review-2026-10-06.md)
 - [Build](./entwicklung/build.md)
 - [Deployment](./entwicklung/deployment.md)

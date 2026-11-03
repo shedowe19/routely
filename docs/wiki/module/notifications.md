@@ -13,6 +13,8 @@ Notifications werden im Tab "Meldungen" angezeigt und in der BottomNavigation mi
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/NotificationScreen.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/NotificationViewModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/NotificationController.kt`
+- `app/src/main/kotlin/de/traewelling/app/ui/navigation/NotificationTargetResolver.kt`
+- `app/src/test/kotlin/de/traewelling/app/ui/navigation/NotificationTargetResolverTest.kt`
 
 ## Verhalten
 
@@ -37,7 +39,7 @@ Ein Mutex serialisiert Zähleranfragen. Zusätzlich tragen sie eine eigene Reque
 
 - `markAsRead(notificationId)`: Optimistic Update + API-Aufruf
 - `markAllAsRead()`: Setzt alle auf gelesen
-- Tippen auf eine Meldung ruft nur für ungelesene Einträge `markAsRead()` auf. Es gibt dabei keine Zielnavigation zum Profil oder zur Fahrt.
+- Tippen auf eine Meldung ruft nur für ungelesene Einträge `markAsRead()` auf. Auflösbare Fahrt-/Profilziele werden unmittelbar geöffnet, ohne auf den Leseauftrag zu warten. Ein Fehler der Lesemarkierung verhindert die Navigation nicht.
 
 Unbekannte oder bereits gelesene IDs verringern den Badge nicht. Pro Meldung ist höchstens ein Leseauftrag offen; `markAllAsRead` und einzelne Leseaufträge überschneiden sich nicht. Neue Listenantworten erhalten noch offene optimistische Lesemarkierungen. Nach erfolgreichem Leseauftrag bleibt die konkrete ID zusätzlich bestätigt überlagert, auch nachdem `pendingReads` entfernt wurde. Erst ein danach gestarteter GET mit serverseitigem `readAt` beendet diese zusätzliche Überlagerung. Ein früher begonnener GET kann eine erfolgreich gelesene Meldung damit nicht erneut als ungelesen anzeigen.
 
@@ -46,6 +48,16 @@ Unbekannte oder bereits gelesene IDs verringern den Badge nicht. Pro Meldung ist
 Bei API-Fehler werden nur die eigenen vorläufigen Markierungen zurückgenommen. Der Badge erhält den bisherigen Zähler und mindestens die jetzt sichtbaren ungelesenen Einträge, einschließlich neuer Meldungen während des PUT, auch wenn der anschließende Count-GET fehlschlägt.
 
 `NotificationControllerTest` prüft mit virtueller Coroutine-Zeit und gezielt zurückgehaltenen API-Antworten verspätete GETs nach erfolgreichem Lesen, neue Meldungen nach `markAllAsRead`, Rollback neben einem anderen laufenden Leseauftrag, Zählerserialisierung und abgebrochene Refreshs. `NotificationReadStateTest` ergänzt die lokalen Mapping-/Rollbackregeln. Es werden keine Zeit-Sleeps verwendet; siehe [Tests](../entwicklung/tests.md).
+
+### Zielnavigation
+
+Seit 03.11.2026 öffnet ein Tippen die zugehörige Fahrt oder das Nutzerprofil, wenn der API-Link ein unterstütztes Ziel des angemeldeten Servers beschreibt. `NotificationTargetResolver` akzeptiert ausschließlich HTTPS-Links derselben Origin einschließlich Port und Installationspfad sowie passende serverrelative Pfade. Die bestätigten Webrouten sind `/status/{id}` mit positiver `Int`-ID und `/@{username}` mit dem Upstream-Nutzernamenvertrag `[A-Za-z0-9_]{1,25}`. Profilnamen werden beim Aufbau der Android-Navigationsroute zusätzlich codiert.
+
+Likes, Erwähnungen und gemeinsame Fahrten können so zur Statusansicht führen, Follows und bestätigte Folgeanfragen zum Profil. Die Auswahl hängt vom validierten `link` ab, nicht von einer Vermutung anhand des Meldungstyps oder aus Nachrichtentext. Fremde Hosts, andere Ports, Zugangsdaten in URLs, ungültige IDs, Steuerzeichen und eingeschleuste Pfadsegmente werden abgelehnt. Es wird keine URL in einem Browser geöffnet.
+
+Meldungen zu noch nicht vorhandenen Appseiten wie Einstellungen oder Events werden weiterhin gelesen markiert, lösen aber keine ersatzweise Navigation aus. Bereits gelesene Einträge mit gültigem Ziel bleiben öffnbar; gelesene Einträge ohne Ziel besitzen keine leere Klickaktion. Ein Pfeil kennzeichnet unterstützte Ziele, die Klickaktion nennt für Bedienungshilfen `Fahrt öffnen` beziehungsweise `Profil öffnen`.
+
+Der Resolver verwendet die aktuelle Serverbasis aus dem Authzustand. Die bestehenden accountbezogenen Feature-ViewModels und die synchronen Navigationscallbacks bleiben erhalten; es wird kein verspäteter API-Callback als Navigationsauslöser verwendet.
 
 ### Notification-Typen
 
@@ -77,7 +89,7 @@ Bei API-Fehler werden nur die eigenen vorläufigen Markierungen zurückgenommen.
 
 ## Offene Fragen
 
-- TODO: Meldungen mit auflösbaren Zielinformationen zum zugehörigen Profil oder Status navigieren lassen.
+- TODO: Meldungsnavigation und Rückkehr zum Meldungstab einschließlich großer Schrift und TalkBack auf einem Android-Gerät prüfen. Unbekannte Ziele und fehlgeschlagene Lesemarkierungen bleiben getrennte Prüfpfade.
 
 ## Verwandte Seiten
 

@@ -14,6 +14,12 @@
       "platform": "4",
       "plannedPlatform": "3",
       "cancelled": false,
+      "operator": {
+        "type": "operator",
+        "id": "81379d66-6f6a-462b-a0f0-68208b2cf9f1",
+        "uuid": "81379d66-6f6a-462b-a0f0-68208b2cf9f1",
+        "name": "Testbahn"
+      },
       "station": {
         "id": 80,
         "uuid": "9766c838-a9bb-45aa-9352-7d06f238864b",

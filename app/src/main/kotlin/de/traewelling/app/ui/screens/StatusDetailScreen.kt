@@ -49,10 +49,12 @@ import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.JourneyTimeSource
 import de.traewelling.app.service.TrackingSource
 import de.traewelling.app.ui.components.StateMessage
+import de.traewelling.app.ui.components.StatusVisibilitySelector
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.theme.*
 import de.traewelling.app.viewmodel.StatusDetailViewModel
 import de.traewelling.app.viewmodel.StatusDetailUiState
+import de.traewelling.app.viewmodel.isEditVisibilityLocked
 import de.traewelling.app.viewmodel.StopEvent
 import de.traewelling.app.viewmodel.eventRealtimeInfo
 import de.traewelling.app.viewmodel.eventPlatformRealtimeInfo
@@ -123,6 +125,7 @@ fun StatusDetailScreen(
             onUpdateDeparture = viewModel::updateEditDeparture,
             onUpdateArrival = viewModel::updateEditArrival,
             onUpdateDestination = viewModel::updateEditDestination,
+            onUpdateVisibility = viewModel::updateEditVisibility,
             onSave = viewModel::saveStatusEdit
         )
     }
@@ -1375,6 +1378,7 @@ private fun EditStatusDialog(
     onUpdateDeparture: (String) -> Unit,
     onUpdateArrival: (String) -> Unit,
     onUpdateDestination: (StopStation) -> Unit,
+    onUpdateVisibility: (Int) -> Unit,
     onSave: () -> Unit
 ) {
     AlertDialog(
@@ -1470,6 +1474,13 @@ private fun EditStatusDialog(
                 }
 
                 // Status text
+                StatusVisibilitySelector(
+                    selectedValue = uiState.editVisibility,
+                    onSelected = onUpdateVisibility,
+                    enabled = !uiState.isUpdating,
+                    locked = uiState.isEditVisibilityLocked
+                )
+
                 OutlinedTextField(
                     value = uiState.editBody,
                     enabled = !uiState.isUpdating,

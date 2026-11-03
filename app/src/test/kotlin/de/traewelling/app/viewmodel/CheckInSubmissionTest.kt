@@ -21,6 +21,36 @@ class CheckInSubmissionTest {
     private fun status(body: String = "original") = gson.fromJson("{\"id\":42,\"body\":\"$body\"}", Status::class.java)
     private val created get() = CheckInResult(status(), null)
 
+    @Test fun defaultPublicVisibilityIsVisibleInStateAndSentExplicitly() {
+        val request = buildCheckInSubmission(state, origin).request
+        assertEquals(0, state.visibility)
+        assertEquals(0, request.visibility)
+        assertEquals(0, JsonParser.parseString(gson.toJson(request)).asJsonObject.get("visibility").asInt)
+    }
+
+    @Test fun eachExplicitVisibilityChoiceIsSentWithItsApiValue() {
+        for (visibility in 0..5) {
+            val request = buildCheckInSubmission(state.copy(visibility = visibility), origin).request
+            assertEquals(visibility, request.visibility)
+            assertEquals(visibility, JsonParser.parseString(gson.toJson(request)).asJsonObject.get("visibility").asInt)
+        }
+    }
+
+    @Test fun backNavigationKeepsVisibilityAndResetRestoresTheOriginalDefault() {
+        val selected = state.copy(step = CheckInStep.CONFIRM, visibility = 3)
+        val previous = requireNotNull(previousCheckInState(selected))
+        assertEquals(3, previous.visibility)
+        assertEquals(0, requireNotNull(resetCheckInState(previous)).visibility)
+    }
+
+    @Test fun unsupportedVisibilityCannotBeSubmitted() {
+        for (visibility in listOf(-1, 6)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                buildCheckInSubmission(state.copy(visibility = visibility), origin)
+            }
+        }
+    }
+
     @Test fun manualRealTimesNeverReplacePlannedPostVisitMarkers() {
         val submission = buildCheckInSubmission(state.copy(manualDeparture = "2026-10-06T18:07:00+02:00",
             manualArrival = "2026-10-06T18:37:00+02:00"), origin)

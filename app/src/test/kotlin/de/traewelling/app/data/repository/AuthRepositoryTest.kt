@@ -198,6 +198,116 @@ class AuthRepositoryTest {
         assertEquals(listOf("refresh", "replacement"), sentRefreshTokens)
     }
 
+    @Test fun simultaneousRefreshesAcrossRepositoriesShareOneTokenRotation() = runBlocking {
+        val store = Store(AuthSession(server, "old-token", "initial"))
+        val entered = CompletableDeferred<Unit>()
+        val response = CompletableDeferred<Response<OAuthTokenResponse>>()
+        var requests = 0
+        val refresh: suspend (String) -> Response<OAuthTokenResponse> = { sent ->
+            assertEquals("refresh", sent)
+            requests++
+            entered.complete(Unit)
+            response.await()
+        }
+        val firstRepo = refreshRepository(store, refresh)
+        val secondRepo = refreshRepository(store, refresh)
+        val first = async { firstRepo.refreshAccessToken() }
+        entered.await()
+        val second = async(start = CoroutineStart.UNDISPATCHED) { firstRepo.refreshAccessToken() }
+        val third = async(start = CoroutineStart.UNDISPATCHED) { secondRepo.refreshAccessToken() }
+        assertEquals(1, requests)
+        response.complete(Response.success(OAuthTokenResponse("new-access", "rotated-refresh", "Bearer", 3600)))
+        listOf(first, second, third).forEach { assertTrue(it.await().isSuccess) }
+        assertEquals("new-access", store.current.accessToken)
+        assertEquals("rotated-refresh", store.refreshToken)
+        assertEquals(1, requests)
+    }
+
+    @Test fun simultaneousInvalidGrantIsHandledOnceAndSharedAsFailure() = runBlocking {
+        val store = Store(AuthSession(server, "old-token", "initial"))
+        val entered = CompletableDeferred<Unit>()
+        val response = CompletableDeferred<Response<OAuthTokenResponse>>()
+        var requests = 0
+        val repo = refreshRepository(store) { requests++; entered.complete(Unit); response.await() }
+        val first = async { repo.refreshAccessToken() }
+        entered.await()
+        val second = async(start = CoroutineStart.UNDISPATCHED) { repo.refreshAccessToken() }
+        response.complete(error(400, "{\"error\":\"invalid_grant\"}"))
+        assertTrue(first.await().isFailure)
+        assertTrue(second.await().isFailure)
+        assertEquals(1, requests)
+        assertNull(store.current.accessToken)
+    }
+
+    @Test fun cancellingAWaitingCallerDoesNotCancelTheSharedRefresh() = runBlocking {
+        val store = Store(AuthSession(server, "old-token", "initial"))
+        val entered = CompletableDeferred<Unit>()
+        val response = CompletableDeferred<Response<OAuthTokenResponse>>()
+        var requests = 0
+        val repo = refreshRepository(store) { requests++; entered.complete(Unit); response.await() }
+        val first = async { repo.refreshAccessToken() }
+        entered.await()
+        val waiter = async(start = CoroutineStart.UNDISPATCHED) { repo.refreshAccessToken() }
+        waiter.cancelAndJoin()
+        response.complete(Response.success(OAuthTokenResponse("new-access", "rotated-refresh", "Bearer", 3600)))
+        assertTrue(first.await().isSuccess)
+        assertTrue(waiter.isCancelled)
+        assertEquals("new-access", store.current.accessToken)
+        assertEquals(1, requests)
+    }
+
+    @Test fun cancelledRefreshCancelsItsWaitersAndAllowsANewAttempt() = runBlocking {
+        val store = Store(AuthSession(server, "old-token", "initial"))
+        val entered = CompletableDeferred<Unit>()
+        val response = CompletableDeferred<Response<OAuthTokenResponse>>()
+        var requests = 0
+        val repo = refreshRepository(store) {
+            requests++
+            if (requests == 1) { entered.complete(Unit); response.await() }
+            else Response.success(OAuthTokenResponse("new-access", "rotated-refresh", "Bearer", 3600))
+        }
+        val first = async { repo.refreshAccessToken() }
+        entered.await()
+        val waiter = async(start = CoroutineStart.UNDISPATCHED) { repo.refreshAccessToken() }
+        first.cancelAndJoin()
+        waiter.join()
+        assertTrue(waiter.isCancelled)
+        assertEquals("old-token", store.current.accessToken)
+        assertTrue(repo.refreshAccessToken().isSuccess)
+        assertEquals("new-access", store.current.accessToken)
+        assertEquals(2, requests)
+    }
+
+    @Test fun temporaryRefreshFailureIsNotCachedForAFutureAttempt() = runBlocking {
+        val store = Store(AuthSession(server, "old-token", "initial"))
+        var requests = 0
+        val repo = refreshRepository(store) {
+            if (++requests == 1) error(503)
+            else Response.success(OAuthTokenResponse("new-access", "rotated-refresh", "Bearer", 3600))
+        }
+        assertTrue(repo.refreshAccessToken().isFailure)
+        assertEquals("old-token", store.current.accessToken)
+        assertTrue(repo.refreshAccessToken().isSuccess)
+        assertEquals(2, requests)
+    }
+
+    @Test fun anotherSessionDoesNotWaitForAnOlderSessionsRefresh() = runBlocking {
+        val oldStore = Store(AuthSession(server, "old-token", "old-session"))
+        val entered = CompletableDeferred<Unit>()
+        val response = CompletableDeferred<Response<OAuthTokenResponse>>()
+        val oldRepo = refreshRepository(oldStore) { entered.complete(Unit); response.await() }
+        val oldRequest = async { oldRepo.refreshAccessToken() }
+        entered.await()
+        val otherStore = Store(AuthSession(server, "other-token", "other-session"))
+        val otherRepo = refreshRepository(otherStore) {
+            Response.success(OAuthTokenResponse("other-refreshed", "other-refresh", "Bearer", 3600))
+        }
+        assertTrue(otherRepo.refreshAccessToken().isSuccess)
+        assertEquals("other-refreshed", otherStore.current.accessToken)
+        response.complete(Response.success(OAuthTokenResponse("old-refreshed", "old-refresh", "Bearer", 3600)))
+        assertTrue(oldRequest.await().isSuccess)
+    }
+
     @Test fun incompleteRefreshSuccessNeverChangesEitherCredential() = runBlocking {
         val replies = listOf(Response.success<OAuthTokenResponse>(null)) + listOf(null, "", " ").map { token ->
             Response.success(OAuthTokenResponse(token, "replacement", "Bearer", 3600))

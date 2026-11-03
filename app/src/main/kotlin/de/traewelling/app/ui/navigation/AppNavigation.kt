@@ -1,5 +1,6 @@
 package de.traewelling.app.ui.navigation
 
+import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.padding
@@ -160,7 +161,16 @@ fun MainNavigation(
                             )
                         }
                         Screen.Notifications -> {
-                            NotificationScreen(notificationViewModel)
+                            NotificationScreen(
+                                viewModel = notificationViewModel,
+                                serverUrl = authState.serverUrl,
+                                onStatusClick = { statusId ->
+                                    navController.navigate("statusDetail/$statusId") { launchSingleTop = true }
+                                },
+                                onUserClick = { username ->
+                                    navController.navigate("userProfile/${Uri.encode(username)}") { launchSingleTop = true }
+                                }
+                            )
                         }
                         Screen.Profile -> {
                             ProfileScreen(
