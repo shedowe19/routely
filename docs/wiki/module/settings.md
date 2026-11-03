@@ -78,7 +78,7 @@ Der Audit vom 03.11.2026 hat hier einen konkreten Fehlerpfad korrigiert: Der let
 
 ## Offene Fragen
 
-- Speicherfehler sind unter [PreferencesManager: Fehlergrenzen](../konfiguration/preferences-manager.md#lese--und-schreibfehler) konkret eingeordnet. Es gibt keine automatische Rücksetzung bei Lesefehlern; ein umfassender sichtbarer Recoveryablauf bleibt eine eigene Änderung.
+- Speicherfehler werden über den gemeinsamen [Recoveryablauf](../konfiguration/preferences-manager.md#lese--und-schreibfehler) sichtbar behandelt. Setter fangen typisierte Speicherfehler ab und verändern ihre bestätigten Anzeigezustände erst nach Persistenz; ein fehlgeschlagener Auftrag bleibt als Hinweis erkennbar und wird nicht automatisch wiederholt. Der TTS-Initialisierer wird bei fehlender Speicherbereitschaft deaktiviert und erst aus bestätigten Einstellungen wieder gestartet. Geräte- und TalkBackbedienung der Recoveryoberfläche bleibt praktisch zu prüfen.
 - TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.
 - TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.
 

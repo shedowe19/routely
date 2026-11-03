@@ -23,25 +23,34 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import de.traewelling.app.service.TripTrackingService
 import de.traewelling.app.service.RideRecognitionService
 import de.traewelling.app.ui.navigation.NavigationRequest
 import de.traewelling.app.ui.navigation.MainNavigation
 import de.traewelling.app.ui.screens.SetupScreen
+import de.traewelling.app.ui.components.StorageRecoveryDialog
 import de.traewelling.app.ui.theme.TraewellingTheme
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.ViewModelProvider
 import de.traewelling.app.util.PreferencesManager
-import de.traewelling.app.util.AuthSession
+import de.traewelling.app.util.ConfirmedStorageSession
+import de.traewelling.app.util.PreferenceStorageException
+import de.traewelling.app.util.TrackingConfiguration
+import de.traewelling.app.util.canConfirmStorageReset
+import de.traewelling.app.util.canResumeStoredServices
+import de.traewelling.app.util.canUseStoredSession
 import de.traewelling.app.util.SessionViewModelStore
 import de.traewelling.app.util.SystemSettingsNavigation
 import de.traewelling.app.viewmodel.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 
 class MainActivity : ComponentActivity() {
@@ -52,6 +61,7 @@ class MainActivity : ComponentActivity() {
     private val authViewModel:         AuthViewModel         by viewModels()
     private val sessionViewModels:     SessionViewModelStore by viewModels()
     private val settingsViewModel:     SettingsViewModel     by viewModels()
+    private val preferences by lazy { PreferencesManager(applicationContext) }
 
     private val permissionRevision = MutableStateFlow(0)
     private var permissionRequestInFlight = false
@@ -72,32 +82,52 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
 
         requestNotificationPermission()
-        checkAndResumeTripTracking()
-        checkAndResumeRideRecognition()
+        checkAndResumeServices()
         receiveNavigationIntent(intent)
 
         setContent {
             val settingsState by settingsViewModel.uiState.collectAsState()
+            val storageState by preferences.storageState.collectAsState()
 
             TraewellingTheme(theme = settingsState.appTheme) {
                 val snackbarHostState = remember { SnackbarHostState() }
                 val scope             = rememberCoroutineScope()
                 val authState         by authViewModel.uiState.collectAsState()
                 val requestedNavigation by navigationRequest.collectAsState()
+                val keyboard = LocalSoftwareKeyboardController.current
+                var confirmedStorageSession by remember { mutableStateOf<ConfirmedStorageSession?>(null) }
+                var hasRenderedContent by remember { mutableStateOf(false) }
+                var recoveryActionInProgress by remember { mutableStateOf(false) }
+                val canInteract = canUseStoredSession(storageState, authState.hasLoadedSession,
+                    authState.sessionRevision, authState.isLoggedIn, confirmedStorageSession)
 
-                LaunchedEffect(authState.isLoggedIn, authState.sessionRevision) {
-                    if (!authState.isLoggedIn) sessionViewModels.clearSession()
+                // Ready can arrive before the separate AuthViewModel collector hydrates/reset completes.
+                LaunchedEffect(storageState.isReady, storageState.revision,
+                    authState.hasLoadedSession, authState.sessionRevision) {
+                    confirmedStorageSession = null
+                    if (storageState.isReady) {
+                        try {
+                            val session = preferences.getAuthSession()
+                            confirmedStorageSession = ConfirmedStorageSession(session.revision, session.accessToken != null,
+                                storageState.revision)
+                        } catch (cancelled: CancellationException) {
+                            throw cancelled
+                        } catch (_: PreferenceStorageException) {
+                            // The shared storage state owns the visible recovery action.
+                        }
+                    }
+                }
+                SideEffect { if (canInteract) hasRenderedContent = true }
+                LaunchedEffect(canInteract) { if (!canInteract) keyboard?.hide() }
+
+                LaunchedEffect(canInteract, authState.isLoggedIn, authState.sessionRevision) {
+                    if (canInteract && !authState.isLoggedIn) sessionViewModels.clearSession()
                 }
 
                 // Show "Willkommen @user" once after login / startup validation
-                LaunchedEffect(authState.welcomeMessage) {
-                    authState.welcomeMessage?.let { msg ->
-                        scope.launch {
-                            snackbarHostState.showSnackbar(
-                                message  = msg,
-                                duration = SnackbarDuration.Short
-                            )
-                        }
+                LaunchedEffect(canInteract, authState.welcomeMessage) {
+                    authState.welcomeMessage?.takeIf { canInteract }?.let { msg ->
+                        snackbarHostState.showSnackbar(message = msg, duration = SnackbarDuration.Short)
                         authViewModel.clearWelcomeMessage()
                     }
                 }
@@ -107,8 +137,10 @@ class MainActivity : ComponentActivity() {
                     snackbarHost  = { SnackbarHost(snackbarHostState) },
                     containerColor = MaterialTheme.colorScheme.background
                 ) { innerPadding ->
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        if (authState.isLoggedIn) {
+                    Box(modifier = Modifier.fillMaxSize().then(
+                        if (canInteract) Modifier else Modifier.clearAndSetSemantics {}
+                    )) {
+                        if ((canInteract || hasRenderedContent) && authState.isLoggedIn) {
                             key(authState.sessionRevision) {
                                 val featureModels = remember(authState.sessionRevision) {
                                     ViewModelProvider(
@@ -137,12 +169,36 @@ class MainActivity : ComponentActivity() {
                                     }
                                 )
                             }
-                        } else {
+                        } else if (canInteract || hasRenderedContent) {
                             Box(modifier = Modifier.padding(innerPadding)) {
                                 SetupScreen(viewModel = authViewModel)
                             }
                         }
                     }
+                }
+                if (!canInteract || recoveryActionInProgress) {
+                    StorageRecoveryDialog(
+                        state = storageState,
+                        actionInProgress = recoveryActionInProgress,
+                        onRetry = {
+                            if (!recoveryActionInProgress) {
+                                recoveryActionInProgress = true
+                                scope.launch {
+                                    try { preferences.retryStorage() }
+                                    finally { recoveryActionInProgress = false }
+                                }
+                            }
+                        },
+                        onReset = { failureId ->
+                            if (!recoveryActionInProgress && canConfirmStorageReset(failureId, preferences.storageState.value)) {
+                                recoveryActionInProgress = true
+                                scope.launch {
+                                    try { preferences.resetCorruptedStorage(failureId) }
+                                    finally { recoveryActionInProgress = false }
+                                }
+                            }
+                        }
+                    )
                 }
             }
         }
@@ -156,32 +212,75 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkAndResumeTripTracking() {
-        val prefs = PreferencesManager(this)
+    private fun checkAndResumeServices() {
         lifecycleScope.launch {
-            hasRequestedLocationPermission = prefs.hasRequestedLocationPermission()
             // Location foreground services must start while the Activity is visible.
             repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                combine(prefs.trackingConfiguration, permissionRevision) { config, revision ->
-                    TrackingStartState(config.activeStatusId, config.gpsEnabled, config.session, revision)
-                }.distinctUntilChanged().collect { state ->
-                    val statusId = state.statusId
-                    visibleTrackingStatusId = statusId
-                    if (statusId == null || state.session.accessToken == null) {
-                        permissionAskedForStatusId = null
-                        stopService(Intent(this@MainActivity, TripTrackingService::class.java))
-                    } else {
-                        val fineGranted = hasPreciseLocationPermission()
-                        startTripTracking(statusId, state.gpsEnabled && fineGranted && locationServicesEnabled(), state.session.revision)
-                        if (state.gpsEnabled && !fineGranted && permissionAskedForStatusId != statusId) {
-                            permissionAskedForStatusId = statusId
-                            requestGpsPermission()
-                        }
+                combine(preferences.storageState, preferences.trackingConfiguration, permissionRevision,
+                    TripTrackingService.storagePauseInProgress, RideRecognitionService.storagePauseInProgress
+                ) { storage, configuration, revision, tripPausing, recognitionPausing ->
+                    ServiceResumeSignal(configuration, storage.isReady, storage.revision, revision,
+                        tripPausing, recognitionPausing)
+                }.distinctUntilChanged().collectLatest { signal ->
+                    if (!signal.storageReady) {
+                        visibleTrackingStatusId = null
+                        // Each service owns its non-destructive storage pause and paused widget.
+                        return@collectLatest
+                    }
+                    storageAction {
+                        val config = preferences.getTrackingConfiguration()
+                        hasRequestedLocationPermission = preferences.hasRequestedLocationPermission()
+                        if (!canResumeStoredServices(signal.storageRevision, preferences.storageState.value, false))
+                            return@storageAction
+                        resumeTrip(config, signal)
+                        resumeRecognition(config, signal)
                     }
                 }
             }
         }
     }
+
+    private fun resumeTrip(config: TrackingConfiguration, signal: ServiceResumeSignal) {
+        if (!canResumeStoredServices(signal.storageRevision, preferences.storageState.value,
+                TripTrackingService.storagePauseInProgress.value)) return
+        val statusId = config.activeStatusId
+        visibleTrackingStatusId = statusId
+        if (statusId == null || config.session.accessToken == null) {
+            permissionAskedForStatusId = null
+            stopService(Intent(this, TripTrackingService::class.java))
+            return
+        }
+        val fineGranted = hasPreciseLocationPermission()
+        startTripTracking(statusId, config.gpsEnabled && fineGranted && locationServicesEnabled(), config.session.revision)
+        if (config.gpsEnabled && !fineGranted && permissionAskedForStatusId != statusId) {
+            permissionAskedForStatusId = statusId
+            requestGpsPermission()
+        }
+    }
+
+    private fun resumeRecognition(config: TrackingConfiguration, signal: ServiceResumeSignal) {
+        if (!canResumeStoredServices(signal.storageRevision, preferences.storageState.value,
+                RideRecognitionService.storagePauseInProgress.value)) return
+        if (config.recognitionEnabled && config.session.accessToken != null && config.activeStatusId == null &&
+            hasPreciseLocationPermission() && locationServicesEnabled()) {
+            try {
+                ContextCompat.startForegroundService(this,
+                    RideRecognitionService.startIntent(this).putExtra(
+                        RideRecognitionService.EXTRA_AUTH_SESSION_REVISION, config.session.revision))
+            } catch (error: RuntimeException) {
+                android.util.Log.w("MainActivity", "Fahrterkennung konnte nicht gestartet werden", error)
+            }
+        } else stopService(Intent(this, RideRecognitionService::class.java))
+    }
+
+    private data class ServiceResumeSignal(
+        val configuration: TrackingConfiguration,
+        val storageReady: Boolean,
+        val storageRevision: Long,
+        val permissionRevision: Int,
+        val tripPausing: Boolean,
+        val recognitionPausing: Boolean
+    )
 
     override fun onResume() {
         super.onResume()
@@ -207,56 +306,40 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun checkAndResumeRideRecognition() {
-        val prefs = PreferencesManager(this)
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.RESUMED) {
-                combine(prefs.trackingConfiguration, permissionRevision) { config, revision ->
-                    RecognitionStartState(config.recognitionEnabled, config.activeStatusId, config.session, revision)
-                }.distinctUntilChanged().collect { state ->
-                    if (state.enabled && state.session.accessToken != null && state.activeId == null &&
-                        hasPreciseLocationPermission() && locationServicesEnabled()
-                    ) {
-                        try {
-                            ContextCompat.startForegroundService(this@MainActivity,
-                                RideRecognitionService.startIntent(this@MainActivity).putExtra(
-                                    RideRecognitionService.EXTRA_AUTH_SESSION_REVISION, state.session.revision))
-                        } catch (error: RuntimeException) {
-                            android.util.Log.w("MainActivity", "Fahrterkennung konnte nicht gestartet werden", error)
-                        }
-                    } else {
-                        stopService(Intent(this@MainActivity, RideRecognitionService::class.java))
-                    }
-                }
-            }
-        }
-    }
-
-    private data class TrackingStartState(val statusId: Int?, val gpsEnabled: Boolean, val session: AuthSession, val revision: Int)
-    private data class RecognitionStartState(val enabled: Boolean, val activeId: Int?, val session: AuthSession, val revision: Int)
-
     private fun requestRideRecognitionStart() {
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || !preferences.storageState.value.isReady) return
         val revision = authViewModel.uiState.value.sessionRevision
         lifecycleScope.launch {
-            val prefs = PreferencesManager(this@MainActivity)
-            val session = prefs.getAuthSession()
-            if (session.revision != revision || session.accessToken == null ||
-                !prefs.setRideRecognitionEnabled(true, session)) return@launch
-            requestNotificationPermission()
-            requestGpsPermission(fromSettings = true)
-            permissionRevision.value += 1
+            storageAction {
+                val session = preferences.getAuthSession()
+                if (session.revision != revision || session.accessToken == null ||
+                    !preferences.setRideRecognitionEnabled(true, session)) return@storageAction
+                requestNotificationPermission()
+                requestGpsPermission(fromSettings = true)
+                permissionRevision.value += 1
+            }
         }
     }
 
     private fun stopRideRecognition() {
         val revision = authViewModel.uiState.value.sessionRevision
         lifecycleScope.launch {
-            val prefs = PreferencesManager(this@MainActivity)
-            val session = prefs.getAuthSession()
-            if (session.revision == revision) prefs.setRideRecognitionEnabled(false, session)
+            storageAction {
+                val session = preferences.getAuthSession()
+                if (session.revision == revision) preferences.setRideRecognitionEnabled(false, session)
+            }
         }
         stopService(Intent(this, RideRecognitionService::class.java))
+    }
+
+    private suspend fun storageAction(action: suspend () -> Unit) {
+        try {
+            action()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: PreferenceStorageException) {
+            // Recovery is displayed by the shared root gate; never replace stored values here.
+        }
     }
 
     private fun openLiveUpdateSettings() {
@@ -302,7 +385,8 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun requestGpsPermission(fromSettings: Boolean = false) {
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || permissionRequestInFlight) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || permissionRequestInFlight ||
+            !preferences.storageState.value.isReady) return
         permissionAskedForStatusId = visibleTrackingStatusId
         if (hasPreciseLocationPermission()) {
             if (!locationServicesEnabled()) {
@@ -323,16 +407,31 @@ class MainActivity : ComponentActivity() {
             return
         }
         permissionRequestInFlight = true
-        hasRequestedLocationPermission = true
-        lifecycleScope.launch { PreferencesManager(this@MainActivity).markLocationPermissionRequested() }
-        locationPermissionLauncher.launch(arrayOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
-        ))
+        lifecycleScope.launch {
+            var launched = false
+            try {
+                storageAction {
+                    preferences.markLocationPermissionRequested()
+                    hasRequestedLocationPermission = true
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && preferences.storageState.value.isReady) {
+                        locationPermissionLauncher.launch(arrayOf(
+                            Manifest.permission.ACCESS_FINE_LOCATION,
+                            Manifest.permission.ACCESS_COARSE_LOCATION
+                        ))
+                        launched = true
+                    }
+                }
+            } finally {
+                if (!launched) {
+                    permissionRequestInFlight = false
+                    permissionAskedForStatusId = null
+                }
+            }
+        }
     }
 
     private fun startTripTracking(statusId: Int, enableGps: Boolean, sessionRevision: String) {
-        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || !preferences.storageState.value.isReady) return
         val intent = Intent(this, TripTrackingService::class.java).apply {
             putExtra(TripTrackingService.EXTRA_STATUS_ID, statusId)
             putExtra(TripTrackingService.EXTRA_ENABLE_GPS, enableGps)

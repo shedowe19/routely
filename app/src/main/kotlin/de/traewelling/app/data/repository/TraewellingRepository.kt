@@ -11,6 +11,7 @@ import de.traewelling.app.data.model.*
 import de.traewelling.app.data.dbf.DbfRealtimeRepository
 import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.PreferencesManager
+import de.traewelling.app.util.PreferenceStorageException
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.ensureActive
@@ -95,8 +96,8 @@ class TraewellingRepository internal constructor(
             throw cancelled
         } catch (failure: Exception) {
             // Auth/validation failures must never resurrect a previous private feed.
-            val temporaryFailure = failure is IOException || failure is HttpException &&
-                (failure.code() == 408 || failure.code() == 429 || failure.code() >= 500)
+            val temporaryFailure = failure !is PreferenceStorageException && (failure is IOException || failure is HttpException &&
+                (failure.code() == 408 || failure.code() == 429 || failure.code() >= 500))
             if (page != 1 || !temporaryFailure) throw failure
             mutations.cacheMutex.withLock {
                 requireUnchangedFeed()
@@ -149,7 +150,11 @@ class TraewellingRepository internal constructor(
         orderedStatusWrite(session, id) {
             val r = apiFactory(session).deleteStatus(id)
             if (!r.isSuccessful) error("Löschen fehlgeschlagen (${r.code()})")
-            completeStatusMutation(session, StatusMutation.Deleted(session.revision, id))
+            try {
+                completeStatusMutation(session, StatusMutation.Deleted(session.revision, id))
+            } catch (failure: PreferenceStorageException) {
+                throw StatusWriteAcceptedException(id, deleted = true, cause = failure)
+            }
             onCommitted(session)
         }
     }
@@ -168,11 +173,19 @@ class TraewellingRepository internal constructor(
             if (!r.isSuccessful) error("Änderung fehlgeschlagen (${r.code()})")
             val status = r.body()?.data?.takeIf { it.id == id }
             if (status == null) {
-                completeStatusMutation(session, StatusMutation.Invalidated(session.revision, id))
+                try {
+                    completeStatusMutation(session, StatusMutation.Invalidated(session.revision, id))
+                } catch (failure: PreferenceStorageException) {
+                    throw StatusWriteAcceptedException(id, cause = failure)
+                }
                 onCommitted(session)
-                error("Änderung wurde angenommen, aber die Antwort ist unvollständig. Bitte aktualisiere die Fahrt (${r.code()}).")
+                throw StatusWriteAcceptedException(id)
             }
-            completeStatusMutation(session, StatusMutation.Updated(session.revision, status))
+            try {
+                completeStatusMutation(session, StatusMutation.Updated(session.revision, status))
+            } catch (failure: PreferenceStorageException) {
+                throw StatusWriteAcceptedException(id, status, cause = failure)
+            }
             onCommitted(session)
             status
         }
@@ -279,7 +292,12 @@ class TraewellingRepository internal constructor(
         if (expectedSession != null && session != expectedSession)
             throw CancellationException("Session changed before check-in")
         val r = apiFactory(session).checkIn(request)
-        requireCurrentSession(session)
+        try {
+            requireCurrentSession(session)
+        } catch (failure: PreferenceStorageException) {
+            if (r.isSuccessful) throw CheckInAcceptedException(r.body()?.data, failure)
+            throw failure
+        }
         if (r.isSuccessful) {
             r.body()?.data?.takeIf { (it.status?.id ?: 0) > 0 } ?: throw CheckInAcceptedException()
         } else if (r.code() == 409) {

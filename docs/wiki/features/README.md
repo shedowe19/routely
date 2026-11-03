@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Codebasierte Übersicht des veröffentlichten Stands `v1.11.0` (Releasecommit `fc771e6`) vom 03.11.2026. Dieser ergänzt die folgenden Jetzt-Aktionen und die rückwirkende Suche. Signatur-, Versions- und Prüfungsnachweise stehen unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1110). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
+Codebasierte Übersicht auf Basis von `v1.11.0` (Releasecommit `fc771e6`) vom 03.11.2026. Der anschließende lokale Ausbau ergänzt Storage-Recovery und verlegt die Jetzt-Aktionen in die Fahrtbearbeitung mit nativen Datum-/Uhrzeitfeldern. Dieser neue Ausbau ist noch nicht veröffentlicht. Signatur-, Versions- und Prüfungsnachweise stehen unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1110). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
 ## Vorhandene Funktionen
 
@@ -10,7 +10,7 @@ Codebasierte Übersicht des veröffentlichten Stands `v1.11.0` (Releasecommit `f
 | --- | --- |
 | [Anmeldung](../module/auth.md) | Server-URL und manueller Access-Token, Tokenprüfung, Willkommen-Hinweis und Logout. |
 | [Check-in](../module/checkin.md) | Stationssuche, nahe Stationen, Datum-/Uhrzeitwahl auch für vergessene Fahrten, Abfahrten mit Betreiber/Gleis/Verspätung/Ausfall, Fahrt und Ausstieg, Text, Reisegrund, Sichtbarkeit und manuelle Zeiten. Beendete Nachträge starten keine Begleitung. |
-| [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit, lokale GPS-Zeiten, Gleise, Ausfälle und Reisefortschritt. Eigene Fahrt bearbeiten/löschen sowie Abfahrt oder Ankunft per Jetzt-Knopf festhalten; angenommene Ankunft beendet nur die passende Begleitung. |
+| [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit, lokale GPS-Zeiten, Gleise, Ausfälle und Reisefortschritt. Eigene Fahrt bearbeiten/löschen; im Editor Abfahrt/Ankunft per Jetzt-Knopf oder nativen Datum-/Uhrzeitdialogen wählen und gemeinsam speichern. Angenommene Jetzt-Ankunft beendet nur die passende Begleitung. |
 | [Zusätzliche Bahn-Livedaten](../api/live-datenquellen.md) | Anonyme DBF-/IRIS-Werte für eindeutig zugeordnete Zugfahrten; Quellen- und Abrufalteranzeige sowie Soll-/Ist-Gleisvergleich. Ergänzt lokale Anzeigen ohne Rückschreiben nach Träwelling. |
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
 | [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Geeignete native Träwelling-Linienzüge für Bahn/Tram, getrennte Straßenprojektion für SEV sowie gemeinsame Quellenwahl und API-/Plan-Rückfall. |
@@ -25,6 +25,7 @@ Codebasierte Übersicht des veröffentlichten Stands `v1.11.0` (Releasecommit `f
 | [Profile](../module/profile.md) und [Nutzersuche](../module/user-search.md) | Eigenes Profil mit Statistik und letzten Fahrten, fremde Profile mit Historie sowie Folgen/Entfolgen und private Folgeanfragen. |
 | [Meldungen](../module/notifications.md) | Benachrichtigungen mit Ungelesen-Badge, Aktualisierung und Gelesenmarkierung; interne Navigation zu gültigen Status-/Profilzielen desselben Servers. |
 | [Sichtbarkeit](../module/status-detail.md) | Sechs Sichtbarkeitsstufen im Check-in und bei der Bearbeitung eigener Status; unveränderte Werte und Moderationssperren bleiben erhalten. |
+| [Lokale Wiederherstellung](../konfiguration/preferences-manager.md) | Sichtbare Speicherfehler, begrenztes Wiederholen und manuelle Prüfung; Korruptionsreset erst nach aktueller Bestätigung. Begleitung pausiert ohne automatisches Löschen ihrer gespeicherten Fahrt. |
 | [Darstellung](../module/settings.md) | Hell, Dunkel und AMOLED; gemeinsame Lade-, Fehler- und Leerzustände. |
 | [Punkte](./points-enabled.md) | Anzeige des API-Punktesystems einschließlich deaktivierter Punkte. |
 

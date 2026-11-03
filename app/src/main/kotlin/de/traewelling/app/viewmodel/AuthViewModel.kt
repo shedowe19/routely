@@ -11,6 +11,7 @@ import kotlinx.coroutines.launch
 
 data class AuthUiState(
     val isLoading: Boolean = false,
+    val hasLoadedSession: Boolean = false,
     val isLoggedIn: Boolean = false,
     val error: String? = null,
     val serverUrl: String = PreferencesManager.DEFAULT_SERVER_URL,
@@ -32,7 +33,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
             prefs.authSession.collect { session ->
                 _uiState.update { previous ->
                     val signedOut = previous.sessionRevision != session.revision && session.accessToken.isNullOrBlank()
-                    previous.copy(isLoggedIn = !session.accessToken.isNullOrBlank(),
+                    previous.copy(hasLoadedSession = true, isLoggedIn = !session.accessToken.isNullOrBlank(),
                         serverUrl = session.serverUrl, sessionRevision = session.revision,
                         isLoading = if (signedOut) false else previous.isLoading,
                         accessToken = if (signedOut) "" else previous.accessToken,
@@ -40,10 +41,14 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
                 }
             }
         }
-        authJob = viewModelScope.launch {
-            repo.validateCurrentSession().onSuccess { username ->
-                if (username != null) _uiState.update { it.copy(welcomeMessage = "Willkommen, @$username!") }
-            }
+        viewModelScope.launch {
+            prefs.storageState.map { state -> state.revision.takeIf { state.isReady } }
+                .distinctUntilChanged().filterNotNull().collectLatest {
+                    // Recovery checks the saved session anew; it never repeats a login or logout action.
+                    repo.validateCurrentSession().onSuccess { username ->
+                        if (username != null) _uiState.update { it.copy(welcomeMessage = "Willkommen, @$username!") }
+                    }
+                }
         }
     }
 

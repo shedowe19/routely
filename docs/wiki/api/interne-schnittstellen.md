@@ -35,6 +35,10 @@ Bei einem Check-in-Konflikt (HTTP 409) wertet das Repository `data.conflicts` al
 
 `updateStatus` besitzt einen optionalen `onCommitted(AuthSession)`-Callback. Dieser läuft bei angenommenem HTTP-2xx und weiterhin passender Sitzung innerhalb der geordneten, begrenzten und gegen Abbruch geschützten Schreibgrenze, auch wenn der Antwortstatus unvollständig ist. Die Jetzt-Ankunft beendet darüber ausschließlich ihre eigene lokale Begleitung; eine fehlende Antwort oder fehlerhafte lokale Bereinigung darf keinen automatischen zweiten PUT erzeugen. Die vollständige UI-Bestätigung und weitere Detailaktualisierung bleiben an Ansicht und Sitzung gebunden. [Statusdetail](../module/status-detail.md) beschreibt diese Aktionen.
 
+`CheckInAcceptedException` und `StatusWriteAcceptedException` unterscheiden angenommene HTTP-Schreibvorgänge von einer danach nicht abschließbaren lokalen Prüfung oder unvollständigen Antwort. Vorhandene Fahrt-IDs beziehungsweise Statusantworten bleiben als Teilerfolg erhalten. Ein nicht mehr prüfbarer Auth-Snapshot verhindert Cleanup und Veröffentlichung an eine andere Sitzung; der ursprüngliche Serverwrite wird durch Retry nicht erneut gesendet.
+
+Die gemeinsame [Storagegrenze](../konfiguration/preferences-manager.md#lese--und-schreibfehler) trennt bestätigte Beobachtungsflows von frischen suspendierenden Gettern. `storageState`, `retryStorage()` und `resetCorruptedStorage(expectedFailureId)` steuern die Recoveryoberfläche. `apiResult` und `runStorageAction` prüfen vor einer Fehlerübernahme auch die aktuelle Coroutine-Cancellation.
+
 Stations- und Zeitdaten werden über die Helfer des Datenmodells gelesen: `stationId`, `stationName`, `stationIdentifier(type)`, `effectiveArrival`, `effectiveDeparture` und `matchesStopover(other)`. Damit verwenden UI, ViewModels und Tracking denselben API-Vertrag.
 
 ### AuthRepository

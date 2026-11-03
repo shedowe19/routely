@@ -79,6 +79,27 @@ Die [CI 41669223966](https://github.com/shedowe19/routely/actions/runs/416692239
 
 Der anschließend erfolgreiche [Signierworkflow 41670396027](https://github.com/shedowe19/routely/actions/runs/41670396027) baute und veröffentlichte `v1.11.0` mit Code `20` aus genau demselben Commit. Die tatsächlich heruntergeladene APK hat gültige v2-/v3-Signaturen mit unverändertem Zertifikat; Version, Commit, Tag, Codeclaim, Größe und Prüfsummen sind unabhängig geprüft. Vollständiger Nachweis unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1110). Keine reale Geräte-, Fahrt- oder schreibende Träwelling-Prüfung durch diese CI- und Artefaktkontrolle.
 
+## Storage-Recovery und native Zeitbearbeitung vom 03.11.2026
+
+Der lokale Ausbau nach v1.11.0 besteht **1.065 Android-Unit-Tests in 91 Klassen**, ohne Fehler, Fehlschläge oder übersprungene Fälle. 82 neue Fälle ergänzen die vorhandene Suite; neun Editor-/Abschlussfälle ersetzen die 13 bisherigen direkten Jetzt-Aktionsfälle. Damit steigt die Gesamtzahl gegenüber 987 um 78.
+
+| Bereich | Fälle | Nachweis |
+| --- | --- | --- |
+| `PreferenceStorageTest`, `PreferencesManagerStorageTest`, `PreferenceStorageFileTest` | 30 | Geteilter Owner, frische Getter, begrenzte IO-Retrys, letzte bestätigte Werte, Schreibprobe, aktuelle/alte Resetbestätigung, Cancellation-/Observerrennen und echte beschädigte Datei |
+| `StorageRecoveryPresentationTest`, `JourneyDateTimePresentationTest` | 19 | Kaltstart, Authhydration/Recoverygeneration, Servicewiederstart, lesbare lokale Zeit und Sommerzeitlücke/-überlappung |
+| `StorageRecoveryServiceBoundaryTest` | 6 | Einmalige nicht destruktive Pause, keine alte Wiederbelebung, Cancellation und unerwartete Fehler |
+| `StorageCommitRecoveryRepositoryTest`, `CheckInStorageCommitTest` | 16 | Angenommene POST-/PUT-/DELETE-Antworten, erhaltene Fahrt-ID, keine unprüfbare fremde Bereinigung, Cachepartitionen und kein automatisches Replay |
+| `StorageActionTest`, `StatusEditTimeValidationTest` | 11 | Abbruch vor Fehlerübernahme, kein wiederholter fachlicher Auftrag, endgültige Zeitreihenfolge und gelöschte Overrides |
+| `NowTimeCorrectionTest` | 9 Ersatzfälle | Jetzt ändert nur den Editorentwurf, Minutenpräzision, beide Zeiten vor Speichern korrigierbar, angenommener Abschluss und begrenztes Cleanup |
+
+Der finale Lauf `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug :app:assembleRelease -Pkotlin.incremental=false --no-build-cache` bestand in **2 min 35 s**. 108 Aufgaben, davon 26 ausgeführt und 82 unverändert aktuell. Vollständiges Debug-Lint: **0 Fehler / 55 Warnungen**. Debug-APK, unsignierte Release-APK und Release-Vital-Lint sind erfolgreich. JUnit-XML und Lint-XML wurden unabhängig gezählt; alle 249 eingefrorenen Quell-, Test-, Ressourcen- und Gradle-Dateien blieben SHA-256-identisch.
+
+Der echte Dateitest nutzt unveränderte DataStore-Factory und Preferences-Serializer mit beschädigten Dateibytes. Die JVM-Fixture aktiviert den von Routely unterstützten SDK-26-NIO-Dateipfad, weil Androidstubs sonst SDK 0 liefern. Originalbytes bleiben vor Bestätigung identisch; nach bestätigtem Reset wird der erste Store vollständig geschlossen und dieselbe Datei frisch mit neuer Sitzungsrevision gelesen. Die Testfixture setzt den SDK-Wert auch bei Abbruch zurück. Das ersetzt keinen Android-Geräte-/Stromausfall-/Restorelauf.
+
+Zwischenläufe sind keine grünen Abschlussnachweise: Der erste Lauf hatte zwei neue Testfehler (SDK-0-/Windows-Legacyrename und zu strenge Exceptionidentität bei Coroutine-Stacktrace-Recovery). Die Dateidiagnose führte zusätzlich zu einer echten Produktkorrektur für unterdrückte IO-Schreibfehler beim Korruptionsersatz. Ein Korrekturlauf scheiterte am testlokalen JVM-Import; die reflektive Fixture bestand anschließend alle 30 Storagefälle. Ein weiterer Gesamtstand bestand bereits alle 1.065 Unit-Tests, scheiterte aber an `NonObservableLocale`. Die native Datumsanzeige verwendet nun die beobachtbare Compose-Locale; ausschließlich diese Produktdatei änderte sich vor dem oben dokumentierten grünen Endlauf.
+
+Die fünf Reviewachsen wurden unabhängig ohne verbleibende Produktbefunde abgeschlossen. Die 65 Python-Offlineprüfungen wurden für diesen Android-Ausbau nicht erneut ausgeführt; der vorherige Nachweis bleibt dem veröffentlichten v1.11.0 zugeordnet. Keine realen Träwelling-Schreibanfragen, Geräte-/TalkBack-/Fahrtprüfung oder weitere signierte Veröffentlichung. Funktionsverträge: [Storage-Recovery](../entscheidungen/2026-11-03-storage-recovery.md), [PreferencesManager](../konfiguration/preferences-manager.md), [Fahrtbearbeitung](../module/status-detail.md) und [Check-in](../module/checkin.md).
+
 ## Voraussetzungen
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.

@@ -6,9 +6,8 @@ Aktuelle offene Arbeit, praktische Prüfbedingungen und Produktentscheidungen. D
 
 ## Offene Punkte
 
-- **P12 – Speicherfehler und Recovery:** Ein vollständiger Umgang mit Lese-/Schreibfehlern samt sicherer Wiederherstellungsoberfläche fehlt. Kein automatisches Leeren der Preferences, weil dadurch Tokens und aktive Fahrtzustände verloren gehen könnten. Das [Speicherkonzept](./konfiguration/preferences-manager.md) beschreibt die nötigen Fehlerfälle und Entscheidungsgrenzen.
 - **A01 – laufender API-Abgleich:** Der geprüfte Träwelling-Stand ist develop 6051078ef10246d931a34c72d12ad3f96c8a53bc mit Changelog 4035dadd77fc2fe692396aa4e9a5dcea5a1a6c67. Keine weitere Pflichtmigration wurde gefunden. Weitere Änderungen sind regelmäßig gegen tatsächliche Routen, Ressourcen und Clientverbraucher zu prüfen. Operator-IDs bleiben im geprüften Server noch numerisch; continuationTrip ist dort trotz Changelog nicht im TripResource ausgegeben. Siehe [API-Kompatibilität](./api/traewelling-kompatibilitaet.md).
-- **Bestätigter Validierungsstand:** Der als `v1.11.0` veröffentlichte Zeitausbau besteht 987 Android-Unit-Tests ohne Fehler oder Skips, vollständiges Debug-Lint ohne Fehler (55 Warnungen) sowie Debug- und unsignierten Release-Build. Alle 65 Offlineprüfungen wurden in der zugehörigen CI erneut erfolgreich ausgeführt. Sieben zusätzliche lesende GET-Stichproben prüfen aktuelle und vergangene Abfahrten/Fahrtdetails; die frühere lesende Live-Prüfung mit 16 Erfolgen bleibt dem vorherigen Stand zugeordnet. Signierte APK, Version 1.11.0/Code 20 und Commitbindung sind unter [Deployment](./entwicklung/deployment.md#verifizierte-veröffentlichung-v1110) geprüft. Nachweise und ausdrücklich nicht ausgeführte Geräteprüfungen stehen unter [Tests](./entwicklung/tests.md).
+- **Bestätigter Validierungsstand:** Der lokale Recovery-/Zeitdialogausbau nach v1.11.0 besteht 1.065 Android-Unit-Tests in 91 Klassen ohne Fehler oder Skips, vollständiges Debug-Lint ohne Fehler (55 Warnungen) sowie Debug- und unsignierten Release-Build. Dieser Stand ist noch nicht veröffentlicht. Der veröffentlichte v1.11.0-Nachweis bleibt bei 987 Android-Tests und 65 Offlineprüfungen; auch die früheren lesenden Live-Stichproben bleiben ihrem Prüfstand zugeordnet. Details und ausdrückliche Geräteprüfgrenzen stehen unter [Tests](./entwicklung/tests.md).
 
 ## Noch nötige System- und Fahrttests
 
@@ -24,6 +23,8 @@ Die Kennungen verweisen auf die vollständigen Bedingungen im [Audit](./entwickl
 - **P05–P06 – Systemanzeigen:** Live Updates auf API 35, 36 und 36.1 sowie Samsung einschließlich Promotion, Wegwischen, kalter/warmer Navigation und Sperrbildschirm-Privatsphäre prüfen. Widget-Systemzustellung bei nicht exportiertem Receiver, Quellenwechsel, negative Abweichung und große Schrift im Launcher testen. Das System entscheidet die Hervorhebung.
 - **P08–P11 – Oberfläche und Plattformintegration:** Betreiberanzeige, Sichtbarkeitsdropdowns und Moderationssperre, Editor-/Zurücknavigation und Meldungsziele mit großer Schrift, Tastatur und TalkBack prüfen. Für die neuen Zeitfunktionen zusätzlich Datum-/Uhrzeitdialoge, `Fahrt öffnen`, Jetzt-Zeitkorrekturen und deren echte Serverbestätigung samt passendem Begleitungsende prüfen. Timeline benötigt genau einen passenden Besuchsmarker und konsistente mehrzeilige Zeiten. Coil-3-Bildcache, Material-3-Refresh, Standortabfrage sowie fehlende/verweigerte System-Activities und Rückkehr zur Settingskarte bleiben praktische Fälle.
 
+- **P12 – Recovery auf dem Gerät:** Volle/zeitweise unzugängliche Speicherpfade, bestätigter Korruptionsreset und Abbruch, erhaltene Fahrt bei Servicepause, Wiederstart nach Retry und TalkBack tatsächlich ausführen. Injizierte Unit-/Dateitests ersetzen diese Gerätebeobachtung nicht.
+
 ## Produkt- und Betriebsentscheidungen
 
 Diese Punkte sind geklärte Funktionsgrenzen oder optionale Erweiterungen, keine unbeantworteten Ursachenbehauptungen:
@@ -36,11 +37,14 @@ Diese Punkte sind geklärte Funktionsgrenzen oder optionale Erweiterungen, keine
 
 ## Geklärte und korrigierte Fragen
 
+- **P12 – Storage-Recovery:** Im lokalen Ausbau umgesetzt: gemeinsame Fehlerzustände, begrenztes Wiederholen, sichtbare Retryoberfläche, ausdrücklich bestätigter Korruptionsreset und nicht destruktive Servicepause. Letzte bestätigte Werte bleiben erhalten; schreibende und Startentscheidungen benötigen frische Daten. Implementierungsvertrag und Praxisgrenzen stehen in der [Recovery-Entscheidung](./entscheidungen/2026-11-03-storage-recovery.md), tatsächliche Ergebnisse unter [Tests](./entwicklung/tests.md).
+
+
 - Die historischen 16 Hauptbefunde, zwölf zusätzlichen Nachreview-Befunde und acht weiteren Nachreview-Befunde sind bereits korrigiert; die [historischen Nachweise](./entwicklung/main-review-2026-10-06.md) bleiben erhalten.
 - **R01:** Der echte veröffentlichte Release v1.9.1 ist durch heruntergeladene APK, Signaturen, Manifest, Digest, Metadaten, Tag, Claim und Workflow geprüft. Der frühere TODO zum ersten signierten Release ist geschlossen; siehe [Deployment-Nachweis](./entwicklung/deployment.md#verifizierte-veröffentlichung-v191).
 - **R03/A07/U01:** Die Toolchain-/AAR-Frage, Folgen der App-Umbenennung und Dokumentation des Editorlayouts sind geklärt.
-- Betreiberanzeige, Sichtbarkeitsauswahl und Meldungsnavigation sind umgesetzt. **A06/G11/P11:** Zusätzlich sind die bestätigten Parallel-Refresh-, Stopover-Datenverlust- und System-Settings-Fallbackfehler korrigiert. Der endgültige Gesamtprüflauf dazu steht noch aus.
-- **A02/A03:** Wiederholbares lesendes API-Prüfscript und zusätzliche Repositoryfälle für HTTP 409 liegen vor. 65 Python-Offlinefälle einschließlich neun Scriptprüfungen sind erfolgreich. Der frühere CLI-Lauf lieferte 16 erfolgreiche GETs; die erneute verschärfte Live-Strukturprüfung bleibt im Endnachweis zu ergänzen. Kein Token und keine persönliche API-Antwort sind Teil des Wikis.
+- Betreiberanzeige, Sichtbarkeitsauswahl und Meldungsnavigation sind umgesetzt. **A06/G11/P11:** Zusätzlich sind die bestätigten Parallel-Refresh-, Stopover-Datenverlust- und System-Settings-Fallbackfehler korrigiert. Der vollständige Nachweis ist für v1.10.0 und v1.11.0 unter [Tests](./entwicklung/tests.md) dokumentiert.
+- **A02/A03:** Wiederholbares lesendes API-Prüfscript und zusätzliche Repositoryfälle für HTTP 409 liegen vor. 65 Python-Offlinefälle einschließlich neun Scriptprüfungen sind erfolgreich. Der frühere CLI-Lauf lieferte 16 erfolgreiche GETs; die verschärfte Live-Strukturprüfung mit 16 Erfolgen ist unter [Tests](./entwicklung/tests.md) dokumentiert. Kein Token und keine persönliche API-Antwort sind Teil des Wikis.
 
 ## Verwandte Seiten
 

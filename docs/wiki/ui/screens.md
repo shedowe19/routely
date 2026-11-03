@@ -42,13 +42,21 @@ Der sichtbare Main-Eintrag schützt einen laufenden Check-in auch nach Tabwechse
 
 ## Benachrichtigungsnavigation
 
-Die Check-in-Erfolgskarte öffnet einen bestätigten Status mit `Fahrt öffnen` direkt im Fahrtdetail. Solange Erstellung oder Zeitkorrektur läuft, bleibt die Schaltfläche gesperrt. Dort stehen die Jetzt-Aktionen für verifiziert eigene Fahrten bereit; angenommene Antworten ohne verwertbare ID erzeugen keinen erfundenen Navigationspfad.
+Die Check-in-Erfolgskarte öffnet einen bestätigten Status mit `Fahrt öffnen` direkt im Fahrtdetail. Solange Erstellung oder Zeitkorrektur läuft, bleibt die Schaltfläche gesperrt. Die Jetzt-Aktionen für verifiziert eigene Fahrten stehen anschließend unter `Fahrt bearbeiten`; angenommene Antworten ohne verwertbare ID erzeugen keinen erfundenen Navigationspfad.
 
 Der Meldungstab löst API-Links über `NotificationTargetResolver` gegen den aktuellen Server auf. Gültige `/status/{id}`- und `/@{username}`-Ziele öffnen Fahrtdetail beziehungsweise Profil mit normalem Rückweg zum Meldungstab. HTTPS, Host, Port und ein möglicher Installationspfad müssen zur aktiven Instanz passen. Einstellungen, Events und ungültige Ziele erhalten keine falsche Appnavigation; die Gelesenmarkierung funktioniert davon unabhängig. Die betroffenen Zeilen kennzeichnen ein unterstütztes Ziel durch einen Öffnungspfeil und eine benannte Bedienaktion.
 
 `MainActivity` übersetzt `open_status_id` in einen `NavigationRequest` zum passenden `statusDetail/{statusId}`. `open_recognition` öffnet den Check-in-Tab. Ein bereits abgeschickter CONFIRM-POST beziehungsweise seine laufende SUCCESS-Zeitkorrektur wird dabei nicht zurückgesetzt. Die Requests haben einen Verbrauchs-/Sequenzschlüssel und werden bei kaltem Start sowie `onNewIntent` verarbeitet; die Fahrtbenachrichtigung und Änderungshinweise führen damit zur jeweiligen Fahrt. Ein Request mit optionaler `authSessionRevision` wird nur in derselben aktuellen Zugangsgeneration geöffnet; ein alter Hinweis darf nach Kontowechsel nicht dieselbe numerische Status-ID des neuen Kontos öffnen. Der Opt-in-Bereich der Fahrterkennung steht im Stationsschritt des Check-ins und bietet aktuelle Vorschläge, Pausen-/Fehlerhinweise und Beenden.
 
 ## Zustandsdarstellung
+
+### Wiederherstellung lokaler App-Daten
+
+`MainActivity` zeigt vor Anmeldung und Navigation eine modale `StorageRecoveryDialog`-Oberfläche, solange der gemeinsame Speicherzustand oder die frisch gelesene Sitzung noch nicht bestätigt ist. Dadurch wird ein Kaltstart-Lesefehler nicht als Abmeldung dargestellt. Bei einem späteren Fehler bleiben die vorhandenen Navigation und Formulare komponiert; die modale Oberfläche sperrt Bedienung und darunterliegende Semantik, bis der Zugriff wieder sicher ist. Eine Sitzungsbereinigung erfolgt nur bei tatsächlich bestätigter Abmeldung.
+
+`Erneut versuchen` prüft den Speicher; es wiederholt keinen Check-in oder Statuswrite. Nur bestätigte beschädigte Preferences bieten `Lokale App-Daten zurücksetzen` an. Der zusätzliche Dialog erklärt den Verlust lokaler Anmeldung, Einstellungen und aktiver Begleitung; Fahrten auf dem Server bleiben erhalten. Eine Bestätigung ist an genau den aktuellen Fehlerzyklus gebunden und darf nach erfolgreicher Wiederherstellung oder einem neuen Fehler keine Daten zurücksetzen. IO-Fehler erhalten keine Resetaktion.
+
+Die sichtbare Activity startet Begleitung und Erkennung nach erfolgreicher Wiederherstellung erst mit frisch gelesener Konfiguration. Die Bereitschaftsgeneration und das tatsächliche Ende einer alten Serviceinstanz gehören zur Startentscheidung, auch wenn dieselbe aktive Fahrt erhalten bleibt. Fehler bei Berechtigungsmarkern oder Erkennungsaktionen gehen über dieselbe Speicheroberfläche. Die reine Kotlin-Prüfung `StorageRecoveryPresentationTest` sichert Kaltstart, verspätete Sitzungsübernahme, veraltete Resetbestätigungen und Service-Neustartgrenzen; tatsächliche Dialog-/TalkBack-/Rotationbedienung bleibt eine Geräteprüfung. Details: [PreferencesManager](../konfiguration/preferences-manager.md).
 
 Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications nutzen `StateMessage` für Lade-, Fehler- und Empty-States. Dadurch sind die visuellen Zustände über die wichtigsten Screens konsistent.
 
@@ -63,6 +71,12 @@ Bei GPS-Fortschritt kennzeichnet StatusDetail einen tatsächlich verwendeten nat
 Die Einstellungs-Card `Begleitung bei ausgeschaltetem Display` liest den Akkuoptimierungsstatus direkt aus Android und aktualisiert ihn bei Rückkehr in die sichtbare Activity. Eine Ausnahme wird ausschließlich über einen ausdrücklichen Nutzertipp auf die Systemfreigabe angefragt. Sie ist kein gespeicherter App-Schalter; Start-/Fallbackverhalten steht unter [Settings](../module/settings.md).
 
 Detail-Compositions besitzen eigene Beobachtungsleases. Activity-Neuanlage erhält den Fachentwurf und abgeschickte Mutationen; aktueller Busyzustand sperrt Verlassen. Erfolgreiche Löschungen bereinigen die aufgenommene Fahrt getrennt vom alten Screen und navigieren nur durch die aktuelle Detail-Composition. Dropdowns und Einstellungsaktionen besitzen zugeordnete Semantiklabels; die praktische TalkBack-/Rotationprüfung bleibt offen.
+
+### Datum und Uhrzeit bearbeiten
+
+`Zeiten erfassen` mit `Abfahrt jetzt` und `Ankunft jetzt` gehört ausschließlich in `Fahrt bearbeiten`. Die Schaltflächen ändern den Entwurf; erst `Speichern` überträgt die Änderung. Abbrechen speichert keine Jetzt-Zeit. Ein separater Hinweis bestätigt die Übernahme beziehungsweise einen Teilerfolg nach geschlossenem Editor, ohne weitere Schnellaktionen auf der Hauptseite.
+
+Die Zeitfelder im Editor und bei der Check-in-Bestätigung nutzen `JourneyDateTimeField`: Ein Antippen öffnet native Android-Datums- und Uhrzeitdialoge. Angezeigt werden Datum, lokale Uhrzeit im eingestellten 12-/24-Stundenformat und die Gerätezeitzone einschließlich des zum Datum gehörenden Offsets. ISO-Werte mit `T` und `Z` bleiben ein internes API-Format. Erst eine vollständige Auswahl beider Dialoge aktualisiert das Formular; Abbruch und eine inzwischen ersetzte Eingabe verändern den bisherigen Wert nicht. `Automatische Zeit verwenden` entfernt die manuelle Korrektur. Sommerzeitlücken werden erklärt statt still verschoben; bei einer unveränderten doppelten Herbstuhrzeit bleibt der vorhandene Offset erhalten. Die Android-freien `JourneyDateTimePresentationTest`-Fälle sichern Anzeige und Zeitauflösung; tatsächliche native Dialog-/Tastatur-/TalkBack-Bedienung bleibt eine Geräteprüfung.
 
 ## Verwandte Seiten
 

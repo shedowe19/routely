@@ -55,7 +55,9 @@ import de.traewelling.app.data.routing.RoadRouteRepository
 import de.traewelling.app.data.routing.TransitRouteRepository
 import de.traewelling.app.util.PreferencesManager
 import de.traewelling.app.util.AuthSession
+import de.traewelling.app.util.isPreferenceStorageFailure
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -67,7 +69,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -93,7 +94,9 @@ private data class CachedTripTrackingState(
 class TripTrackingService : Service() {
     // The mutex also covers suspension points between cursor mutation and publication/persistence.
     private val serviceJob = SupervisorJob()
-    private val serviceScope = CoroutineScope(Dispatchers.Main.immediate + serviceJob)
+    private val storageRecovery = StorageRecoveryServiceBoundary(::pauseForStorageFailure)
+    private val storageFailureHandler = CoroutineExceptionHandler { _, failure -> storageRecovery.onFailure(failure) }
+    private val serviceScope = CoroutineScope(Dispatchers.Main.immediate + serviceJob + storageFailureHandler)
     private val trackingMutex = Mutex()
     private val gson = Gson()
     private lateinit var prefs: PreferencesManager
@@ -177,6 +180,9 @@ class TripTrackingService : Service() {
         repo = TraewellingRepository(applicationContext, prefs)
         locationClient = LocationServices.getFusedLocationProviderClient(this)
         createNotificationChannel()
+        serviceScope.launch {
+            prefs.storageState.collect { storageRecovery.onPhase(it.phase) }
+        }
         serviceScope.launch {
             StatusMutationEvents.events.collect { event ->
                 if (event is StatusMutation.LikeChanged || !activeStatusBridge.owns(event)) return@collect
@@ -268,7 +274,7 @@ class TripTrackingService : Service() {
         }
         serviceScope.launch {
             prefs.trackingConfiguration.collect { emitted ->
-                val config = prefs.trackingConfiguration.first()
+                val config = prefs.getTrackingConfiguration()
                 if (config != emitted) return@collect
                 observedAuthSession = config.session
                 // Invalidate immediately, even while another coroutine holds the
@@ -282,7 +288,7 @@ class TripTrackingService : Service() {
                 }
                 trackingMutex.withLock {
                     // A queued emission may predate a trip switch that held this mutex.
-                    val latest = prefs.trackingConfiguration.first()
+                    val latest = prefs.getTrackingConfiguration()
                     observedAuthSession = latest.session
                     if (currentAuthSession?.let { it != latest.session } == true) {
                         val pendingStartMatches = latest.activeStatusId != null && latest.session.accessToken != null &&
@@ -476,7 +482,7 @@ class TripTrackingService : Service() {
             val stopGeneration = generation
             serviceScope.launch {
                 trackingMutex.withLock {
-                    val config = prefs.trackingConfiguration.first()
+                    val config = prefs.getTrackingConfiguration()
                     if ((stopCommandVersion != commandVersion && ownedSession != null) ||
                         (generation != stopGeneration && (ownedSession != null || requestedRevision == null)) ||
                         (requestedId != null && requestedId != config.activeStatusId) ||
@@ -506,7 +512,7 @@ class TripTrackingService : Service() {
             var acceptedSession: AuthSession? = null
             try {
                 trackingMutex.withLock {
-                    val config = prefs.trackingConfiguration.first()
+                    val config = prefs.getTrackingConfiguration()
                     val statusId = requestedId ?: config.activeStatusId
                     if (statusId == null || config.activeStatusId != statusId || config.session.accessToken == null ||
                         !startRequests.accept(startRequest, config.session.revision)) {
@@ -549,11 +555,12 @@ class TripTrackingService : Service() {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
+                if (isPreferenceStorageFailure(failure)) throw failure
                 startRequests.finish(startRequest)
                 trackingMutex.withLock {
                     // A failed old start must not tear down a replacement trip.
-                    val config = prefs.trackingConfiguration.first()
+                    val config = prefs.getTrackingConfiguration()
                     if (acceptedCommand == commandVersion && currentAuthSession == acceptedSession && currentStatusId != null) finishService(null)
                     else if (currentStatusId == null && !startRequests.hasPending(config.session.revision, config.activeStatusId)) finishService(null)
                 }
@@ -657,7 +664,8 @@ class TripTrackingService : Service() {
                         refreshTrip(statusId, expectedGeneration, session)
                     } catch (e: CancellationException) {
                         throw e
-                    } catch (_: Exception) {
+                    } catch (failure: Exception) {
+                        if (isPreferenceStorageFailure(failure)) throw failure
                         // Keep the last successful route available while offline.
                     }
                     delay(API_POLL_INTERVAL_MILLIS)
@@ -739,8 +747,10 @@ class TripTrackingService : Service() {
     }
 
     private suspend fun restoreCachedTrip(statusId: Int, expectedGeneration: Long, session: AuthSession) {
+        // A failed preferences read is not a missing or malformed route cache.
+        val cachedJson = prefs.getTrackingState()
         val cache = runCatching {
-            gson.fromJson(prefs.getTrackingState(), CachedTripTrackingState::class.java)
+            gson.fromJson(cachedJson, CachedTripTrackingState::class.java)
         }.getOrNull() ?: return
         if (!isCurrentTracking(statusId, expectedGeneration) || prefs.getAuthSession() != session) return
         val valid = runCatching {
@@ -801,7 +811,10 @@ class TripTrackingService : Service() {
         mutationRefreshJob = serviceScope.launch {
             try { refreshTrip(statusId, expectedGeneration, session) }
             catch (cancelled: CancellationException) { throw cancelled }
-            catch (_: Exception) { /* The regular poll retries an unverified replacement. */ }
+            catch (failure: Exception) {
+                if (isPreferenceStorageFailure(failure)) throw failure
+                // The regular poll retries an unverified replacement.
+            }
         }
     }
 
@@ -905,7 +918,8 @@ class TripTrackingService : Service() {
                 }
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
+            } catch (failure: Exception) {
+                if (isPreferenceStorageFailure(failure)) throw failure
                 // Optional website metadata must never stop normal tracking.
             }
         }
@@ -1742,6 +1756,18 @@ class TripTrackingService : Service() {
         }
     }
 
+    /** No preferences read/write: the durable journey is retained for an explicit recovery start. */
+    private fun pauseForStorageFailure() {
+        mutableStoragePauseInProgress.value = true
+        commandVersion++
+        startRequests.clear()
+        try {
+            finishService(null)
+        } finally {
+            serviceJob.cancel()
+        }
+    }
+
     private fun finishService(expectedStatusId: Int?, preserveForegroundForPendingStart: Boolean = false) {
         if (expectedStatusId != null && currentStatusId != null && currentStatusId != expectedStatusId) return
         stopping = true
@@ -1789,6 +1815,7 @@ class TripTrackingService : Service() {
         restartSpeechEngine(false)
         mutableTrackingLiveState.value = null
         super.onDestroy()
+        mutableStoragePauseInProgress.value = false
     }
 
     override fun onTimeout(startId: Int, fgsType: Int) {
@@ -1804,7 +1831,8 @@ class TripTrackingService : Service() {
         serviceJob.cancel()
     }
 
-    private fun publishWidgetWaiting(message: String = "Warte auf Check-in…") {
+    private fun publishWidgetWaiting(message: String = if (storageRecovery.isPaused)
+        "Begleitung pausiert – App öffnen" else "Warte auf Check-in…") {
         sendBroadcast(Intent(this, de.traewelling.app.widget.TripWidgetProvider::class.java).apply {
             action = "de.traewelling.app.ACTION_UPDATE_WIDGET"
             putExtra("lineName", "Routely")
@@ -1819,6 +1847,8 @@ class TripTrackingService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     companion object {
+        private val mutableStoragePauseInProgress = MutableStateFlow(false)
+        val storagePauseInProgress: StateFlow<Boolean> = mutableStoragePauseInProgress.asStateFlow()
         private const val ROAD_RETRY_INTERVAL_MILLIS = 60_000L
         private const val MAX_CACHED_ROAD_SEGMENTS = 8
         private const val TRANSIT_RETRY_INTERVAL_MILLIS = 60_000L

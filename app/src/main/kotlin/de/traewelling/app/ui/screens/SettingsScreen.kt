@@ -89,6 +89,16 @@ fun SettingsScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            uiState.storageError?.let { message ->
+                item {
+                    Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(message)
+                            TextButton(onClick = viewModel::clearStorageError) { Text("Verstanden") }
+                        }
+                    }
+                }
+            }
             item {
                 Text("Reisebegleitung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                 Spacer(Modifier.height(8.dp))

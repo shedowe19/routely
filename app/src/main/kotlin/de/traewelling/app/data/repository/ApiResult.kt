@@ -13,5 +13,6 @@ internal suspend inline fun <T> apiResult(block: () -> T): Result<T> = try {
 } catch (cancelled: CancellationException) {
     throw cancelled
 } catch (failure: Exception) {
+    currentCoroutineContext().ensureActive()
     Result.failure(failure)
 }

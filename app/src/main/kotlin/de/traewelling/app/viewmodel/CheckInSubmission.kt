@@ -8,6 +8,8 @@ import de.traewelling.app.data.model.StatusVisibility
 import de.traewelling.app.data.model.UpdateStatusRequest
 import de.traewelling.app.data.repository.apiResult
 import de.traewelling.app.data.repository.CheckInAcceptedException
+import de.traewelling.app.data.repository.StatusWriteAcceptedException
+import de.traewelling.app.util.PreferenceStorageException
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.OffsetDateTime
@@ -36,7 +38,7 @@ internal fun buildCheckInSubmission(state: CheckInUiState, origin: StopStation?)
     require(departureMarker <= arrivalMarker) { "Die Ankunft muss nach der Abfahrt liegen." }
     fun manual(value: String, description: String): String? = value.trim().takeIf(String::isNotEmpty)?.let {
         val instant = runCatching { OffsetDateTime.parse(it).toInstant() }.getOrNull()
-            ?: throw IllegalArgumentException("$description: Bitte ISO-Zeit mit Zeitzone eingeben, z. B. 2026-10-06T18:05:00+02:00.")
+            ?: throw IllegalArgumentException("$description: Bitte ein gültiges Datum mit Uhrzeit wählen.")
         instant.toString()
     }
     val manualDeparture = manual(state.manualDeparture, "Abfahrt")
@@ -71,10 +73,17 @@ internal suspend fun submitCheckIn(
     correctTimes: suspend (Int, UpdateStatusRequest) -> Result<Status>
 ): Result<CheckInCompletion> = apiResult {
     val response = create(submission.request)
-    if (response.exceptionOrNull() is CheckInAcceptedException || response.isSuccess &&
+    val accepted = response.exceptionOrNull() as? CheckInAcceptedException
+    if (accepted != null || response.isSuccess &&
         (response.getOrNull()?.status?.id ?: 0) <= 0) {
-        onCreated(null)
-        return@apiResult CheckInCompletion(null, CheckInAcceptedException().message)
+        try {
+            onCreated(accepted?.created)
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (_: Exception) {
+            // Creation is confirmed even when the local completion cannot read/write preferences.
+        }
+        return@apiResult CheckInCompletion(accepted?.created, (accepted ?: CheckInAcceptedException()).message)
     }
     val created = requireNotNull(response.getOrThrow())
     val statusId = requireNotNull(created.status).id
@@ -83,6 +92,9 @@ internal suspend fun submitCheckIn(
         onCreated(created)
     } catch (cancelled: CancellationException) {
         throw cancelled
+    } catch (_: PreferenceStorageException) {
+        return@apiResult CheckInCompletion(created,
+            "Du bist eingecheckt. Die lokale Prüfung konnte nicht abgeschlossen werden. Bitte prüfe die Fahrt nach der Wiederherstellung; ein erneuter Check-in ist nicht nötig.")
     } catch (_: Exception) {
         warnings += "Du bist eingecheckt, aber die lokale Reisebegleitung konnte nicht aktiviert werden. Öffne die Fahrt im Profil."
     }
@@ -90,8 +102,13 @@ internal suspend fun submitCheckIn(
     submission.timeCorrection?.let { request ->
         apiResult { correctTimes(statusId, request).getOrThrow() }
             .onSuccess { status -> result = created.copy(status = status) }
-            .onFailure {
-                warnings += "Du bist eingecheckt. Die manuelle Zeitkorrektur konnte nicht gespeichert werden. Bearbeite die erstellte Fahrt im Profil; ein erneuter Check-in ist nicht nötig."
+            .onFailure { failure ->
+                if (failure is StatusWriteAcceptedException) {
+                    failure.status?.let { accepted -> result = created.copy(status = accepted) }
+                    warnings += failure.message.orEmpty()
+                } else {
+                    warnings += "Du bist eingecheckt. Die manuelle Zeitkorrektur konnte nicht gespeichert werden. Bearbeite die erstellte Fahrt im Profil; ein erneuter Check-in ist nicht nötig."
+                }
             }
     }
     CheckInCompletion(result, warnings.takeIf { it.isNotEmpty() }?.joinToString("\n"))

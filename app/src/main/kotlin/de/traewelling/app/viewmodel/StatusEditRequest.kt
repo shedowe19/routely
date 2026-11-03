@@ -2,6 +2,7 @@ package de.traewelling.app.viewmodel
 
 import de.traewelling.app.data.model.UpdateStatusRequest
 import de.traewelling.app.data.model.StatusVisibility
+import java.time.Instant
 
 internal val StatusDetailUiState.isEditVisibilityLocked: Boolean
     get() = status?.lockVisibility == true || editInitialStatus?.lockVisibility == true
@@ -34,4 +35,23 @@ internal fun buildStatusEditRequest(
             else -> null
         }
     )
+}
+
+/** Validate the values the request will actually leave on the server, including cleared overrides. */
+internal fun validateStatusEditTimes(state: StatusDetailUiState, request: UpdateStatusRequest) {
+    if (request.departure == null && request.arrival == null && request.destination == null) return
+    val checkin = requireNotNull(state.status?.checkin) { "Die Fahrt enthält keine gültigen Zeiten." }
+    val destination = if (request.destination != null) state.editDestinationStop else checkin.destination
+    fun parsed(value: String?): Instant? = value?.let { runCatching { Instant.parse(it) }.getOrNull() }
+    fun resolved(requested: String?, stored: String?, real: String?, planned: String?, label: String): Instant {
+        if (!requested.isNullOrBlank()) return requireNotNull(parsed(requested)) { "$label: Bitte Datum und Uhrzeit wählen." }
+        return requireNotNull((if (requested == null) parsed(stored) else null) ?: parsed(real) ?: parsed(planned)) {
+            "$label fehlt. Bitte Datum und Uhrzeit wählen."
+        }
+    }
+    val departure = resolved(request.departure, checkin.manualDeparture,
+        checkin.origin?.departureReal, checkin.origin?.departurePlanned, "Abfahrt")
+    val arrival = resolved(request.arrival, checkin.manualArrival.takeIf { request.destination == null },
+        destination?.arrivalReal, destination?.arrivalPlanned, "Ankunft")
+    require(departure <= arrival) { "Die Ankunft darf nicht vor der Abfahrt liegen. Bitte prüfe beide Zeiten." }
 }

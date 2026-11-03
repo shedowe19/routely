@@ -7,6 +7,7 @@ import android.speech.tts.TextToSpeech
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.util.PreferencesManager
+import de.traewelling.app.util.runStorageAction
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.Locale
@@ -29,7 +30,8 @@ data class SettingsUiState(
     val tripChangeSpeechEnabled: Boolean = true,
     val liveProgressEnabled: Boolean = true,
     val lockScreenDetailsEnabled: Boolean = true,
-    val publicRailRealtimeEnabled: Boolean = true
+    val publicRailRealtimeEnabled: Boolean = true,
+    val storageError: String? = null
 )
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
@@ -66,6 +68,15 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val tts: TextToSpeech? get() = speechInitializer.instance
 
     init {
+        viewModelScope.launch {
+            prefs.storageState.map { it.isReady }.distinctUntilChanged().collect { ready ->
+                if (!ready) {
+                    speechInitializer.disable()
+                } else if (_uiState.value.isTtsEnabled) {
+                    initTts(_uiState.value.selectedTtsEngine)
+                }
+            }
+        }
         viewModelScope.launch {
             launch {
                 combine(prefs.isTtsEnabled, prefs.ttsEngine, prefs.ttsLanguage, prefs.ttsVoice) {
@@ -159,21 +170,35 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
         super.onCleared()
     }
 
-    fun toggleTts(enabled: Boolean) {
+    private fun saveSetting(action: suspend () -> Unit) {
         viewModelScope.launch {
+            runStorageAction(onFailure = {
+                _uiState.update { state -> state.copy(storageError =
+                    "Die Änderung wurde nicht gespeichert. Bitte prüfe den lokalen Speicher und versuche sie danach erneut.") }
+            }) {
+                action()
+                _uiState.update { it.copy(storageError = null) }
+            }
+        }
+    }
+
+    fun clearStorageError() = _uiState.update { it.copy(storageError = null) }
+
+    fun toggleTts(enabled: Boolean) {
+        saveSetting {
             prefs.setTtsEnabled(enabled)
         }
     }
 
     fun selectTtsEngine(engine: String) {
         val normalizedEngine = if (engine.isEmpty()) null else engine
-        viewModelScope.launch {
+        saveSetting {
             prefs.saveTtsSettings(normalizedEngine, _uiState.value.selectedTtsLanguage, _uiState.value.selectedTtsVoice)
         }
     }
 
     fun selectTtsLanguage(language: String) {
-        viewModelScope.launch {
+        saveSetting {
             prefs.saveTtsSettings(_uiState.value.selectedTtsEngine, language, "")
         }
     }
@@ -201,40 +226,40 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun selectTtsVoice(voiceName: String) {
-        viewModelScope.launch {
+        saveSetting {
             prefs.saveTtsSettings(_uiState.value.selectedTtsEngine, _uiState.value.selectedTtsLanguage, voiceName)
         }
     }
 
     fun setAppTheme(theme: String) {
-        viewModelScope.launch {
+        saveSetting {
             prefs.setAppTheme(theme)
         }
     }
 
     fun setGpsTrackingEnabled(enabled: Boolean) {
-        viewModelScope.launch { prefs.setGpsTrackingEnabled(enabled) }
+        saveSetting { prefs.setGpsTrackingEnabled(enabled) }
     }
 
     fun setAnnouncementRadiusMeters(radius: Int) {
-        viewModelScope.launch { prefs.setAnnouncementRadiusMeters(radius) }
+        saveSetting { prefs.setAnnouncementRadiusMeters(radius) }
     }
 
     fun setTripChangeAlertsEnabled(enabled: Boolean) {
-        viewModelScope.launch { prefs.setTripChangeAlertsEnabled(enabled) }
+        saveSetting { prefs.setTripChangeAlertsEnabled(enabled) }
     }
     fun setTripChangeSpeechEnabled(enabled: Boolean) {
-        viewModelScope.launch { prefs.setTripChangeSpeechEnabled(enabled) }
+        saveSetting { prefs.setTripChangeSpeechEnabled(enabled) }
     }
     fun setLiveProgressEnabled(enabled: Boolean) {
-        viewModelScope.launch { prefs.setLiveProgressEnabled(enabled) }
+        saveSetting { prefs.setLiveProgressEnabled(enabled) }
     }
     fun setLockScreenDetailsEnabled(enabled: Boolean) {
-        viewModelScope.launch { prefs.setLockScreenDetailsEnabled(enabled) }
+        saveSetting { prefs.setLockScreenDetailsEnabled(enabled) }
     }
 
     fun setPublicRailRealtimeEnabled(enabled: Boolean) {
-        viewModelScope.launch { prefs.setPublicRailRealtimeEnabled(enabled) }
+        saveSetting { prefs.setPublicRailRealtimeEnabled(enabled) }
     }
 }
 

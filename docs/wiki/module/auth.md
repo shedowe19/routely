@@ -48,6 +48,10 @@ Der Token-Hilfelink prüft die eingegebene Serveradresse vor dem Browserstart. U
 - **Retrofit**: Für Tokenvalidierung und Abmeldung (`TraewellingApiService`), optional die vorhandenen OAuth-Helfer.
 - **DataStore**: Für die lokale Persistenz der Authentifizierungs-Token (`PreferencesManager`).
 
+## Lokale Speicherbereitschaft
+
+`AuthUiState.hasLoadedSession` kennzeichnet eine tatsächlich bestätigte Sitzungsausgabe. `MainActivity` prüft vor Setup beziehungsweise Navigation zusätzlich eine frische Sitzung der aktuellen Storagegeneration; der anfängliche Anzeigezustand `isLoggedIn = false` genügt nicht als Abmeldungsbeleg. Bei einer Speicherstörung bleiben bestätigte Werte erhalten und die Recoveryoberfläche sperrt die Bedienung. Nach bestätigter Wiederherstellung validiert `AuthViewModel` die gespeicherte Sitzung erneut über den lesenden Profilabruf; eine Anmeldung oder Abmeldung wird dabei nicht automatisch wiederholt. Fehlerhafte Persistenz gilt weiterhin nicht als erfolgreiche Anmeldung oder Abmeldung. Vertrag: [PreferencesManager](../konfiguration/preferences-manager.md#lese--und-schreibfehler).
+
 ## Offene Fragen
 
 - TODO: OAuth-Anmeldung einschließlich Callback-Verarbeitung und automatischer Token-Erneuerung an einen erreichbaren UI-Ablauf anbinden, falls dieser Login unterstützt werden soll.

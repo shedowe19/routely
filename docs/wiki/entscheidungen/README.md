@@ -6,6 +6,8 @@
 
 ## Liste der Entscheidungen
 
+- [03.11.2026: Sichere Storage-Recovery](./2026-11-03-storage-recovery.md)
+
 - [07.10.2026: GPS-Prognose auf gemeinsamem SEV-Restweg](./2026-10-07-sev-gemeinsamer-restweg.md)
 - [07.10.2026: Aktive Fahrtrevision und getrennte GPS-Ereignisse](./2026-10-07-aktive-fahrt-und-beobachtungen.md)
 

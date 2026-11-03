@@ -87,7 +87,7 @@ Priorität P1 betrifft Datenintegrität oder die sichere Vorbereitung einer spä
 | P09 / P2 | Timeline und mehrzeilige Zeiten; [Statusdetail](../module/status-detail.md) | Sichtprüfung auf Gerät: genau ein Besuchsmarker, durchgehende Linie und passende Haltepunkte bei großer Schrift, langen Stationsnamen, mehreren Zeitquellen und Teilroute. Kein Fortschritt darf aus einer anderen Fahrt übernommen werden. |
 | P10 / P2 | Bibliotheksverhalten auf Gerät; [Build](./build.md) | Systemtest: Coil-3-Bilder/HTTP-Cache, Material-3-Pull-to-refresh, Compose-Layouts, Standortabfrage und TTS-Einstellungen prüfen. Kompatible AAR-Metadaten und erfolgreicher Build ersetzen diese Oberflächenprüfung nicht. |
 | P11 / P2 | Fehlende oder verweigerte System-Einstellungen; [Settings](../module/settings.md) | Behoben und geprüft: vorher ungeschützte Fallbacks und SecurityException werden durch gemeinsame Strategie und Android-Adapter behandelt. Alle fünf Regressionen sind bestanden. Auf Android/Samsung bleiben tatsächliche Activity-Verfügbarkeit, Rückkehr zur Karte und Freigabeänderungen zu prüfen. |
-| P12 / P2 | PreferencesManager-Fehler und Recovery; [PreferencesManager](../konfiguration/preferences-manager.md) | Offener Implementierungsbedarf: ein vollständiger transparenter Umgang mit Lese-/Schreibfehlern und sichere Recovery-UI fehlen. Automatisches Ersetzen durch leere Preferences würde Datenverlust riskieren. Eine getrennte Umsetzung braucht Tests und eine ausdrückliche Nutzerentscheidung vor verlustbehafteter Wiederherstellung. |
+| P12 / P2 | PreferencesManager-Fehler und Recovery; [PreferencesManager](../konfiguration/preferences-manager.md) | Im anschließenden lokalen Ausbau implementiert: gemeinsamer Storagezustand, begrenzte IO-Wiederholung, sichtbare Retry-/bestätigte Korruptionsresetoberfläche und nicht destruktive Servicepause. Zugangsdaten werden nicht automatisch ersetzt; Reset verlangt eine aktuelle ausdrückliche Bestätigung in der App. Injizierte Fehler und echte beschädigte Testdatei prüfen den Vertrag, Gerätepraxis bleibt offen. Siehe [Recovery-Entscheidung](../entscheidungen/2026-11-03-storage-recovery.md). |
 
 ### Dokumentation und optionale Produktentscheidungen
 
@@ -106,7 +106,7 @@ Die Antworten stützen sich auf den lokalen Quellstand, kontrollierte Regression
 ## Offene Fragen
 
 - Die bestätigten Ergebnisse sind unter [Tests](./tests.md) eingetragen; bei weiteren Änderungen müssen die betroffenen Nachweise erneuert werden.
-- P12 ist noch technische Arbeit; A05, R02, R04 und U02–U05 benötigen bei gewünschtem Ausbau eine Produkt- beziehungsweise Betriebsentscheidung.
+- P12 ist im lokalen Ausbau umgesetzt; der tatsächliche Validierungsnachweis und Geräteprüfgrenzen stehen unter [Tests](./tests.md). A05, R02, R04 und U02–U05 benötigen bei gewünschtem Ausbau eine Produkt- beziehungsweise Betriebsentscheidung.
 - G01–G10 sowie P01–P10 und die Gerätehälfte von P11 enthalten konkrete praktische Prüfbedingungen. Ohne diese Beobachtungen werden sie nicht als abgeschlossen bezeichnet.
 - A01 bleibt fortlaufende Pflege. Der heutige Vertragsabgleich ist eine Momentaufnahme.
 

@@ -10,6 +10,8 @@ import de.traewelling.app.service.RideRecognitionService
 import de.traewelling.app.service.RideRecognitionState
 import de.traewelling.app.service.RideRecognitionEngine
 import de.traewelling.app.util.PreferencesManager
+import de.traewelling.app.util.runStorageAction
+import de.traewelling.app.util.isPreferenceStorageFailure
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.*
 
@@ -67,8 +69,18 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
     private var checkInJob: Job? = null
     private var selectionGeneration = 0L
 
+    private fun launchStorageAction(block: suspend CoroutineScope.() -> Unit): Job = viewModelScope.launch {
+        runStorageAction(onFailure = { failure ->
+            _uiState.update {
+                if (it.step == CheckInStep.SUCCESS) it.copy(isLoading = false,
+                    completionWarning = "Der Check-in wurde angenommen. Lokale Daten konnten nicht gespeichert werden; prüfe die Fahrt im Profil. Ein erneuter Check-in ist nicht nötig.")
+                else it.copy(isLoading = false, error = failure.message)
+            }
+        }) { block(this) }
+    }
+
     init {
-        viewModelScope.launch {
+        launchStorageAction {
             combine(prefs.rideRecognitionEnabled, RideRecognitionService.state, prefs.activeStatusId, prefs.authSession) { enabled, recognition, active, session ->
                 Triple(enabled, recognition.takeIf { session.accessToken != null && it.authSessionRevision == session.revision }
                     ?: RideRecognitionState(), active != null)
@@ -84,33 +96,33 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         val requestedSelection = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
-        selectionJob = viewModelScope.launch {
+        selectionJob = launchStorageAction {
             val current = RideRecognitionService.state.value
             val freshCandidate = current.candidates.firstOrNull {
                 it.id == candidate.id && it.sessionId == candidate.sessionId &&
                     it.latestFixMillis == candidate.latestFixMillis
             }
             val enabled = prefs.getRideRecognitionEnabled()
-            val active = prefs.activeStatusId.first()
+            val active = prefs.getActiveStatusId()
             val session = prefs.getAuthSession()
             val loggedIn = session.accessToken != null
             val now = System.currentTimeMillis()
             ensureActive()
-            if (requestedSelection != selectionGeneration) return@launch
+            if (requestedSelection != selectionGeneration) return@launchStorageAction
             if (!enabled || active != null || !loggedIn || _uiState.value.departureSearchTimeMillis != null ||
                 current.authSessionRevision != session.revision || freshCandidate == null ||
                 now - freshCandidate.latestFixMillis !in 0..RideRecognitionEngine.MAX_FIX_AGE_MILLIS ||
                 current.sessionId != candidate.sessionId || RideRecognitionService.state.value != current) {
                 _uiState.update { it.copy(error = "Dieser Vorschlag ist nicht mehr aktuell. Bitte warte auf eine neue Erkennung.") }
-                return@launch
+                return@launchStorageAction
             }
             val ride = freshCandidate.ride
-            val origin = ride.origin ?: return@launch
-            val originStation = origin.station ?: return@launch
+            val origin = ride.origin ?: return@launchStorageAction
+            val originStation = origin.station ?: return@launchStorageAction
             val destinations = validCheckInDestinations(ride.trip.stopovers.orEmpty(), ride.originIndex)
             if (destinations.isEmpty()) {
                 _uiState.update { it.copy(error = "Für diese Fahrt sind keine gültigen Ziele verfügbar.") }
-                return@launch
+                return@launchStorageAction
             }
             _uiState.update { it.copy(
                 step = CheckInStep.DESTINATION, selectedStation = originStation,
@@ -155,7 +167,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         val requestGeneration = ++selectionGeneration
         searchJob?.cancel()
         selectionJob?.cancel()
-        searchJob = viewModelScope.launch {
+        searchJob = launchStorageAction {
             _uiState.update { it.copy(isLoading = true, error = null, stationQuery = "Stationen in der Nähe...") }
             repo.getNearbyStations(lat, lon)
                 .onSuccess { stations ->
@@ -194,9 +206,9 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         selectionJob?.cancel()
         _uiState.update { it.copy(stationQuery = query, searchResults = emptyList(), error = null, isLoading = false) }
         if (query.length < 2) return
-        searchJob = viewModelScope.launch {
+        searchJob = launchStorageAction {
             delay(350)
-            if (requestGeneration != selectionGeneration) return@launch
+            if (requestGeneration != selectionGeneration) return@launchStorageAction
             _uiState.update { it.copy(isLoading = true) }
             repo.searchStations(query)
                 .onSuccess { stations ->
@@ -234,7 +246,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             _uiState.update { it.copy(error = "Bahnhof hat keine gültige ID.") }
             return
         }
-        selectionJob = viewModelScope.launch {
+        selectionJob = launchStorageAction {
             _uiState.update {
                 it.copy(
                     selectedStation = station,
@@ -284,7 +296,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
             return
         }
         val lineName = departure.line?.name ?: ""
-        selectionJob = viewModelScope.launch {
+        selectionJob = launchStorageAction {
             _uiState.update {
                 it.copy(selectedDeparture = departure, isLoading = true, error = null)
             }
@@ -384,13 +396,13 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
         val requestGeneration = selectionGeneration
         _uiState.update { it.copy(isLoading = true, error = null) }
 
-        checkInJob = viewModelScope.launch {
+        checkInJob = launchStorageAction {
             val session = prefs.getAuthSession()
             ensureActive()
-            if (requestGeneration != selectionGeneration) return@launch
+            if (requestGeneration != selectionGeneration) return@launchStorageAction
             if (session.accessToken == null) {
                 _uiState.update { it.copy(isLoading = false, error = "Bitte melde dich erneut an.") }
-                return@launch
+                return@launchStorageAction
             }
 
             // Stopover IDs are distinct from station IDs. Resolve the matching visit
@@ -403,7 +415,7 @@ class CheckInViewModel(application: Application) : AndroidViewModel(application)
                 buildCheckInSubmission(state, originStop)
             } catch (invalid: IllegalArgumentException) {
                 _uiState.update { it.copy(isLoading = false, error = invalid.message) }
-                return@launch
+                return@launchStorageAction
             }
             submitCheckIn(
                 submission = submission,

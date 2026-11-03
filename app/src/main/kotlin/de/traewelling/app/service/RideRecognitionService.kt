@@ -29,7 +29,9 @@ import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.util.PreferencesManager
 import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.TrackingConfiguration
+import de.traewelling.app.util.isPreferenceStorageFailure
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -44,7 +46,6 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collect
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
@@ -53,7 +54,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 /** Explicitly started, visible location FGS. Only nearby station lookups leave the device. */
 class RideRecognitionService : Service() {
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+    private val storageRecovery = StorageRecoveryServiceBoundary(::pauseForStorageFailure)
+    private val storageFailureHandler = CoroutineExceptionHandler { _, failure -> storageRecovery.onFailure(failure) }
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate + storageFailureHandler)
     private lateinit var prefs: PreferencesManager
     private lateinit var repo: TraewellingRepository
     private val engine = RideRecognitionEngine()
@@ -83,8 +86,11 @@ class RideRecognitionService : Service() {
             CHANNEL_ID, "Fahrterkennung", NotificationManager.IMPORTANCE_LOW
         ).apply { description = "Sichtbare GPS-Suche nach möglichen Fahrten" })
         scope.launch {
+            prefs.storageState.collect { storageRecovery.onPhase(it.phase) }
+        }
+        scope.launch {
             prefs.trackingConfiguration.collect { emitted ->
-                val config = prefs.trackingConfiguration.first()
+                val config = prefs.getTrackingConfiguration()
                 if (config != emitted) return@collect
                 observedAuthSession = config.session
                 if (!recognitionAllowed(config)) finish()
@@ -96,12 +102,16 @@ class RideRecognitionService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (!scope.isActive) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         val requestedRevision = intent?.getStringExtra(EXTRA_AUTH_SESSION_REVISION)
         if (intent?.action == ACTION_STOP) {
             val expectedSession = ownedAuthSession
             val expectedRecognitionSession = sessionId
             scope.launch {
-                val config = prefs.trackingConfiguration.first()
+                val config = prefs.getTrackingConfiguration()
                 if ((sessionId != expectedRecognitionSession && (expectedSession != null || requestedRevision == null)) ||
                     requestedRevision != config.session.revision ||
                     (expectedSession != null && expectedSession != config.session)) return@launch
@@ -112,7 +122,6 @@ class RideRecognitionService : Service() {
             }
             return START_NOT_STICKY
         }
-        if (!scope.isActive) return START_NOT_STICKY
         val startRequest = startRequests.begin(requestedRevision)
         pendingRequestedRevision = requestedRevision
         // Enter foreground immediately; actual scanning starts only after all guards passed.
@@ -124,7 +133,7 @@ class RideRecognitionService : Service() {
         } catch (_: RuntimeException) { finish(); return START_NOT_STICKY }
         scope.launch {
             try {
-                val config = prefs.trackingConfiguration.first()
+                val config = prefs.getTrackingConfiguration()
                 if (!recognitionAllowed(config) || !locationServicesEnabled()) { finish(); return@launch }
                 if (!startRequests.accept(startRequest, config.session.revision)) {
                     startRequests.finish(startRequest)
@@ -186,7 +195,7 @@ class RideRecognitionService : Service() {
         config.session.accessToken != null && config.activeStatusId == null
 
     private suspend fun isAllowed(): Boolean {
-        val config = prefs.trackingConfiguration.first()
+        val config = prefs.getTrackingConfiguration()
         observedAuthSession = config.session
         return !stopped && recognitionAllowed(config) && ownedAuthSession == config.session
     }
@@ -314,7 +323,8 @@ class RideRecognitionService : Service() {
             }
         } catch (error: CancellationException) {
             throw error
-        } catch (_: Exception) {
+        } catch (failure: Exception) {
+            if (isPreferenceStorageFailure(failure)) throw failure
             if (currentSearch() && isAllowed() && currentSearch()) {
                 searching = false
                 searchError = "Keine Stations- oder Fahrtdaten erhalten. Neuer Versuch in 90 Sekunden."
@@ -396,14 +406,27 @@ class RideRecognitionService : Service() {
         }
     }
 
+    private fun pauseForStorageFailure() {
+        mutableStoragePauseInProgress.value = true
+        startRequests.clear()
+        try {
+            finish()
+        } finally {
+            scope.cancel()
+        }
+    }
+
     override fun onDestroy() {
         startRequests.clear()
         finish()
         scope.cancel()
         super.onDestroy()
+        mutableStoragePauseInProgress.value = false
     }
 
     companion object {
+        private val mutableStoragePauseInProgress = MutableStateFlow(false)
+        val storagePauseInProgress: StateFlow<Boolean> = mutableStoragePauseInProgress.asStateFlow()
         private const val CHANNEL_ID = "ride_recognition"
         private const val NOTIFICATION_ID = 710
         private const val ACTION_STOP = "de.traewelling.app.STOP_RIDE_RECOGNITION"

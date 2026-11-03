@@ -1,19 +1,14 @@
 package de.traewelling.app.util
 
 import android.content.Context
-import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
-import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
-
-val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "traewelling_prefs")
 
 data class TrackingConfiguration(
     val session: AuthSession,
@@ -22,7 +17,17 @@ data class TrackingConfiguration(
     val recognitionEnabled: Boolean
 )
 
-class PreferencesManager(private val context: Context) {
+class PreferencesManager private constructor(
+    private val storage: PreferenceStorage,
+    private val context: Context?
+) {
+    constructor(context: Context) : this(PreferenceStorageRegistry.get(context), context.applicationContext)
+    internal constructor(storage: PreferenceStorage) : this(storage, null)
+
+    val storageState: StateFlow<PreferenceStorageState> = storage.state
+    suspend fun retryStorage(): Result<Unit> = storage.retryStorage()
+    suspend fun resetCorruptedStorage(expectedFailureId: Long): Result<Unit> = storage.resetCorruptedStorage(expectedFailureId)
+
 
     companion object {
         val KEY_SERVER_URL    = AuthSessionPreferences.server
@@ -55,111 +60,117 @@ class PreferencesManager(private val context: Context) {
         const val OAUTH_SCOPES = "read-statuses write-statuses read-notifications read-settings write-settings"
     }
 
-    val serverUrl: Flow<String> = context.dataStore.data.map { prefs ->
+    val serverUrl: Flow<String> = storage.observePreferences().map { prefs ->
         prefs[KEY_SERVER_URL] ?: DEFAULT_SERVER_URL
     }
 
-    val authSession: Flow<AuthSession> = context.dataStore.data.map(AuthSessionPreferences::read).distinctUntilChanged()
+    val authSession: Flow<AuthSession> = storage.observePreferences().map(AuthSessionPreferences::read).distinctUntilChanged()
 
     // Startup decisions must not combine credentials from one edit with an active ride from another.
-    val trackingConfiguration: Flow<TrackingConfiguration> = context.dataStore.data.map { prefs ->
-        TrackingConfiguration(AuthSessionPreferences.read(prefs), prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull(),
-            prefs[KEY_GPS_TRACKING_ENABLED] ?: true, prefs[KEY_RIDE_RECOGNITION_ENABLED] ?: false)
-    }.distinctUntilChanged()
+    val trackingConfiguration: Flow<TrackingConfiguration> =
+        storage.observePreferences().map(::readTrackingConfiguration).distinctUntilChanged()
+
+    private fun readTrackingConfiguration(prefs: Preferences) = TrackingConfiguration(
+        AuthSessionPreferences.read(prefs), prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull(),
+        prefs[KEY_GPS_TRACKING_ENABLED] ?: true, prefs[KEY_RIDE_RECOGNITION_ENABLED] ?: false
+    )
+
+    suspend fun getTrackingConfiguration(): TrackingConfiguration = readTrackingConfiguration(storage.readPreferences())
+    suspend fun getActiveStatusId(): Int? = storage.readPreferences()[KEY_ACTIVE_STATUS_ID]?.toIntOrNull()
 
     val accessToken: Flow<String?> = authSession.map { it.accessToken }
 
-    val refreshToken: Flow<String?> = context.dataStore.data.map { prefs ->
+    val refreshToken: Flow<String?> = storage.observePreferences().map { prefs ->
         prefs[KEY_REFRESH_TOKEN]
     }
 
-    val clientId: Flow<String?> = context.dataStore.data.map { prefs ->
+    val clientId: Flow<String?> = storage.observePreferences().map { prefs ->
         prefs[KEY_CLIENT_ID]
     }
 
-    val clientSecret: Flow<String?> = context.dataStore.data.map { prefs ->
+    val clientSecret: Flow<String?> = storage.observePreferences().map { prefs ->
         prefs[KEY_CLIENT_SECRET]
     }
 
-    val username: Flow<String?> = context.dataStore.data.map { prefs ->
+    val username: Flow<String?> = storage.observePreferences().map { prefs ->
         prefs[KEY_USERNAME]
     }
 
     val isLoggedIn: Flow<Boolean> = authSession.map { it.accessToken != null }
 
-    val activeStatusId: Flow<Int?> = context.dataStore.data.map { prefs ->
+    val activeStatusId: Flow<Int?> = storage.observePreferences().map { prefs ->
         prefs[KEY_ACTIVE_STATUS_ID]?.toIntOrNull()
     }
 
-    val isTtsEnabled: Flow<Boolean> = context.dataStore.data.map { prefs ->
+    val isTtsEnabled: Flow<Boolean> = storage.observePreferences().map { prefs ->
         prefs[KEY_TTS_ENABLED] ?: false
     }
 
-    val ttsEngine: Flow<String?> = context.dataStore.data.map { prefs -> prefs[KEY_TTS_ENGINE] }
-    val ttsLanguage: Flow<String?> = context.dataStore.data.map { prefs -> prefs[KEY_TTS_LANGUAGE] }
-    val ttsVoice: Flow<String?> = context.dataStore.data.map { prefs -> prefs[KEY_TTS_VOICE] }
+    val ttsEngine: Flow<String?> = storage.observePreferences().map { prefs -> prefs[KEY_TTS_ENGINE] }
+    val ttsLanguage: Flow<String?> = storage.observePreferences().map { prefs -> prefs[KEY_TTS_LANGUAGE] }
+    val ttsVoice: Flow<String?> = storage.observePreferences().map { prefs -> prefs[KEY_TTS_VOICE] }
 
-    val appTheme: Flow<String> = context.dataStore.data.map { prefs -> prefs[KEY_APP_THEME] ?: "LIGHT" }
+    val appTheme: Flow<String> = storage.observePreferences().map { prefs -> prefs[KEY_APP_THEME] ?: "LIGHT" }
 
-    val gpsTrackingEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val gpsTrackingEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_GPS_TRACKING_ENABLED] ?: true
     }
 
-    val announcementRadiusMeters: Flow<Int> = context.dataStore.data.map {
+    val announcementRadiusMeters: Flow<Int> = storage.observePreferences().map {
         validRadius(it[KEY_ANNOUNCEMENT_RADIUS] ?: 0)
     }
 
-    val rideRecognitionEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val rideRecognitionEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_RIDE_RECOGNITION_ENABLED] ?: false
     }
-    val tripChangeAlertsEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val tripChangeAlertsEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_TRIP_CHANGE_ALERTS_ENABLED] ?: true
     }
-    val tripChangeSpeechEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val tripChangeSpeechEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_TRIP_CHANGE_SPEECH_ENABLED] ?: true
     }
-    val liveProgressEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val liveProgressEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_LIVE_PROGRESS_ENABLED] ?: true
     }
-    val lockScreenDetailsEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val lockScreenDetailsEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_LOCK_SCREEN_DETAILS_ENABLED] ?: true
     }
-    val publicRailRealtimeEnabled: Flow<Boolean> = context.dataStore.data.map {
+    val publicRailRealtimeEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_PUBLIC_RAIL_REALTIME_ENABLED] ?: true
     }.distinctUntilChanged()
 
     suspend fun setRideRecognitionEnabled(enabled: Boolean, expectedSession: AuthSession? = null): Boolean {
         var changed = false
-        context.dataStore.edit { changed = AuthSessionPreferences.setRecognitionEnabled(it, enabled, expectedSession) }
+        storage.editPreferences { changed = AuthSessionPreferences.setRecognitionEnabled(it, enabled, expectedSession) }
         return changed
     }
     suspend fun setTripChangeAlertsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_TRIP_CHANGE_ALERTS_ENABLED] = enabled }
-        if (!enabled) de.traewelling.app.service.TripTrackingService.clearChangeNotifications(context)
+        storage.editPreferences { it[KEY_TRIP_CHANGE_ALERTS_ENABLED] = enabled }
+        if (!enabled) context?.let { de.traewelling.app.service.TripTrackingService.clearChangeNotifications(it) }
     }
     suspend fun setTripChangeSpeechEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_TRIP_CHANGE_SPEECH_ENABLED] = enabled }
+        storage.editPreferences { it[KEY_TRIP_CHANGE_SPEECH_ENABLED] = enabled }
     }
     suspend fun setLiveProgressEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_LIVE_PROGRESS_ENABLED] = enabled }
+        storage.editPreferences { it[KEY_LIVE_PROGRESS_ENABLED] = enabled }
     }
     suspend fun setLockScreenDetailsEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_LOCK_SCREEN_DETAILS_ENABLED] = enabled }
-        if (!enabled) de.traewelling.app.service.TripTrackingService.clearChangeNotifications(context)
+        storage.editPreferences { it[KEY_LOCK_SCREEN_DETAILS_ENABLED] = enabled }
+        if (!enabled) context?.let { de.traewelling.app.service.TripTrackingService.clearChangeNotifications(it) }
     }
     suspend fun setPublicRailRealtimeEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_PUBLIC_RAIL_REALTIME_ENABLED] = enabled }
+        storage.editPreferences { it[KEY_PUBLIC_RAIL_REALTIME_ENABLED] = enabled }
     }
 
-    suspend fun getRideRecognitionEnabled(): Boolean = rideRecognitionEnabled.first()
-    suspend fun getTripChangeAlertsEnabled(): Boolean = tripChangeAlertsEnabled.first()
-    suspend fun getTripChangeSpeechEnabled(): Boolean = tripChangeSpeechEnabled.first()
-    suspend fun getLiveProgressEnabled(): Boolean = liveProgressEnabled.first()
-    suspend fun getLockScreenDetailsEnabled(): Boolean = lockScreenDetailsEnabled.first()
-    suspend fun getPublicRailRealtimeEnabled(): Boolean = publicRailRealtimeEnabled.first()
+    suspend fun getRideRecognitionEnabled(): Boolean = storage.readPreferences()[KEY_RIDE_RECOGNITION_ENABLED] ?: false
+    suspend fun getTripChangeAlertsEnabled(): Boolean = storage.readPreferences()[KEY_TRIP_CHANGE_ALERTS_ENABLED] ?: true
+    suspend fun getTripChangeSpeechEnabled(): Boolean = storage.readPreferences()[KEY_TRIP_CHANGE_SPEECH_ENABLED] ?: true
+    suspend fun getLiveProgressEnabled(): Boolean = storage.readPreferences()[KEY_LIVE_PROGRESS_ENABLED] ?: true
+    suspend fun getLockScreenDetailsEnabled(): Boolean = storage.readPreferences()[KEY_LOCK_SCREEN_DETAILS_ENABLED] ?: true
+    suspend fun getPublicRailRealtimeEnabled(): Boolean = storage.readPreferences()[KEY_PUBLIC_RAIL_REALTIME_ENABLED] ?: true
 
     suspend fun saveServerConfig(serverUrl: String, clientId: String, clientSecret: String) {
-        context.dataStore.edit { prefs ->
+        storage.editPreferences { prefs ->
             if (AuthSessionPreferences.read(prefs).serverUrl != serverUrl.trimEnd('/')) {
                 AuthSessionPreferences.clear(prefs)
             }
@@ -170,103 +181,103 @@ class PreferencesManager(private val context: Context) {
     }
 
     suspend fun saveTokens(accessToken: String, refreshToken: String?) {
-        context.dataStore.edit { AuthSessionPreferences.saveTokens(it, accessToken, refreshToken) }
+        storage.editPreferences { AuthSessionPreferences.saveTokens(it, accessToken, refreshToken) }
     }
 
-    suspend fun getAuthSession(): AuthSession = AuthSessionPreferences.read(context.dataStore.data.first())
+    suspend fun getAuthSession(): AuthSession = AuthSessionPreferences.read(storage.readPreferences())
 
     suspend fun saveValidatedSession(serverUrl: String, token: String, username: String) {
-        context.dataStore.edit { AuthSessionPreferences.saveValidated(it, serverUrl, token, username) }
+        storage.editPreferences { AuthSessionPreferences.saveValidated(it, serverUrl, token, username) }
     }
 
     suspend fun clearSessionIfMatches(expected: AuthSession): Boolean {
         var changed = false
-        context.dataStore.edit { changed = AuthSessionPreferences.clearIfMatches(it, expected) }
+        storage.editPreferences { changed = AuthSessionPreferences.clearIfMatches(it, expected) }
         return changed
     }
 
     suspend fun saveUsernameIfMatches(expected: AuthSession, username: String): Boolean {
         var changed = false
-        context.dataStore.edit { changed = AuthSessionPreferences.saveUsernameIfMatches(it, expected, username) }
+        storage.editPreferences { changed = AuthSessionPreferences.saveUsernameIfMatches(it, expected, username) }
         return changed
     }
 
     suspend fun saveTokensIfMatches(expected: AuthSession, token: String, refresh: String?): Boolean {
         var changed = false
-        context.dataStore.edit { changed = AuthSessionPreferences.saveTokensIfMatches(it, expected, token, refresh) }
+        storage.editPreferences { changed = AuthSessionPreferences.saveTokensIfMatches(it, expected, token, refresh) }
         return changed
     }
 
     suspend fun saveUsername(username: String) {
-        context.dataStore.edit { prefs ->
+        storage.editPreferences { prefs ->
             prefs[KEY_USERNAME] = username
         }
     }
 
     suspend fun saveActiveStatusId(statusId: Int?) {
-        context.dataStore.edit { AuthSessionPreferences.saveActiveStatusId(it, statusId) }
+        storage.editPreferences { AuthSessionPreferences.saveActiveStatusId(it, statusId) }
     }
 
     suspend fun saveActiveStatusIdIfMatches(expected: AuthSession, statusId: Int?): Boolean {
         var changed = false
-        context.dataStore.edit { changed = AuthSessionPreferences.saveActiveStatusIdIfMatches(it, expected, statusId) }
+        storage.editPreferences { changed = AuthSessionPreferences.saveActiveStatusIdIfMatches(it, expected, statusId) }
         return changed
     }
 
     suspend fun saveActiveStatusIdIfIdleOrSame(expectedSession: AuthSession, statusId: Int): Boolean {
         var changed = false
-        context.dataStore.edit {
+        storage.editPreferences {
             changed = AuthSessionPreferences.saveActiveStatusIdIfIdleOrSame(it, expectedSession, statusId)
         }
         return changed
     }
 
     suspend fun setGpsTrackingEnabled(enabled: Boolean) {
-        context.dataStore.edit { it[KEY_GPS_TRACKING_ENABLED] = enabled }
+        storage.editPreferences { it[KEY_GPS_TRACKING_ENABLED] = enabled }
     }
 
     suspend fun setAnnouncementRadiusMeters(radius: Int) {
-        context.dataStore.edit { it[KEY_ANNOUNCEMENT_RADIUS] = validRadius(radius) }
+        storage.editPreferences { it[KEY_ANNOUNCEMENT_RADIUS] = validRadius(radius) }
     }
 
-    suspend fun getGpsTrackingEnabled(): Boolean = gpsTrackingEnabled.first()
+    suspend fun getGpsTrackingEnabled(): Boolean = storage.readPreferences()[KEY_GPS_TRACKING_ENABLED] ?: true
 
-    suspend fun getAnnouncementRadiusMeters(): Int = announcementRadiusMeters.first()
+    suspend fun getAnnouncementRadiusMeters(): Int = validRadius(storage.readPreferences()[KEY_ANNOUNCEMENT_RADIUS] ?: 0)
 
-    suspend fun getTrackingState(): String? = context.dataStore.data.first()[KEY_TRACKING_STATE]
+    suspend fun getTrackingState(): String? = storage.readPreferences()[KEY_TRACKING_STATE]
 
     suspend fun hasRequestedLocationPermission(): Boolean =
-        context.dataStore.data.first()[KEY_LOCATION_PERMISSION_REQUESTED] ?: false
+        storage.readPreferences()[KEY_LOCATION_PERMISSION_REQUESTED] ?: false
 
     suspend fun markLocationPermissionRequested() {
-        context.dataStore.edit { it[KEY_LOCATION_PERMISSION_REQUESTED] = true }
+        storage.editPreferences { it[KEY_LOCATION_PERMISSION_REQUESTED] = true }
     }
 
     // A superseded service must never overwrite the progress of the current trip.
     suspend fun saveTrackingState(statusId: Int, stateJson: String, expectedSession: AuthSession? = null) {
-        context.dataStore.edit { AuthSessionPreferences.saveTrackingState(it, statusId, stateJson, expectedSession) }
+        storage.editPreferences { AuthSessionPreferences.saveTrackingState(it, statusId, stateJson, expectedSession) }
     }
 
     suspend fun invalidateTrackingState(statusId: Int, expectedSession: AuthSession) {
-        context.dataStore.edit { AuthSessionPreferences.invalidateTrackingState(it, statusId, expectedSession) }
+        storage.editPreferences { AuthSessionPreferences.invalidateTrackingState(it, statusId, expectedSession) }
     }
 
     suspend fun clearActiveTracking(statusId: Int, expectedSession: AuthSession? = null): Boolean {
         var cleared = false
-        context.dataStore.edit { cleared = AuthSessionPreferences.clearActiveTracking(it, statusId, expectedSession) }
+        storage.editPreferences { cleared = AuthSessionPreferences.clearActiveTracking(it, statusId, expectedSession) }
         return cleared
     }
 
     private fun validRadius(radius: Int): Int = radius.takeIf { it in ANNOUNCEMENT_RADII } ?: 0
 
     suspend fun setTtsEnabled(enabled: Boolean) {
-        context.dataStore.edit { prefs ->
+        storage.editPreferences { prefs ->
             prefs[KEY_TTS_ENABLED] = enabled
         }
     }
 
     suspend fun saveTtsSettings(engine: String?, language: String?, voice: String?) {
-        context.dataStore.edit { prefs ->
+        storage.editPreferences { prefs ->
             if (engine != null) prefs[KEY_TTS_ENGINE] = engine else prefs.remove(KEY_TTS_ENGINE)
             if (language != null) prefs[KEY_TTS_LANGUAGE] = language else prefs.remove(KEY_TTS_LANGUAGE)
             if (voice != null) prefs[KEY_TTS_VOICE] = voice else prefs.remove(KEY_TTS_VOICE)
@@ -276,17 +287,17 @@ class PreferencesManager(private val context: Context) {
     suspend fun setAppTheme(theme: String) {
         val validThemes = listOf("LIGHT", "DARK", "AMOLED")
         val safeTheme = if (theme in validThemes) theme else "LIGHT"
-        context.dataStore.edit { prefs ->
+        storage.editPreferences { prefs ->
             prefs[KEY_APP_THEME] = safeTheme
         }
     }
 
     suspend fun clearSession() {
-        context.dataStore.edit { AuthSessionPreferences.clear(it) }
+        storage.editPreferences { AuthSessionPreferences.clear(it) }
     }
 
     suspend fun clearAll() {
-        context.dataStore.edit { it.clear(); AuthSessionPreferences.renew(it) }
+        storage.editPreferences { it.clear(); AuthSessionPreferences.renew(it) }
     }
 
     // Read current values once (suspend, for non-flow contexts)
@@ -294,26 +305,26 @@ class PreferencesManager(private val context: Context) {
         getAuthSession().accessToken
 
     suspend fun getServerUrl(): String =
-        context.dataStore.data.map { it[KEY_SERVER_URL] ?: DEFAULT_SERVER_URL }.first()
+        storage.readPreferences()[KEY_SERVER_URL] ?: DEFAULT_SERVER_URL
 
     suspend fun getClientId(): String? =
-        context.dataStore.data.map { it[KEY_CLIENT_ID] }.first()
+        storage.readPreferences()[KEY_CLIENT_ID]
 
     suspend fun getClientSecret(): String? =
-        context.dataStore.data.map { it[KEY_CLIENT_SECRET] }.first()
+        storage.readPreferences()[KEY_CLIENT_SECRET]
 
     suspend fun getRefreshToken(): String? =
-        context.dataStore.data.map { it[KEY_REFRESH_TOKEN] }.first()
+        storage.readPreferences()[KEY_REFRESH_TOKEN]
 
     suspend fun getUsername(): String? =
-        context.dataStore.data.map { it[KEY_USERNAME] }.first()
+        storage.readPreferences()[KEY_USERNAME]
 
     suspend fun getTtsEnabled(): Boolean =
-        context.dataStore.data.map { it[KEY_TTS_ENABLED] ?: false }.first()
+        storage.readPreferences()[KEY_TTS_ENABLED] ?: false
 
-    suspend fun getTtsEngine(): String? = context.dataStore.data.map { it[KEY_TTS_ENGINE] }.first()
-    suspend fun getTtsLanguage(): String? = context.dataStore.data.map { it[KEY_TTS_LANGUAGE] }.first()
-    suspend fun getTtsVoice(): String? = context.dataStore.data.map { it[KEY_TTS_VOICE] }.first()
+    suspend fun getTtsEngine(): String? = storage.readPreferences()[KEY_TTS_ENGINE]
+    suspend fun getTtsLanguage(): String? = storage.readPreferences()[KEY_TTS_LANGUAGE]
+    suspend fun getTtsVoice(): String? = storage.readPreferences()[KEY_TTS_VOICE]
 
-    suspend fun getAppTheme(): String = context.dataStore.data.map { it[KEY_APP_THEME] ?: "LIGHT" }.first()
+    suspend fun getAppTheme(): String = storage.readPreferences()[KEY_APP_THEME] ?: "LIGHT"
 }

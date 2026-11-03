@@ -31,6 +31,7 @@ import de.traewelling.app.data.model.*
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusVisibilitySelector
 import de.traewelling.app.ui.components.DepartureSearchTimeSelector
+import de.traewelling.app.ui.components.JourneyDateTimeField
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.service.RideRecognitionPhase
 import de.traewelling.app.ui.theme.SuccessGreen
@@ -548,28 +549,20 @@ private fun ConfirmStep(viewModel: CheckInViewModel, uiState: CheckInUiState) {
                 Spacer(Modifier.height(16.dp))
 
                 Text("Tatsächliche Zeiten korrigieren (optional)", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-                Text("Leer lassen für API-/Fahrplanzeiten. Eingaben werden nach dem Check-in als manuelle Zeiten gespeichert. Nutze ISO-Format mit Zeitzone, z. B. 2026-10-06T18:05:00+02:00.",
+                Text("Wähle bei Bedarf Datum und Uhrzeit aus. Ohne Korrektur verwendet die Fahrt die verfügbaren Echtzeit- oder Fahrplanzeiten.",
                     style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                Row(Modifier.fillMaxWidth()) {
-                    OutlinedTextField(
-                        value = uiState.manualDeparture,
-                        enabled = !uiState.isLoading,
-                        onValueChange = viewModel::updateManualDeparture,
-                        label = { Text("Abfahrt real") },
-                        modifier = Modifier.weight(1f),
-                        textStyle = MaterialTheme.typography.bodySmall
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    OutlinedTextField(
-                        value = uiState.manualArrival,
-                        enabled = !uiState.isLoading,
-                        onValueChange = viewModel::updateManualArrival,
-                        label = { Text("Ankunft real") },
-                        modifier = Modifier.weight(1f),
-                        textStyle = MaterialTheme.typography.bodySmall
-                    )
-                }
+                JourneyDateTimeField(
+                    label = "Abfahrt", value = uiState.manualDeparture,
+                    onValueChange = viewModel::updateManualDeparture, enabled = !uiState.isLoading,
+                    modifier = Modifier.fillMaxWidth(), suggestedValue = uiState.resolvedOriginStop?.effectiveDeparture
+                )
+                Spacer(Modifier.height(12.dp))
+                JourneyDateTimeField(
+                    label = "Ankunft", value = uiState.manualArrival,
+                    onValueChange = viewModel::updateManualArrival, enabled = !uiState.isLoading,
+                    modifier = Modifier.fillMaxWidth(), suggestedValue = uiState.selectedDestination?.effectiveArrival
+                )
                 Spacer(Modifier.height(16.dp))
                 uiState.error?.let {
                     Spacer(Modifier.height(8.dp))

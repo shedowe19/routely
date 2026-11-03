@@ -71,6 +71,12 @@ Ein fehlgeschlagener Zeit-PUT oder lokaler Speicherfehler macht den bereits erst
 
 Ein erfolgreicher Check-in enthält `data.status` und `data.points`. Bei HTTP 409 liest das Repository `data.conflicts`, erzeugt eine `CheckInConflictException` und nennt die betroffenen Linien, Ziele und Status-IDs. Die auslaufenden Felder `message.status_id` und `message.lineName` werden nicht verwendet. Eine leere Konfliktliste führt zu einer allgemeinen Überschneidungsmeldung.
 
+## Manuelle Abfahrt und Ankunft
+
+Die optionalen Zeitfelder im Bestätigungsschritt verwenden `JourneyDateTimeField`: native Android-Datum-/Uhrzeitdialoge, lokale Darstellung mit Gerätezeitzone und 12-/24-Stundenformat. Nur eine vollständig bestätigte Auswahl ändert den Entwurf; Abbruch lässt ihn unverändert. Nicht existierende Sommerzeit-Uhrzeiten werden erklärt, vorhandene Offsets bei doppelter Uhrzeit erhalten. Leeren verwendet wieder die automatische Zeit. ISO-Strings bleiben intern und werden nicht als editierbare T-/Z-Rohfelder gezeigt.
+
+Ein typisierter Storagefehler nach bestätigtem POST erhält die erzeugte Fahrt-ID und den SUCCESS-Zustand; die automatische Zeitnachkorrektur wird bei unprüfbarer lokaler Sitzung ausgesetzt. Ein bereits angenommener Zeit-PUT liefert ebenfalls einen Teilerfolgshinweis mit vorhandenem Status. Weder Wiederherstellung noch Fehlermeldung erzeugen einen zweiten Check-in. Die zusätzlichen Regressionen stehen unter [Tests](../entwicklung/tests.md).
+
 ## Start der Fahrtverfolgung
 
 Nach einem erfolgreichen Check-in und einem gegebenenfalls folgenden Zeit-PUT prüft `CheckInViewModel` den **finalen** Status. Die erste parsebare Zeit aus manueller Ankunft, API-Echtzeit und Planankunft entscheidet: Ist die Ankunft bereits erreicht, bleibt die Fahrt in der Historie und startet keine Begleitung. Fehlt jede verwertbare Ankunftszeit, wird ebenfalls kein aktiver Zustand erfunden. Eine noch laufende Fahrt darf nur aktiviert werden, wenn keine andere lokale Fahrt begleitet wird oder dieselbe ID bereits aktiv ist. Die atomare Persistenz prüft zugleich die Auth-Sitzung; ein rückwirkender Eintrag überschreibt keine andere Begleitung.
@@ -83,7 +89,7 @@ Die Auswahl `Abfahrten ab` ist bereits vor der Stationswahl sichtbar und bleibt 
 
 Jeder Zeitwechsel beendet die vorige Abfragegeneration und entfernt davon abhängige Fahrt-/Zielauswahlen. Verspätete Antworten dürfen die neue Liste nicht ersetzen. Zurück erhält die Suchzeit; vollständiges Zurücksetzen stellt `Jetzt` wieder her. Planzeiten des konkreten gewählten Haltebesuchs bleiben die POST-Marker; der Suchzeitpunkt ersetzt sie nicht.
 
-Die App setzt kein erfundenes 7-/30-Tage-Limit. Träwelling akzeptiert einen datierten `when`-Parameter; historische Verfügbarkeit hängt vom Datenanbieter und vorhandenen gespeicherten Fahrten ab. Eine leere Antwort erklärt diese Grenze und erlaubt eine neue Zeitwahl. Eine ausschließlich lesende Stichprobe am 03.11.2026 lieferte für Berlin Hbf sowohl aktuelle als auch Abfahrten von gestern und vor sieben Tagen sowie passende Fahrtdetails. Das ist kein Nachweis einer garantierten allgemeinen Aufbewahrungsdauer.
+Die App setzt kein erfundenes 7-/30-Tage-Limit. Träwelling akzeptiert einen datierten `when`-Parameter; historische Abfahrtssuche hängt vom Datenanbieter ab; bereits gespeicherte Trips können anschließend beim Detailabruf helfen. Eine leere Antwort erklärt diese Grenze und erlaubt eine neue Zeitwahl. Eine ausschließlich lesende Stichprobe am 03.11.2026 lieferte für Berlin Hbf sowohl aktuelle als auch Abfahrten von gestern und vor sieben Tagen sowie passende Fahrtdetails. Das ist kein Nachweis einer garantierten allgemeinen Aufbewahrungsdauer.
 
 Regressionen: `CheckInDepartureSearchTest` prüft UTC-/Kalendertagszuordnung, Sommer-/Winterzeit, verspätete Antworten, Abbruch und Navigation. `CheckInTrackingCompletionTest` prüft abgeschlossene und laufende Fahrten, final korrigierte Ankünfte, aktive Begleitung, fehlende IDs sowie Persistenzfehler und Fristablauf.
 
