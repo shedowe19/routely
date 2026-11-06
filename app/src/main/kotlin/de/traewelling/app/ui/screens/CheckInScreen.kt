@@ -1,11 +1,13 @@
 package de.traewelling.app.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -34,7 +36,7 @@ import de.traewelling.app.ui.components.DepartureSearchTimeSelector
 import de.traewelling.app.ui.components.JourneyDateTimeField
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.service.RideRecognitionPhase
-import de.traewelling.app.ui.theme.SuccessGreen
+import de.traewelling.app.ui.theme.successColor
 import de.traewelling.app.viewmodel.CheckInStep
 import de.traewelling.app.viewmodel.CheckInUiState
 import de.traewelling.app.viewmodel.CheckInViewModel
@@ -147,7 +149,7 @@ private fun StationSearchStep(
         if (uiState.departureSearchTimeMillis == null) {
             RideRecognitionCard(viewModel, uiState, onStartRideRecognition, onStopRideRecognition)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(12.dp))
 
         Row(
             modifier = Modifier
@@ -158,8 +160,7 @@ private fun StationSearchStep(
             OutlinedTextField(
                 value = uiState.stationQuery,
                 onValueChange = viewModel::updateStationQuery,
-                label = { Text("Bahnhof suchen") },
-                placeholder = { Text("z.B. Berlin Hbf") },
+                placeholder = { Text("Bahnhof suchen") },
                 leadingIcon = { Icon(Icons.Default.Search, null) },
                 trailingIcon = {
                     when {
@@ -173,7 +174,14 @@ private fun StationSearchStep(
                 },
                 modifier = Modifier
                     .weight(1f),
-                singleLine = true
+                singleLine = true,
+                shape = RoundedCornerShape(14.dp),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerLow
+                )
             )
 
             Spacer(modifier = Modifier.width(8.dp))
@@ -197,7 +205,8 @@ private fun StationSearchStep(
                         )
                     }
                 },
-                modifier = Modifier.padding(top = 8.dp)
+                modifier = Modifier.size(52.dp),
+                shape = RoundedCornerShape(14.dp)
             ) {
                 Icon(Icons.Default.LocationOn, contentDescription = "Standort")
             }
@@ -251,12 +260,42 @@ private fun RideRecognitionCard(
     onStart: () -> Unit,
     onStop: () -> Unit
 ) {
-    Card(Modifier.padding(horizontal = 16.dp, vertical = 12.dp).fillMaxWidth().heightIn(max = 340.dp)) {
-        Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+    Surface(
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .fillMaxWidth()
+            .heightIn(max = 340.dp),
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        )
+    ) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Default.MyLocation, null, tint = MaterialTheme.colorScheme.primary)
-                Spacer(Modifier.width(8.dp))
-                Text("Fahrt erkennen", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    shape = RoundedCornerShape(10.dp)
+                ) {
+                    Box(
+                        modifier = Modifier.size(34.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(Icons.Default.MyLocation, null, modifier = Modifier.size(18.dp))
+                    }
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    "Fahrt erkennen",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
             Spacer(Modifier.height(8.dp))
             Text(
@@ -265,32 +304,58 @@ private fun RideRecognitionCard(
                     !uiState.rideRecognitionEnabled -> "Routely kann anhand von GPS und passenden Abfahrten Fahrten vorschlagen. Du prüfst die Linie und wählst dein Ziel selbst."
                     uiState.rideRecognition.phase == RideRecognitionPhase.OFF -> "Die Suche ist pausiert. Prüfe die präzise Standortfreigabe und die Ortung deines Geräts."
                     else -> uiState.rideRecognition.message
-                }, style = MaterialTheme.typography.bodySmall
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
             if (!uiState.rideRecognitionEnabled) {
-                Spacer(Modifier.height(6.dp))
-                Text("Zur Suche naher Stationen wird dein Standort an den konfigurierten Träwelling-Server gesendet. Es wird kein GPS-Verlauf gespeichert und kein Check-in automatisch veröffentlicht.",
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    "Zur Suche naher Stationen wird dein Standort an den konfigurierten Träwelling-Server gesendet. Es wird kein GPS-Verlauf gespeichert und kein Check-in automatisch veröffentlicht.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
             uiState.rideRecognition.candidates.forEach { candidate ->
-                HorizontalDivider(Modifier.padding(vertical = 10.dp))
+                HorizontalDivider(
+                    Modifier.padding(vertical = 10.dp),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                )
                 val departure = candidate.ride.departure
-                Text("${departure.line?.name ?: "Unbekannte Linie"} → ${departure.direction ?: candidate.nextStationName}",
-                    fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.bodyMedium)
-                Text("Ab ${candidate.ride.origin?.stationName ?: "Station"} · ${formatLocalTime(departure.realWhen ?: departure.plannedWhen ?: "")}",
-                    style = MaterialTheme.typography.bodySmall)
-                Text("Nächster Halt im Verlauf: ${candidate.nextStationName}", style = MaterialTheme.typography.bodySmall)
-                TextButton(onClick = { viewModel.acceptRecognizedRide(candidate) }) { Text("Fahrt prüfen und Ziel wählen") }
+                Text(
+                    "${departure.line?.name ?: "Unbekannte Linie"} → ${departure.direction ?: candidate.nextStationName}",
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "Ab ${candidate.ride.origin?.stationName ?: "Station"} · ${formatLocalTime(departure.realWhen ?: departure.plannedWhen ?: "")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    "Nächster Halt im Verlauf: ${candidate.nextStationName}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                TextButton(onClick = { viewModel.acceptRecognizedRide(candidate) }) {
+                    Text("Fahrt prüfen und Ziel wählen")
+                }
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(6.dp))
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (!uiState.rideRecognitionEnabled || uiState.rideRecognition.phase == RideRecognitionPhase.OFF) {
-                    Button(onClick = onStart, enabled = !uiState.activeRidePresent, modifier = Modifier.fillMaxWidth()) {
+                    Button(
+                        onClick = onStart,
+                        enabled = !uiState.activeRidePresent,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
                         Text(if (uiState.rideRecognitionEnabled) "Standortfreigabe prüfen" else "Fahrtsuche aktivieren")
                     }
                 }
                 if (uiState.rideRecognitionEnabled) {
-                    OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) { Text("Suche stoppen") }
+                    OutlinedButton(onClick = onStop, modifier = Modifier.fillMaxWidth()) {
+                        Text("Suche stoppen")
+                    }
                 }
             }
         }
@@ -394,7 +459,7 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
                     Text(times.time, style = MaterialTheme.typography.bodySmall,
                         color = when {
                             times.delayed -> MaterialTheme.colorScheme.error
-                            times.earlier -> SuccessGreen
+                            times.earlier -> MaterialTheme.successColor
                             else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                         })
                     times.plannedTime?.let { planned ->
@@ -405,7 +470,7 @@ private fun DepartureListItem(departure: DepartureTrip, onClick: () -> Unit) {
                         Spacer(Modifier.width(4.dp))
                         Text(deviation,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (times.earlier) SuccessGreen else MaterialTheme.colorScheme.error)
+                            color = if (times.earlier) MaterialTheme.successColor else MaterialTheme.colorScheme.error)
                     }
                     val plat = departure.platform?.takeIf { it.isNotBlank() }
                     if (plat != null) {

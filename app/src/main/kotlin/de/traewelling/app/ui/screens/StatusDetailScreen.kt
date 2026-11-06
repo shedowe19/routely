@@ -306,7 +306,7 @@ private fun StatusDetailContent(
         if (checkin != null) {
             item {
                 val retrieval = stopoversRetrievalPresentation(stopovers, nowMillis, uiState.realtimeRefreshFailed)
-                val tint = if (retrieval.recentlyRetrieved) MaterialTheme.colorScheme.primary else WarningOrange
+                val tint = if (retrieval.recentlyRetrieved) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.tertiary
                 Surface(
                     modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 12.dp),
                     color = tint.copy(alpha = 0.08f),
@@ -379,7 +379,7 @@ private fun StatusDetailContent(
                                     Brush.horizontalGradient(
                                         colors = listOf(
                                             MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                            MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.04f),
                                             MaterialTheme.colorScheme.surface
                                         )
                                     )
@@ -517,9 +517,15 @@ private fun StatusHeaderCard(status: Status, onUserClick: (String) -> Unit) {
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(3.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
         Column(Modifier.padding(16.dp)) {
             // User row
@@ -596,9 +602,15 @@ private fun TripInfoCard(
 
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(16.dp),
-        elevation = CardDefaults.cardElevation(4.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        ),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+        )
     ) {
         Column(Modifier.padding(16.dp)) {
             // Line name + category
@@ -635,14 +647,14 @@ private fun TripInfoCard(
 
             if (isReplacementBus) {
                 Spacer(Modifier.height(12.dp))
-                Surface(color = AmberAccent.copy(alpha = 0.10f), shape = RoundedCornerShape(10.dp)) {
+                Surface(color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.10f), shape = RoundedCornerShape(10.dp)) {
                     Column(Modifier.fillMaxWidth().padding(10.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(Icons.Default.DirectionsBus, null,
-                                modifier = Modifier.size(16.dp), tint = AmberAccent)
+                                modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.tertiary)
                             Spacer(Modifier.width(6.dp))
                             Text("Schienenersatzverkehr", style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold, color = AmberAccent)
+                                fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.tertiary)
                         }
                         Text(
                             when {
@@ -665,7 +677,7 @@ private fun TripInfoCard(
 
             // Origin → Destination with mini-timeline
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(12.dp).background(TealAccent, CircleShape))
+                Box(Modifier.size(12.dp).background(MaterialTheme.colorScheme.secondary, CircleShape))
                 Spacer(Modifier.width(8.dp))
                 Text(checkin.origin?.stationName ?: "–", fontWeight = FontWeight.SemiBold)
             }
@@ -676,7 +688,7 @@ private fun TripInfoCard(
                         .height(24.dp)
                         .background(
                             Brush.verticalGradient(
-                                colors = listOf(TealAccent, AmberAccent)
+                                colors = listOf(MaterialTheme.colorScheme.secondary, AmberAccent)
                             )
                         )
                 )
@@ -697,13 +709,13 @@ private fun TripInfoCard(
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 if (checkin.distanceMeters != null) {
-                    StatPill(Icons.Default.Route, "%.1f km".format(checkin.distanceMeters / 1000.0), TealAccent)
+                    StatPill(Icons.Default.Route, "%.1f km".format(checkin.distanceMeters / 1000.0), MaterialTheme.colorScheme.secondary)
                 }
                 if (checkin.duration != null) {
                     StatPill(Icons.Default.Schedule, "${checkin.duration} min", MaterialTheme.colorScheme.primary)
                 }
                 if (checkin.points != null && checkin.points > 0) {
-                    StatPill(Icons.Default.Stars, "${checkin.points} Pkt", AmberAccent)
+                    StatPill(Icons.Default.Stars, "${checkin.points} Pkt", MaterialTheme.colorScheme.tertiary)
                 }
             }
 
@@ -790,7 +802,7 @@ private fun TimeRow(label: String, time: JourneyTime?, realtimeInfo: StopRealtim
         Text(label, style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
         if (cancelled) Text("ENTFÄLLT", style = MaterialTheme.typography.labelLarge,
-            color = ErrorRed, fontWeight = FontWeight.SemiBold)
+            color = MaterialTheme.colorScheme.error, fontWeight = FontWeight.SemiBold)
         else JourneyTimeValue(time, realtimeInfo = realtimeInfo, nowMillis = nowMillis,
             realtimeRefreshFailed = realtimeRefreshFailed, eventLabel = label)
     }
@@ -825,8 +837,8 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
     }
     val timeColor = when {
         !differs -> MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha)
-        delay > 0 -> WarningOrange
-        else -> SuccessGreen
+        delay > 0 -> MaterialTheme.colorScheme.tertiary
+        else -> MaterialTheme.successColor
     }
     Column(horizontalAlignment = Alignment.End, modifier = Modifier.widthIn(max = 180.dp)
         .clearAndSetSemantics { contentDescription = spokenTime }) {
@@ -841,7 +853,7 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
                     textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough)
                 Spacer(Modifier.width(4.dp))
                 if (showDelayBadge && delay != 0L) {
-                    Surface(color = if (delay > 0) WarningOrangeLight else SuccessGreenLight,
+                    Surface(color = if (delay > 0) MaterialTheme.colorScheme.tertiaryContainer else MaterialTheme.successColor.copy(alpha = 0.14f),
                         shape = RoundedCornerShape(10.dp)) {
                         Text("${if (delay > 0) "+" else ""}$delay",
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
@@ -857,9 +869,9 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
                 Spacer(Modifier.width(4.dp))
                 when (time?.source) {
                     JourneyTimeSource.GPS_ESTIMATE -> Text("≈",
-                        style = MaterialTheme.typography.bodyMedium, color = TealAccent)
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.secondary)
                     JourneyTimeSource.GPS_OBSERVED -> Icon(Icons.Default.GpsFixed,
-                        contentDescription = null, modifier = Modifier.size(12.dp), tint = TealAccent)
+                        contentDescription = null, modifier = Modifier.size(12.dp), tint = MaterialTheme.colorScheme.secondary)
                     JourneyTimeSource.MANUAL -> Icon(Icons.Default.Edit,
                         contentDescription = null, modifier = Modifier.size(12.dp),
                         tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
@@ -871,7 +883,7 @@ private fun JourneyTimeValue(time: JourneyTime?, prefix: String = "", showDelayB
             Text(sourceLabel,
                 style = MaterialTheme.typography.labelSmall,
                 color = if (time?.source == JourneyTimeSource.GPS_ESTIMATE || time?.source == JourneyTimeSource.GPS_OBSERVED)
-                    TealAccent else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
+                    MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
         }
     }
 }
@@ -916,14 +928,14 @@ private fun StopoverItem(
     var headerHeightPx by remember { mutableIntStateOf(0) }
 
     val lineColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
-    val activeLineColor = TealAccent
+    val activeLineColor = MaterialTheme.colorScheme.secondary
 
     val dotColor = when {
-        isOrigin -> TealAccent
+        isOrigin -> MaterialTheme.colorScheme.secondary
         isDestination -> AmberAccent
-        isPast || isHighlighted -> TealAccent.copy(alpha = 0.7f)
-        isInRange -> TealAccent.copy(alpha = 0.35f)
-        stop.cancelled == true -> ErrorRed
+        isPast || isHighlighted -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.7f)
+        isInRange -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
+        stop.cancelled == true -> MaterialTheme.colorScheme.error
         else -> MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
     }
 
@@ -934,15 +946,15 @@ private fun StopoverItem(
         else -> 0.45f
     }
     val stopContainerColor = when {
-        isHighlighted -> TealAccent.copy(alpha = 0.12f)
-        isOrigin -> TealAccent.copy(alpha = 0.08f)
+        isHighlighted -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.12f)
+        isOrigin -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f)
         isDestination -> AmberAccent.copy(alpha = 0.10f)
         isInRange -> MaterialTheme.colorScheme.primary.copy(alpha = 0.035f)
         else -> Color.Transparent
     }
     val stopBorderColor = when {
-        isHighlighted -> TealAccent.copy(alpha = 0.35f)
-        isOrigin -> TealAccent.copy(alpha = 0.20f)
+        isHighlighted -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
+        isOrigin -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.20f)
         isDestination -> AmberAccent.copy(alpha = 0.25f)
         else -> Color.Transparent
     }
@@ -1017,7 +1029,7 @@ private fun StopoverItem(
                 Text(
                     stop.stationName ?: "–",
                     fontWeight = if (isOrigin || isDestination) FontWeight.Bold else FontWeight.SemiBold,
-                    color = if (isCancelled) ErrorRed else MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha),
+                    color = if (isCancelled) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface.copy(alpha = textAlpha),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f),
@@ -1057,9 +1069,9 @@ private fun StopoverItem(
             ) {
                 if (isHighlighted) {
                     Surface(
-                        color = TealAccent.copy(alpha = 0.14f),
+                        color = MaterialTheme.colorScheme.secondary.copy(alpha = 0.14f),
                         shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(0.5.dp, TealAccent.copy(alpha = 0.35f))
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1069,13 +1081,13 @@ private fun StopoverItem(
                                 Icons.Default.Navigation,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = TealDark
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
                                 badge.orEmpty(),
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TealDark,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1083,7 +1095,7 @@ private fun StopoverItem(
                 }
                 if (platform != null && !isReplacementBus && !isCancelled) {
                     Surface(
-                        color = if (platform.changed) WarningOrangeLight
+                        color = if (platform.changed) MaterialTheme.colorScheme.tertiaryContainer
                             else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.06f),
                         shape = RoundedCornerShape(4.dp)
                     ) {
@@ -1096,7 +1108,7 @@ private fun StopoverItem(
                                         realtimeRefreshFailed)
                                 },
                             style = MaterialTheme.typography.labelSmall,
-                            color = if (platform.changed) WarningOrange
+                            color = if (platform.changed) MaterialTheme.colorScheme.tertiary
                                 else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
                             fontWeight = if (platform.changed) FontWeight.Bold else FontWeight.Normal
                         )
@@ -1104,7 +1116,7 @@ private fun StopoverItem(
                 }
                 if (isCancelled) {
                     Surface(
-                        color = ErrorRedLight,
+                        color = MaterialTheme.colorScheme.errorContainer,
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Row(
@@ -1115,7 +1127,7 @@ private fun StopoverItem(
                                 Icons.Default.Warning,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = ErrorRed
+                                tint = MaterialTheme.colorScheme.error
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
@@ -1125,7 +1137,7 @@ private fun StopoverItem(
                                         stop.cancellationRealtimeInfo, nowMillis, realtimeRefreshFailed)
                                 },
                                 style = MaterialTheme.typography.labelSmall,
-                                color = ErrorRed,
+                                color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1133,7 +1145,7 @@ private fun StopoverItem(
                 }
                 if (isFirst) {
                     Surface(
-                        color = TealLight,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Row(
@@ -1144,13 +1156,13 @@ private fun StopoverItem(
                                 Icons.Default.FirstPage,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = TealDark
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
                                 "STARTHALTESTELLE",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TealDark,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1158,9 +1170,9 @@ private fun StopoverItem(
                 }
                 if (isOrigin) {
                     Surface(
-                        color = AmberLight,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
                         shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(0.5.dp, AmberAccent.copy(alpha = 0.3f))
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1170,13 +1182,13 @@ private fun StopoverItem(
                                 Icons.AutoMirrored.Filled.Login,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = AmberDark
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
                                 "DEIN EINSTIEG",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = AmberDark,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -1184,9 +1196,9 @@ private fun StopoverItem(
                 }
                 if (isDestination) {
                     Surface(
-                        color = AmberLight,
+                        color = MaterialTheme.colorScheme.tertiaryContainer,
                         shape = RoundedCornerShape(4.dp),
-                        border = BorderStroke(0.5.dp, AmberAccent.copy(alpha = 0.3f))
+                        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.tertiary.copy(alpha = 0.3f))
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -1196,13 +1208,13 @@ private fun StopoverItem(
                                 Icons.AutoMirrored.Filled.Logout,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = AmberDark
+                                tint = MaterialTheme.colorScheme.onTertiaryContainer
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
                                 "DEIN ZIEL",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = AmberDark,
+                                color = MaterialTheme.colorScheme.onTertiaryContainer,
                                 fontWeight = FontWeight.Medium
                             )
                         }
@@ -1210,7 +1222,7 @@ private fun StopoverItem(
                 }
                 if (isLast) {
                     Surface(
-                        color = TealLight,
+                        color = MaterialTheme.colorScheme.secondaryContainer,
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Row(
@@ -1221,13 +1233,13 @@ private fun StopoverItem(
                                 Icons.AutoMirrored.Filled.LastPage,
                                 contentDescription = null,
                                 modifier = Modifier.size(10.dp),
-                                tint = TealDark
+                                tint = MaterialTheme.colorScheme.onSecondaryContainer
                             )
                             Spacer(Modifier.width(3.dp))
                             Text(
                                 "ENDSTATION",
                                 style = MaterialTheme.typography.labelSmall,
-                                color = TealDark,
+                                color = MaterialTheme.colorScheme.onSecondaryContainer,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -1245,7 +1257,7 @@ private fun StopoverItem(
 private fun SevStopGuidance(info: SevStopInfo) {
     var expanded by remember(info) { mutableStateOf(false) }
     val uriHandler = LocalUriHandler.current
-    val accent = if (info.hasCoordinates) TealAccent else AmberAccent
+    val accent = if (info.hasCoordinates) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.tertiary
     Column(
         modifier = Modifier.fillMaxWidth().padding(top = 10.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp)
@@ -1261,7 +1273,7 @@ private fun SevStopGuidance(info: SevStopInfo) {
                 color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f))
         }
         info.reason?.takeIf { it.isNotBlank() }?.let { reason ->
-            Text(reason, style = MaterialTheme.typography.bodySmall, color = AmberAccent)
+            Text(reason, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.tertiary)
         }
         if (info.guidance.isNotBlank()) {
             Text(info.guidance, style = MaterialTheme.typography.bodySmall,

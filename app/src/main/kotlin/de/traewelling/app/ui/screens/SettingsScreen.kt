@@ -2,6 +2,7 @@ package de.traewelling.app.ui.screens
 
 import android.os.Build
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -13,6 +14,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalUriHandler
@@ -100,9 +102,9 @@ fun SettingsScreen(
                 }
             }
             item {
-                Text("Reisebegleitung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Reisebegleitung", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                         SettingsToggle(
                             title = "Fahrten automatisch erkennen",
@@ -149,9 +151,9 @@ fun SettingsScreen(
                 }
             }
             item {
-                Text("Bahn-Livedaten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text("Bahn-Livedaten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
-                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+                Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
                     Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         SettingsToggle(
                             title = "Zusätzliche Bahn-Livedaten",
@@ -174,16 +176,18 @@ fun SettingsScreen(
                 Text(
                     text = "Erscheinungsbild",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    elevation = CardDefaults.cardElevation(5.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(18.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -216,13 +220,18 @@ fun SettingsScreen(
                 Text(
                     text = "Stationsansagen mit GPS",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontWeight = FontWeight.SemiBold
                 )
                 Spacer(Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp)
+                    shape = RoundedCornerShape(18.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(Modifier.padding(16.dp)) {
                         SettingsToggle(
@@ -269,16 +278,18 @@ fun SettingsScreen(
                 Text(
                     text = "Sprachausgabe (TTS)",
                     style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    fontWeight = FontWeight.SemiBold
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    elevation = CardDefaults.cardElevation(5.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f)),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    shape = RoundedCornerShape(18.dp),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                    border = BorderStroke(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                    ),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         SettingsToggle(
@@ -372,11 +383,10 @@ private fun BackgroundTrackingBatteryCard() {
     Text(
         "Begleitung bei ausgeschaltetem Display",
         style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary
+        fontWeight = FontWeight.SemiBold
     )
     Spacer(Modifier.height(8.dp))
-    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(22.dp)) {
+    Card(modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(18.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow), border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)), elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -445,45 +455,97 @@ private fun BackgroundTrackingBatteryCard() {
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
+private data class ThemePreview(
+    val id: String,
+    val label: String,
+    val background: Color,
+    val card: Color,
+    val primary: Color,
+    val foreground: Color
+)
+
 @Composable
 private fun ThemeSelectionDropdown(
     selectedTheme: String,
     onThemeSelected: (String) -> Unit
 ) {
     val themes = listOf(
-        "LIGHT" to "Hell",
-        "DARK" to "Dunkel",
-        "AMOLED" to "AMOLED (Schwarz)"
+        ThemePreview(
+            id = "LIGHT",
+            label = "Hell",
+            background = Color(0xFFF7F7FC),
+            card = Color.White,
+            primary = Color(0xFF4B3BB5),
+            foreground = Color(0xFF1B1A22)
+        ),
+        ThemePreview(
+            id = "DARK",
+            label = "Dunkel",
+            background = Color(0xFF0B0D13),
+            card = Color(0xFF171A24),
+            primary = Color(0xFFB4A6FF),
+            foreground = Color(0xFFECEBF2)
+        ),
+        ThemePreview(
+            id = "AMOLED",
+            label = "AMOLED",
+            background = Color.Black,
+            card = Color(0xFF10131B),
+            primary = Color(0xFFB4A6FF),
+            foreground = Color(0xFFECEBF2)
+        )
     )
 
-    FlowRow(
+    Row(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        themes.forEach { (id, label) ->
-            FilterChip(
-                selected = selectedTheme == id,
-                onClick = { onThemeSelected(id) },
-                label = { Text(label) },
-                leadingIcon = {
-                    Icon(
-                        imageVector = when (id) {
-                            "DARK" -> Icons.Default.DarkMode
-                            "AMOLED" -> Icons.Default.Contrast
-                            else -> Icons.Default.LightMode
-                        },
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp)
-                    )
-                },
-                colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.14f),
-                    selectedLabelColor = MaterialTheme.colorScheme.primary,
-                    selectedLeadingIconColor = MaterialTheme.colorScheme.primary
+        themes.forEach { theme ->
+            val selected = selectedTheme == theme.id
+            Surface(
+                onClick = { onThemeSelected(theme.id) },
+                modifier = Modifier.weight(1f),
+                shape = RoundedCornerShape(12.dp),
+                color = theme.background,
+                border = BorderStroke(
+                    width = if (selected) 2.dp else 1.dp,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.primary
+                    } else {
+                        MaterialTheme.colorScheme.outlineVariant
+                    }
                 )
-            )
+            ) {
+                Column(Modifier.padding(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Box(
+                            Modifier
+                                .size(14.dp)
+                                .background(theme.card, RoundedCornerShape(4.dp))
+                        )
+                        Box(
+                            Modifier
+                                .size(14.dp)
+                                .background(theme.primary, RoundedCornerShape(4.dp))
+                        )
+                        Spacer(Modifier.weight(1f))
+                        if (selected) {
+                            Icon(
+                                Icons.Default.Check,
+                                contentDescription = null,
+                                tint = theme.primary,
+                                modifier = Modifier.size(12.dp)
+                            )
+                        }
+                    }
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        theme.label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = theme.foreground
+                    )
+                }
+            }
         }
     }
 }

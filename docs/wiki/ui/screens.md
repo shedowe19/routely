@@ -27,7 +27,20 @@ Die App nutzt einen HorizontalPager mit 4 Tabs:
 - Notifications (mit Badge bei ungelesenen)
 - Profil
 
-Die `NavigationBar` nutzt eine Surface-Optik mit tonal elevation. Ausgewählte Tabs werden über Primary-Farbe und einen dezenten Indicator hervorgehoben.
+Die `NavigationBar` liegt auf `surfaceContainer` mit einer feinen `outlineVariant`-Trennlinie.
+Ausgewählte Tabs nutzen `primaryContainer` als Indicator sowie Primary-Icon/-Text; das frühere
+tonal-elevation-10-dp-Erscheinungsbild entfällt.
+
+Der Feed schaltet `Freunde`/`Global` über den segmentierten `FeedTypeSwitcher` statt über eine
+`TabRow` mit Icons. Über das Filter-Icon öffnet sich ein Bottom-Sheet für ein einzelnes
+Verkehrsmittel; ein aktiver Filter wird am Icon markiert. Karten zeigen relative Zeit,
+Abfahrts-/Ankunftszeiten, Dauer und – sofern Echtzeitdaten vorliegen – einen
+Pünktlich-/Verspätungs-/Ausfall-Chip. Beim ersten Laden erscheinen Skeleton-Karten statt eines
+Spinners. Die Meldungsliste verwendet dichte Zeilen mit Trenner, Tagesgruppen (`Heute`,
+`Gestern`, …) und einem Skeleton beim Erstladen. Der eigene Profilkopf bündelt Avatar, Handle
+und die drei Kennzahlen in einer gemeinsamen Fläche; die Einstellungen sind über das Zahnrad
+im Profilkopf erreichbar, Abmelden über das zweite Icon. Im Check-in bietet die
+Abfahrtsschnellwahl `Jetzt`, `+15 min`, `+30 min` und `+1 h`.
 
 Zusätzliche Screens werden als Stack navigiert:
 

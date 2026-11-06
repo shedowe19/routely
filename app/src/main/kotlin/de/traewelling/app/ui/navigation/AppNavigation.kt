@@ -3,6 +3,7 @@ package de.traewelling.app.ui.navigation
 import android.net.Uri
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
@@ -12,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
@@ -93,6 +96,7 @@ fun MainNavigation(
             val tabs = listOf(Screen.Feed, Screen.CheckIn, Screen.Notifications, Screen.Profile)
             val pagerState = rememberPagerState(pageCount = { tabs.size })
             val coroutineScope = rememberCoroutineScope()
+            val haptic = LocalHapticFeedback.current
             LaunchedEffect(navigationRequest?.token) {
                 val request = currentNavigation
                 if (request?.showCheckIn == true) {
@@ -103,38 +107,46 @@ fun MainNavigation(
 
             Scaffold(
                 bottomBar = {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        tonalElevation = 10.dp
-                    ) {
-                        tabs.forEachIndexed { index, screen ->
-                            NavigationBarItem(
-                                icon = {
-                                    if (screen == Screen.Notifications && unreadCount > 0) {
-                                        BadgedBox(badge = {
-                                            Badge { Text(if (unreadCount > 99) "99+" else unreadCount.toString()) }
-                                        }) {
+                    Column {
+                        HorizontalDivider(
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainer,
+                            tonalElevation = 0.dp
+                        ) {
+                            tabs.forEachIndexed { index, screen ->
+                                NavigationBarItem(
+                                    icon = {
+                                        if (screen == Screen.Notifications && unreadCount > 0) {
+                                            BadgedBox(badge = {
+                                                Badge {
+                                                    Text(if (unreadCount > 99) "99+" else unreadCount.toString())
+                                                }
+                                            }) {
+                                                Icon(screen.icon, screen.label)
+                                            }
+                                        } else {
                                             Icon(screen.icon, screen.label)
                                         }
-                                    } else {
-                                        Icon(screen.icon, screen.label)
+                                    },
+                                    label = { Text(screen.label) },
+                                    selected = pagerState.currentPage == index,
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        coroutineScope.launch {
+                                            pagerState.animateScrollToPage(index)
+                                        }
                                     }
-                                },
-                                label = { Text(screen.label) },
-                                selected = pagerState.currentPage == index,
-                                colors = NavigationBarItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                                    unselectedIconColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f),
-                                    unselectedTextColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                                ),
-                                onClick = {
-                                    coroutineScope.launch {
-                                        pagerState.animateScrollToPage(index)
-                                    }
-                                }
-                            )
+                                )
+                            }
                         }
                     }
                 }

@@ -1,11 +1,17 @@
 package de.traewelling.app.ui.components
 
 import android.text.format.DateFormat
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
@@ -13,7 +19,7 @@ import de.traewelling.app.viewmodel.DepartureSearchTime
 import java.time.Instant
 import java.time.ZoneId
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DepartureSearchTimeSelector(
     timeMillis: Long?,
@@ -27,23 +33,84 @@ fun DepartureSearchTimeSelector(
     var showDate by remember { mutableStateOf(false) }
     var showTime by remember { mutableStateOf(false) }
 
-    Card(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
-        Column(Modifier.padding(12.dp)) {
-            Text("Abfahrten ab", style = MaterialTheme.typography.labelMedium)
-            Text(DepartureSearchTime.label(timeMillis, zone), style = MaterialTheme.typography.titleMedium)
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                TextButton(modifier = Modifier.weight(1f), enabled = enabled, onClick = {
-                    editingMillis = timeMillis ?: System.currentTimeMillis()
-                    showDate = true
-                }) { Text("Datum und Uhrzeit") }
-                if (timeMillis != null) {
-                    TextButton(enabled = enabled, onClick = { onSelected(null) }) { Text("Jetzt") }
+    Surface(
+        onClick = {
+            editingMillis = timeMillis ?: System.currentTimeMillis()
+            showDate = true
+        },
+        enabled = enabled,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primaryContainer,
+                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Box(
+                    modifier = Modifier.size(34.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Default.CalendarMonth, null, modifier = Modifier.size(18.dp))
                 }
             }
-            if (timeMillis != null) {
-                Text("Zeitzone: ${zone.id}. Vergangene Fahrten sind von den verfügbaren Daten abhängig.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    "Abfahrt ab",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    DepartureSearchTime.label(timeMillis, zone),
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            }
+            Icon(
+                Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+
+    if (enabled) {
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AssistChip(
+                onClick = { onSelected(null) },
+                label = { Text("Jetzt", style = MaterialTheme.typography.labelSmall) }
+            )
+            listOf(15, 30, 60).forEach { minutes ->
+                AssistChip(
+                    onClick = {
+                        onSelected(System.currentTimeMillis() + minutes * 60_000L)
+                    },
+                    label = {
+                        Text(
+                            if (minutes == 60) "+1 h" else "+$minutes min",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                )
             }
         }
     }

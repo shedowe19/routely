@@ -6,6 +6,13 @@ Kurze Zusammenfassung technischer Entscheidungen, für die es eventuell keine ei
 
 ## Entscheidungen
 
+- **Design-Refresh „Klar & ruhig“ vom 06.11.2026**: Die App verwendet ein tokenbasiertes
+  Material3-System mit ruhigen Container-Tonwerten, eigener Typografie und reduzierter
+  Farbverwendung. Kompakter Kopf, segmentierter Feed, Zeiten in Feedkarten, dichte
+  Meldungszeilen und ein einheitlicher Profilkopf ersetzen die bisherigen Verläufe und
+  Kartenvarianten. Keine Funktion ändert sich. Details:
+  [ADR Design-Refresh](../entscheidungen/2026-11-06-design-refresh-klar-und-ruhig.md).
+
 - **Gemeinsamer SEV-Restweg vom 07.10.2026**: Unterschiedlich lange historische Anfahrtswege dürfen auf streng belegtem gleichem geordnetem Restweg eine gemeinsame GPS-Prognose liefern, sofern alle plausiblen Kandidaten eigene frische Bewegung belegen und die späteste ETA höchstens 60 Sekunden von den übrigen Kandidaten abweicht. Relative Querabstände trennen räumlich nicht plausible Alternativen; eine solche Neubewertung gilt auch für frühere Bindungen. Die Regel beweist weder den historischen Weg noch einen offiziellen SEV-Fahrweg und erhält GPS-, Sprung-, Ereignis- und Ablaufgrenzen. Details: [ADR gemeinsamer SEV-Restweg](../entscheidungen/2026-10-07-sev-gemeinsamer-restweg.md).
 - **SEV-Verfügbarkeit vom 07.10.2026**: Eine eindeutig am veröffentlichten Punkt belegte zusätzliche Richtungsfrist sperrt keine anderen gültigen Fahrtrichtungen. Unbekannte allgemeine Beschränkungen bleiben konservativ. Kurzzeitige Straßenabruf-Fehler erhalten einen kürzeren Cache als unbrauchbare Geometrien; providerseitige Wartefristen begrenzen den gesamten Prozess. Die Anzeige unterscheidet fehlende bestätigte Ersatzhaltpunkte von fehlender Straßengeometrie. Details: [SEV-Haltestellen](../module/sev-haltestellen.md), [GPS-Zeiten](../module/gps-zeiten.md) und [Externe Schnittstellen](../api/externe-schnittstellen.md).
 
