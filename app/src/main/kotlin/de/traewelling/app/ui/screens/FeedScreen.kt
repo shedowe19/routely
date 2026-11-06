@@ -52,11 +52,12 @@ fun FeedScreen(
         }
     }
 
-    val shouldLoadMore = remember {
+    val shouldLoadMore = remember(filteredStatuses) {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            filteredStatuses.isNotEmpty() && lastVisible >= filteredStatuses.size - 3 &&
-                uiState.hasMore && !uiState.isLoading && !uiState.isRefreshing && uiState.error == null
+            uiState.hasMore && !uiState.isLoading && !uiState.isRefreshing &&
+                uiState.error == null &&
+                (filteredStatuses.isEmpty() || lastVisible >= filteredStatuses.size - 3)
         }
     }
     LaunchedEffect(shouldLoadMore.value) {
@@ -124,6 +125,13 @@ fun FeedScreen(
                         icon = Icons.Default.Train,
                         title = "Noch keine Fahrten",
                         message = "Zieh nach unten zum Aktualisieren oder wechsle in den globalen Feed."
+                    )
+                filteredStatuses.isEmpty() && uiState.isLoading ->
+                    StateMessage(
+                        icon = Icons.Default.FilterList,
+                        title = "Weitere Fahrten werden geladen",
+                        message = "Wir suchen nach passenden Fahrten für diesen Filter.",
+                        loading = true
                     )
                 filteredStatuses.isEmpty() ->
                     StateMessage(

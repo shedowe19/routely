@@ -263,7 +263,8 @@ private fun RideRecognitionCard(
     Surface(
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .heightIn(max = 340.dp),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainerLow,
         border = BorderStroke(
@@ -271,7 +272,11 @@ private fun RideRecognitionCard(
             MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
         )
     ) {
-        Column(Modifier.padding(14.dp)) {
+        Column(
+            Modifier
+                .verticalScroll(rememberScrollState())
+                .padding(14.dp)
+        ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,

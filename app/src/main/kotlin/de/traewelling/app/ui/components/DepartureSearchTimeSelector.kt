@@ -88,7 +88,6 @@ fun DepartureSearchTimeSelector(
     }
 
     if (enabled) {
-        val baseMillis = System.currentTimeMillis()
         FlowRow(
             modifier = Modifier
                 .fillMaxWidth()
@@ -102,7 +101,9 @@ fun DepartureSearchTimeSelector(
             )
             listOf(15, 30, 60).forEach { minutes ->
                 AssistChip(
-                    onClick = { onSelected(baseMillis + minutes * 60_000L) },
+                    onClick = {
+                        onSelected(System.currentTimeMillis() + minutes * 60_000L)
+                    },
                     label = {
                         Text(
                             if (minutes == 60) "+1 h" else "+$minutes min",

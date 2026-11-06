@@ -28,7 +28,7 @@ fun formatRelativeTimestamp(
     if (isoTimestamp.isBlank()) return ""
     return try {
         val then = ZonedDateTime.parse(isoTimestamp)
-            .withZoneSameInstant(ZoneId.systemDefault())
+            .withZoneSameInstant(now.zone)
         val minutes = Duration.between(then, now).toMinutes()
         when {
             minutes < 1 -> "gerade eben"
