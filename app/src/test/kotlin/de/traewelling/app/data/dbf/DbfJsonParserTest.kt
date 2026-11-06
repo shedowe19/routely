@@ -48,11 +48,15 @@ class DbfJsonParserTest {
         ).forEach { json -> assertTrue(json, runCatching { DbfJsonParser.parse(json, "8000152", fetched) }.isFailure) }
     }
 
-    @Test fun refusesInvalidEvaAndEmptyBoardIsSuccessful() {
-        listOf("Hannover Hbf", "0", "8000152/../other", "0000000").forEach { eva ->
-            assertTrue(runCatching { DbfJsonParser.parse("{\"departures\":[]}", eva, fetched) }.isFailure)
+    @Test fun acceptsEvaOrStationNameAndRejectsUnsafeKeys() {
+        listOf("0", "8000152/../other", "8000152?token=x", "0000000").forEach { key ->
+            assertTrue(key, runCatching { DbfJsonParser.parse("{\"departures\":[]}", key, fetched) }.isFailure)
         }
         assertTrue(DbfJsonParser.parse("{\"departures\":[]}", "8000152", fetched).departures.isEmpty())
+        assertEquals(
+            "Hannover Hbf",
+            DbfJsonParser.parse("{\"departures\":[]}", "Hannover Hbf", fetched).eva
+        )
     }
 
     private fun fixture() = requireNotNull(javaClass.getResource("/dbf/public-hannover-v3.json")).readText()
