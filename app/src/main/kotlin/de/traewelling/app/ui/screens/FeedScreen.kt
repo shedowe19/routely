@@ -13,12 +13,14 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import de.traewelling.app.ui.components.FeedSkeletonList
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
@@ -26,7 +28,7 @@ import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.viewmodel.FeedType
 import de.traewelling.app.viewmodel.FeedViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun FeedScreen(
     viewModel: FeedViewModel,
@@ -36,6 +38,13 @@ fun FeedScreen(
 ) {
     val uiState     by viewModel.uiState.collectAsState()
     val listState   = rememberLazyListState()
+    var showFilters by rememberSaveable { mutableStateOf(false) }
+    var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
+    val filteredStatuses = remember(uiState.statuses, selectedCategory) {
+        selectedCategory?.let { category ->
+            uiState.statuses.filter { it.checkin?.category == category }
+        } ?: uiState.statuses
+    }
     // Trigger initial load
     LaunchedEffect(Unit) {
         if (uiState.statuses.isEmpty() && !uiState.isLoading) {
@@ -46,8 +55,8 @@ fun FeedScreen(
     val shouldLoadMore = remember {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= uiState.statuses.size - 3 && uiState.hasMore && !uiState.isLoading &&
-                !uiState.isRefreshing && uiState.error == null
+            filteredStatuses.isNotEmpty() && lastVisible >= filteredStatuses.size - 3 &&
+                uiState.hasMore && !uiState.isLoading && !uiState.isRefreshing && uiState.error == null
         }
     }
     LaunchedEffect(shouldLoadMore.value) {
@@ -60,6 +69,17 @@ fun FeedScreen(
                 title = "Routely",
                 showBrandMark = true,
                 actions = {
+                    IconButton(onClick = { showFilters = true }) {
+                        BadgedBox(
+                            badge = {
+                                if (selectedCategory != null) {
+                                    Badge()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.FilterList, "Feed filtern")
+                        }
+                    }
                     IconButton(onClick = onSearchUsersClick) {
                         Icon(Icons.Default.Search, "Benutzer suchen")
                     }
@@ -105,13 +125,21 @@ fun FeedScreen(
                         title = "Noch keine Fahrten",
                         message = "Zieh nach unten zum Aktualisieren oder wechsle in den globalen Feed."
                     )
+                filteredStatuses.isEmpty() ->
+                    StateMessage(
+                        icon = Icons.Default.FilterList,
+                        title = "Keine Fahrten für diesen Filter",
+                        message = "Wähle ein anderes Verkehrsmittel oder setze den Filter zurück.",
+                        actionLabel = "Filter zurücksetzen",
+                        onAction = { selectedCategory = null }
+                    )
                 else -> {
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp)
                     ) {
-                        items(uiState.statuses, key = { it.id }) { status ->
+                        items(filteredStatuses, key = { it.id }) { status ->
                             StatusCard(
                                 status = status,
                                 onLike = { viewModel.likeStatus(status.id) },
@@ -132,7 +160,70 @@ fun FeedScreen(
             }
         }
     }
+
+    if (showFilters) {
+        FeedFilterSheet(
+            selectedCategory = selectedCategory,
+            onSelect = {
+                selectedCategory = it
+                showFilters = false
+            },
+            onDismiss = { showFilters = false }
+        )
+    }
 }
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@Composable
+private fun FeedFilterSheet(
+    selectedCategory: String?,
+    onSelect: (String?) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val categories = listOf(
+        null to "Alle",
+        "nationalExpress" to "Fernverkehr",
+        "regionalExp" to "Regional",
+        "suburban" to "S-Bahn",
+        "subway" to "U-Bahn",
+        "tram" to "Tram",
+        "bus" to "Bus",
+        "ferry" to "Fähre"
+    )
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        containerColor = MaterialTheme.colorScheme.surfaceContainerLow
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 20.dp)
+                .padding(bottom = 28.dp)
+        ) {
+            Text("Feed filtern", style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Zeige nur Fahrten eines Verkehrsmittels.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(14.dp))
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                categories.forEach { (id, label) ->
+                    FilterChip(
+                        selected = selectedCategory == id,
+                        onClick = { onSelect(id) },
+                        label = { Text(label) }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable

@@ -72,6 +72,17 @@ Alpha-Animation (`rememberInfiniteTransition`) signalisiert Aktivität ohne Layo
 Meldungen werden nach `createdAt` in `Heute`, `Gestern` und absolute Tagesgruppen sortiert.
 Die Kopfzeile ist `labelMedium` auf `onSurfaceVariant`.
 
+### Settings: Theme-Vorschau
+
+Die drei Theme-Optionen erscheinen als kleine Vorschaukarten mit Hintergrund-, Karten- und
+Primary-Swatch, Auswahlrahmen und Checkmark statt als FilterChips. Die Vorschau verwendet
+feste Farben, damit Hell/Dunkel/AMOLED unabhängig vom aktiven Theme vergleichbar bleiben.
+
+### Abfahrtsschnellwahl
+
+Unter der kompakten Datumszeile im Check-in stehen `Jetzt`, `+15 min`, `+30 min` und `+1 h`
+als `AssistChip`s. Sie setzen die Abfahrtszeit direkt, ohne den Datumsdialog zu öffnen.
+
 ### StatPill
 
 Kleines Inline-Statistik-Badge, weiterhin für Detail-Metriken und Distanz/Punkte im

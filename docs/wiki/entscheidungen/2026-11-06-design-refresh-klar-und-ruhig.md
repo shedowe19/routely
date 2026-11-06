@@ -41,7 +41,8 @@ Umgesetzt wird Richtung **A „Klar & ruhig“**:
 
 Ergänzend im selben Durchlauf: relative Zeitangaben im Feed, Status-Chips aus API-Echtzeit
 (Pünktlich/Verspätung/Ausfall), Dauer im Routenpanel, Skeleton-Ladezustände, Tagesgruppen in
-den Meldungen und dezentes haptisches Feedback für Likes und Tabwechsel.
+den Meldungen, dezentes haptisches Feedback für Likes und Tabwechsel, Feed-Filter nach
+Verkehrsmittel, Theme-Vorschaukarten in den Einstellungen und Abfahrtsschnellwahl im Check-in.
 
 Funktionen, Datenflüsse, API-Aufrufe und Navigationsziele bleiben unverändert.
 

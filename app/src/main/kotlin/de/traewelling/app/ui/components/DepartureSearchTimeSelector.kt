@@ -19,7 +19,7 @@ import de.traewelling.app.viewmodel.DepartureSearchTime
 import java.time.Instant
 import java.time.ZoneId
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun DepartureSearchTimeSelector(
     timeMillis: Long?,
@@ -78,21 +78,39 @@ fun DepartureSearchTimeSelector(
                     color = MaterialTheme.colorScheme.onSurface
                 )
             }
-            if (timeMillis != null) {
-                TextButton(
-                    enabled = enabled,
-                    onClick = { onSelected(null) },
-                    contentPadding = PaddingValues(horizontal = 8.dp)
-                ) {
-                    Text("Jetzt")
-                }
-            }
             Icon(
                 Icons.Default.ChevronRight,
                 contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.size(18.dp)
             )
+        }
+    }
+
+    if (enabled) {
+        val baseMillis = System.currentTimeMillis()
+        FlowRow(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 2.dp),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            AssistChip(
+                onClick = { onSelected(null) },
+                label = { Text("Jetzt", style = MaterialTheme.typography.labelSmall) }
+            )
+            listOf(15, 30, 60).forEach { minutes ->
+                AssistChip(
+                    onClick = { onSelected(baseMillis + minutes * 60_000L) },
+                    label = {
+                        Text(
+                            if (minutes == 60) "+1 h" else "+$minutes min",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                )
+            }
         }
     }
 
