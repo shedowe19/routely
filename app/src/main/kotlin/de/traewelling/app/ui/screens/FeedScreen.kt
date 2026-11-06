@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import de.traewelling.app.ui.components.FeedSkeletonList
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
 import de.traewelling.app.ui.components.TraewellingTopAppBar
@@ -88,12 +89,7 @@ fun FeedScreen(
         ) {
             when {
                 (uiState.isLoading || uiState.isRefreshing) && uiState.statuses.isEmpty() ->
-                    StateMessage(
-                        icon = Icons.Default.Train,
-                        title = "Feed wird geladen",
-                        message = "Wir holen die neuesten Fahrten für dich.",
-                        loading = true
-                    )
+                    FeedSkeletonList()
                 uiState.error != null && uiState.statuses.isEmpty() ->
                     StateMessage(
                         icon = Icons.Default.ErrorOutline,

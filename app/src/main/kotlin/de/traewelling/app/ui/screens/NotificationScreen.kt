@@ -19,11 +19,16 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import de.traewelling.app.data.model.Notification
+import de.traewelling.app.ui.components.NotificationSkeletonList
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.navigation.NotificationTarget
 import de.traewelling.app.ui.navigation.NotificationTargetResolver
 import de.traewelling.app.viewmodel.NotificationViewModel
+import java.time.LocalDate
+import java.time.ZoneId
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -87,12 +92,7 @@ fun NotificationScreen(
         ) {
             when {
                 (uiState.isLoading || uiState.isRefreshing) && uiState.notifications.isEmpty() ->
-                    StateMessage(
-                        icon = Icons.Default.Notifications,
-                        title = "Meldungen werden geladen",
-                        message = "Neue Benachrichtigungen werden abgefragt.",
-                        loading = true
-                    )
+                    NotificationSkeletonList()
                 uiState.error != null && uiState.notifications.isEmpty() ->
                     StateMessage(
                         icon = Icons.Default.ErrorOutline,
@@ -114,35 +114,69 @@ fun NotificationScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
-                        itemsIndexed(
-                            uiState.notifications,
-                            key = { _, notification -> notification.id }
-                        ) { index, notification ->
-                            val target = remember(notification.link, serverUrl) {
-                                NotificationTargetResolver.resolve(notification.link, serverUrl)
-                            }
-                            NotificationItem(
-                                notification = notification,
-                                target = target,
-                                showDivider = index < uiState.notifications.lastIndex,
-                                onClick = {
-                                    if (notification.readAt == null) {
-                                        viewModel.markAsRead(notification.id)
-                                    }
-                                    when (target) {
-                                        is NotificationTarget.Status -> onStatusClick(target.id)
-                                        is NotificationTarget.UserProfile -> onUserClick(target.username)
-                                        null -> Unit
-                                    }
+                        uiState.notifications
+                            .groupBy { notificationDay(it.createdAt) }
+                            .forEach { (day, dayNotifications) ->
+                                item(key = "day-$day") {
+                                    NotificationDayHeader(day)
                                 }
-                            )
-                        }
+                                itemsIndexed(
+                                    dayNotifications,
+                                    key = { _, notification -> notification.id }
+                                ) { index, notification ->
+                                    val target = remember(notification.link, serverUrl) {
+                                        NotificationTargetResolver.resolve(notification.link, serverUrl)
+                                    }
+                                    NotificationItem(
+                                        notification = notification,
+                                        target = target,
+                                        showDivider = index < dayNotifications.lastIndex,
+                                        onClick = {
+                                            if (notification.readAt == null) {
+                                                viewModel.markAsRead(notification.id)
+                                            }
+                                            when (target) {
+                                                is NotificationTarget.Status -> onStatusClick(target.id)
+                                                is NotificationTarget.UserProfile -> onUserClick(target.username)
+                                                null -> Unit
+                                            }
+                                        }
+                                    )
+                                }
+                            }
                     }
                 }
             }
         }
     }
 }
+}
+
+@Composable
+private fun NotificationDayHeader(label: String) {
+    Text(
+        label,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp),
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+
+private fun notificationDay(iso: String?): String {
+    val timestamp = iso ?: return "Älter"
+    val date = runCatching {
+        ZonedDateTime.parse(timestamp)
+            .withZoneSameInstant(ZoneId.systemDefault())
+            .toLocalDate()
+    }.getOrNull() ?: return "Älter"
+    val today = LocalDate.now()
+    return when (date) {
+        today -> "Heute"
+        today.minusDays(1) -> "Gestern"
+        else -> date.format(DateTimeFormatter.ofPattern("dd.MM.yyyy"))
+    }
 }
 
 @Composable

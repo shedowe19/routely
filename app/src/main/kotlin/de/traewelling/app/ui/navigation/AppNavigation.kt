@@ -13,6 +13,8 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
@@ -94,6 +96,7 @@ fun MainNavigation(
             val tabs = listOf(Screen.Feed, Screen.CheckIn, Screen.Notifications, Screen.Profile)
             val pagerState = rememberPagerState(pageCount = { tabs.size })
             val coroutineScope = rememberCoroutineScope()
+            val haptic = LocalHapticFeedback.current
             LaunchedEffect(navigationRequest?.token) {
                 val request = currentNavigation
                 if (request?.showCheckIn == true) {
@@ -137,6 +140,7 @@ fun MainNavigation(
                                         unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
                                     ),
                                     onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         coroutineScope.launch {
                                             pagerState.animateScrollToPage(index)
                                         }

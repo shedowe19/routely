@@ -32,8 +32,10 @@ Ausgewählte Tabs nutzen `primaryContainer` als Indicator sowie Primary-Icon/-Te
 tonal-elevation-10-dp-Erscheinungsbild entfällt.
 
 Der Feed schaltet `Freunde`/`Global` über den segmentierten `FeedTypeSwitcher` statt über eine
-`TabRow` mit Icons. Karten zeigen Abfahrts-/Ankunftszeiten direkt an den Stationen. Die
-Meldungsliste verwendet dichte Zeilen mit Trenner statt einer Karte pro Eintrag. Der eigene
+`TabRow` mit Icons. Karten zeigen relative Zeit, Abfahrts-/Ankunftszeiten, Dauer und – sofern
+Echtzeitdaten vorliegen – einen Pünktlich-/Verspätungs-/Ausfall-Chip. Beim ersten Laden
+erscheinen Skeleton-Karten statt eines Spinners. Die Meldungsliste verwendet dichte Zeilen mit
+Trenner, Tagesgruppen (`Heute`, `Gestern`, …) und einem Skeleton beim Erstladen. Der eigene
 Profilkopf bündelt Avatar, Handle und die drei Kennzahlen in einer gemeinsamen Fläche; die
 Einstellungen sind über das Zahnrad im Profilkopf erreichbar, Abmelden über das zweite Icon.
 

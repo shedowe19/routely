@@ -37,10 +37,13 @@ Check-in-Karte für Feed- und Profil-Listen.
 
 Zeigt:
 
-- User-Avatar (Fallback: Initiale auf `primaryContainer`) und Name
+- User-Avatar (Fallback: Initiale auf `primaryContainer`) und Name; relative Zeit
+  (`formatRelativeTimestamp`)
 - Linien-Badge mit `TransportColors` und passendem Verkehrsmittel-Icon
 - Start → Ziel mit Mini-Timeline und **Abfahrts-/Ankunftszeit** (bevorzugt manuelle
   Korrektur, sonst effektive API-Zeit)
+- Status-Chip aus API-Echtzeit: `Pünktlich`, `+N min`, `-N min` oder `Fällt aus`; ohne
+  Echtzeitpaar erscheint stattdessen die Fahrtdauer
 - Punkte-Badge
 - Status-Text (body)
 - Like-Button mit Zähler
@@ -53,10 +56,21 @@ Feedkarten besitzen einen Handler; eigene und fremde Profilkarten übergeben `nu
 
 ### StateMessage
 
-Einheitliche Darstellung für Lade-, Fehler- und Empty-States in Screens. Der Icon-Kreis ist
+Einheitliche Darstellung für Fehler- und Empty-States in Screens. Der Icon-Kreis ist
 60 dp groß, Titel `titleMedium`/SemiBold, Erklärung `bodyMedium` auf `onSurfaceVariant`.
 Wird im Feed, Check-in, StatusDetail, Profil, Benutzerprofil, Benutzersuche und
 Notifications genutzt.
+
+### LoadingSkeletons
+
+`FeedSkeletonList` und `NotificationSkeletonList` ersetzen den zentrierten Spinner beim
+ersten Laden. Die Karten-/Zeilenformen entsprechen den echten Inhalten; eine pulsierende
+Alpha-Animation (`rememberInfiniteTransition`) signalisiert Aktivität ohne Layoutsprung.
+
+### NotificationDayHeader
+
+Meldungen werden nach `createdAt` in `Heute`, `Gestern` und absolute Tagesgruppen sortiert.
+Die Kopfzeile ist `labelMedium` auf `onSurfaceVariant`.
 
 ### StatPill
 

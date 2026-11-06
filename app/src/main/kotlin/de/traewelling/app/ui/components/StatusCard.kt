@@ -15,6 +15,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -23,7 +25,8 @@ import de.traewelling.app.data.model.CheckinInfo
 import de.traewelling.app.data.model.Status
 import de.traewelling.app.ui.theme.AmberAccent
 import de.traewelling.app.ui.theme.TransportColors
-import de.traewelling.app.util.formatTimestamp
+import de.traewelling.app.util.formatRelativeTimestamp
+import java.time.Duration
 import java.time.LocalDateTime
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -41,6 +44,7 @@ fun StatusCard(
     val isLiked = status.liked == true
     val category = checkin?.category ?: checkin?.lineName?.split(" ")?.firstOrNull()
     val accentColor = TransportColors.forCategory(category)
+    val haptic = LocalHapticFeedback.current
 
     Card(
         modifier = Modifier
@@ -82,7 +86,7 @@ fun StatusCard(
                             modifier = Modifier.weight(1f, fill = false)
                         )
                         Text(
-                            " · ${formatTimestamp(status.createdAt ?: "")}",
+                            " · ${formatRelativeTimestamp(status.createdAt ?: "")}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             maxLines = 1
@@ -113,7 +117,10 @@ fun StatusCard(
                         .clip(RoundedCornerShape(10.dp))
                         .clickable(
                             enabled = onLike != null && status.isLikable != false,
-                            onClick = { onLike?.invoke() }
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                onLike?.invoke()
+                            }
                         )
                         .padding(horizontal = 7.dp, vertical = 4.dp),
                     verticalAlignment = Alignment.CenterVertically
@@ -202,6 +209,8 @@ private fun StatusAvatar(imageUrl: String?, displayName: String?) {
 private fun JourneyPanel(checkin: CheckinInfo, accentColor: Color) {
     val departure = formatClock(checkin.manualDeparture ?: checkin.origin?.effectiveDeparture)
     val arrival = formatClock(checkin.manualArrival ?: checkin.destination?.effectiveArrival)
+    val status = journeyStatus(checkin)
+    val duration = checkin.duration?.takeIf { it > 0 }?.let(::formatDuration)
 
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -216,7 +225,22 @@ private fun JourneyPanel(checkin: CheckinInfo, accentColor: Color) {
                     accentColor = accentColor
                 )
 
+                if (status != null) {
+                    Spacer(Modifier.width(6.dp))
+                    JourneyStatusChip(status)
+                }
+
                 Spacer(Modifier.weight(1f))
+
+                if (duration != null && status == null) {
+                    Text(
+                        duration,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
 
                 if ((checkin.points ?: 0) > 0) {
                     Icon(
@@ -340,6 +364,86 @@ private fun transportIcon(category: String?) = when (category) {
     "subway" -> Icons.Default.Subway
     "ferry" -> Icons.Default.DirectionsBoat
     else -> Icons.Default.Train
+}
+
+private data class JourneyStatus(
+    val label: String,
+    val color: Color,
+    val container: Color
+)
+
+@Composable
+private fun journeyStatus(checkin: CheckinInfo): JourneyStatus? {
+    if (checkin.origin?.cancelled == true || checkin.destination?.cancelled == true) {
+        return JourneyStatus(
+            label = "Fällt aus",
+            color = MaterialTheme.colorScheme.onErrorContainer,
+            container = MaterialTheme.colorScheme.errorContainer
+        )
+    }
+    val delay = delayMinutes(checkin) ?: return null
+    return when {
+        delay > 0 -> JourneyStatus(
+            label = "+$delay min",
+            color = MaterialTheme.colorScheme.onTertiaryContainer,
+            container = MaterialTheme.colorScheme.tertiaryContainer
+        )
+        delay < 0 -> JourneyStatus(
+            label = "$delay min",
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            container = MaterialTheme.colorScheme.secondaryContainer
+        )
+        else -> JourneyStatus(
+            label = "Pünktlich",
+            color = MaterialTheme.colorScheme.onSecondaryContainer,
+            container = MaterialTheme.colorScheme.secondaryContainer
+        )
+    }
+}
+
+@Composable
+private fun JourneyStatusChip(status: JourneyStatus) {
+    Surface(color = status.container, shape = RoundedCornerShape(6.dp)) {
+        Text(
+            status.label,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            style = MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.SemiBold,
+            color = status.color,
+            maxLines = 1
+        )
+    }
+}
+
+private fun delayMinutes(checkin: CheckinInfo): Long? {
+    val pairs = listOfNotNull(
+        checkin.origin?.let { origin ->
+            origin.departurePlanned?.let { planned ->
+                origin.departureReal?.let { real -> planned to real }
+            }
+        },
+        checkin.destination?.let { destination ->
+            destination.arrivalPlanned?.let { planned ->
+                destination.arrivalReal?.let { real -> planned to real }
+            }
+        }
+    )
+    val (planned, real) = pairs.firstOrNull() ?: return null
+    val plannedInstant = parseInstant(planned) ?: return null
+    val realInstant = parseInstant(real) ?: return null
+    return Duration.between(plannedInstant, realInstant).toMinutes()
+}
+
+private fun parseInstant(iso: String) = runCatching {
+    OffsetDateTime.parse(iso).toInstant()
+}.recoverCatching {
+    LocalDateTime.parse(iso).atZone(ZoneId.systemDefault()).toInstant()
+}.getOrNull()
+
+private fun formatDuration(minutes: Int): String {
+    if (minutes < 60) return "$minutes min"
+    val rest = minutes % 60
+    return if (rest == 0) "${minutes / 60} h" else "${minutes / 60} h ${rest.toString().padStart(2, '0')}"
 }
 
 private fun formatClock(iso: String?): String? {

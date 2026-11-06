@@ -39,6 +39,10 @@ Umgesetzt wird Richtung **A „Klar & ruhig“**:
 - Fahrtdetail: harte Farbkonstanten wurden auf Theme-Rollen (`secondary`, `tertiary`,
   `error`, Container) umgestellt; die Timeline bleibt funktional unverändert.
 
+Ergänzend im selben Durchlauf: relative Zeitangaben im Feed, Status-Chips aus API-Echtzeit
+(Pünktlich/Verspätung/Ausfall), Dauer im Routenpanel, Skeleton-Ladezustände, Tagesgruppen in
+den Meldungen und dezentes haptisches Feedback für Likes und Tabwechsel.
+
 Funktionen, Datenflüsse, API-Aufrufe und Navigationsziele bleiben unverändert.
 
 ## Konsequenzen
