@@ -28,8 +28,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import de.traewelling.app.ui.theme.DeepIndigo
-import de.traewelling.app.ui.theme.TealAccent
 import de.traewelling.app.viewmodel.AuthViewModel
 import de.traewelling.app.data.api.ApiServerUrl
 import de.traewelling.app.R
@@ -47,7 +45,10 @@ fun SetupScreen(viewModel: AuthViewModel) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(DeepIndigo, Color(0xFF1A237E))
+                    colors = listOf(
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+                        MaterialTheme.colorScheme.background
+                    )
                 )
             )
     ) {
@@ -62,34 +63,35 @@ fun SetupScreen(viewModel: AuthViewModel) {
 
             // Logo Section
             Surface(
-                color = Color.White.copy(alpha = 0.1f),
+                color = MaterialTheme.colorScheme.primaryContainer,
                 shape = CircleShape,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.24f)),
-                modifier = Modifier.size(108.dp)
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                ),
+                modifier = Modifier.size(96.dp)
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
                         imageVector = Icons.Default.Train,
                         contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(48.dp)
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(42.dp)
                     )
                 }
             }
-            
-            Spacer(Modifier.height(16.dp))
-            
+
+            Spacer(Modifier.height(14.dp))
+
             Text(
                 text = "Routely",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.Black,
-                color = Color.White,
-                letterSpacing = 1.sp
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onBackground
             )
             Text(
                 text = "Dein Zug-Check-in Begleiter",
                 style = MaterialTheme.typography.bodyLarge,
-                color = Color.White.copy(alpha = 0.7f)
+                color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
             Spacer(Modifier.height(18.dp))
@@ -106,20 +108,22 @@ fun SetupScreen(viewModel: AuthViewModel) {
 
             Card(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(30.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                elevation = CardDefaults.cardElevation(defaultElevation = 12.dp),
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.18f))
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+                )
             ) {
                 Column(
-                    modifier = Modifier.padding(24.dp),
+                    modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
                         "Anmelden",
                         style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = DeepIndigo
+                        color = MaterialTheme.colorScheme.onSurface
                     )
                     
                     Spacer(Modifier.height(24.dp))
@@ -130,7 +134,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
                         onValueChange = viewModel::updateServerUrl,
                         label = { Text("Server-URL") },
                         placeholder = { Text("https://traewelling.de") },
-                        leadingIcon = { Icon(Icons.Default.Language, null, tint = DeepIndigo) },
+                        leadingIcon = { Icon(Icons.Default.Language, null, tint = MaterialTheme.colorScheme.primary) },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
                         shape = RoundedCornerShape(14.dp),
@@ -145,13 +149,13 @@ fun SetupScreen(viewModel: AuthViewModel) {
                         onValueChange = viewModel::updateAccessToken,
                         label = { Text("Access-Token") },
                         placeholder = { Text("Dein persönlicher API-Token") },
-                        leadingIcon = { Icon(Icons.Default.Key, null, tint = DeepIndigo) },
+                        leadingIcon = { Icon(Icons.Default.Key, null, tint = MaterialTheme.colorScheme.primary) },
                         trailingIcon = {
                             IconButton(onClick = { showToken = !showToken }) {
                                 Icon(
                                     if (showToken) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                     contentDescription = stringResource(if (showToken) R.string.token_hide else R.string.token_show),
-                                    tint = DeepIndigo.copy(alpha = 0.5f)
+                                    tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
                                 )
                             }
                         },
@@ -165,27 +169,30 @@ fun SetupScreen(viewModel: AuthViewModel) {
 
                     // Info Card
                     Surface(
-                        color = DeepIndigo.copy(alpha = 0.05f),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, DeepIndigo.copy(alpha = 0.08f)),
+                        color = MaterialTheme.colorScheme.surfaceContainer,
+                        shape = RoundedCornerShape(12.dp),
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        ),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(Modifier.padding(12.dp)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(Icons.Default.Info, null,
                                     modifier = Modifier.size(16.dp),
-                                    tint = DeepIndigo)
+                                    tint = MaterialTheme.colorScheme.primary)
                                 Spacer(Modifier.width(6.dp))
                                 Text("Wo finde ich meinen Token?",
-                                    fontWeight = FontWeight.Bold,
+                                    fontWeight = FontWeight.SemiBold,
                                     style = MaterialTheme.typography.labelLarge,
-                                    color = DeepIndigo)
+                                    color = MaterialTheme.colorScheme.onSurface)
                             }
                             Spacer(Modifier.height(4.dp))
                             Text(
                                 "Einstellungen → Sicherheit → API-Tokens",
                                 style = MaterialTheme.typography.bodySmall,
-                                color = DeepIndigo.copy(alpha = 0.7f)
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                             TextButton(
                                 onClick = {
@@ -201,9 +208,9 @@ fun SetupScreen(viewModel: AuthViewModel) {
                                 },
                                 contentPadding = PaddingValues(0.dp)
                             ) {
-                                Text("Im Browser öffnen", style = MaterialTheme.typography.labelMedium, color = TealAccent)
+                                Text("Im Browser öffnen", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.secondary)
                                 Spacer(Modifier.width(4.dp))
-                                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(14.dp), tint = TealAccent)
+                                Icon(Icons.AutoMirrored.Filled.OpenInNew, null, modifier = Modifier.size(14.dp), tint = MaterialTheme.colorScheme.secondary)
                             }
                             browserError?.let { error ->
                                 Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
@@ -221,7 +228,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
                             .height(56.dp),
                         enabled = !uiState.isLoading,
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = DeepIndigo)
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                     ) {
                         if (uiState.isLoading) {
                             CircularProgressIndicator(
@@ -267,7 +274,7 @@ fun SetupScreen(viewModel: AuthViewModel) {
             // Quick Selection
             TextButton(
                 onClick = { viewModel.updateServerUrl("https://traewelling.de") },
-                colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.8f))
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.primary)
             ) {
                 Text("Offizielle Instanz (traewelling.de) verwenden", style = MaterialTheme.typography.bodyMedium)
             }
@@ -280,17 +287,29 @@ fun SetupScreen(viewModel: AuthViewModel) {
 @Composable
 private fun LoginFeatureChip(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String) {
     Surface(
-        color = Color.White.copy(alpha = 0.12f),
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
         shape = RoundedCornerShape(999.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)
+        )
     ) {
         Row(
             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Icon(icon, null, modifier = Modifier.size(16.dp), tint = Color.White.copy(alpha = 0.9f))
+            Icon(
+                icon,
+                null,
+                modifier = Modifier.size(16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
             Spacer(Modifier.width(6.dp))
-            Text(label, style = MaterialTheme.typography.labelMedium, color = Color.White.copy(alpha = 0.9f))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface
+            )
         }
     }
 }

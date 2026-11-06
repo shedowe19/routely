@@ -1,9 +1,13 @@
 package de.traewelling.app.ui.screens
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -11,6 +15,9 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
@@ -50,6 +57,7 @@ fun FeedScreen(
         topBar = {
             TraewellingTopAppBar(
                 title = "Routely",
+                showBrandMark = true,
                 actions = {
                     IconButton(onClick = onSearchUsersClick) {
                         Icon(Icons.Default.Search, "Benutzer suchen")
@@ -62,23 +70,10 @@ fun FeedScreen(
         }
     ) { innerPadding ->
         Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-        // Tab row
-        TabRow(
-            selectedTabIndex = if (uiState.feedType == FeedType.DASHBOARD) 0 else 1
-        ) {
-            Tab(
-                selected = uiState.feedType == FeedType.DASHBOARD,
-                onClick  = { viewModel.switchFeedType(FeedType.DASHBOARD) },
-                text     = { Text("Freunde") },
-                icon     = { Icon(Icons.Default.People, null) }
-            )
-            Tab(
-                selected = uiState.feedType == FeedType.GLOBAL,
-                onClick  = { viewModel.switchFeedType(FeedType.GLOBAL) },
-                text     = { Text("Global") },
-                icon     = { Icon(Icons.Default.Public, null) }
-            )
-        }
+        FeedTypeSwitcher(
+            selected = uiState.feedType,
+            onSelect = viewModel::switchFeedType
+        )
 
         if (uiState.statuses.isNotEmpty()) {
             uiState.error?.let { error ->
@@ -115,7 +110,11 @@ fun FeedScreen(
                         message = "Zieh nach unten zum Aktualisieren oder wechsle in den globalen Feed."
                     )
                 else -> {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(top = 2.dp, bottom = 16.dp)
+                    ) {
                         items(uiState.statuses, key = { it.id }) { status ->
                             StatusCard(
                                 status = status,
@@ -138,4 +137,66 @@ fun FeedScreen(
         }
     }
 }
+}
+
+@Composable
+private fun FeedTypeSwitcher(
+    selected: FeedType,
+    onSelect: (FeedType) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .selectableGroup()
+            .background(MaterialTheme.colorScheme.surfaceContainer, RoundedCornerShape(14.dp))
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        FeedTypeTab(
+            label = "Freunde",
+            selected = selected == FeedType.DASHBOARD,
+            modifier = Modifier.weight(1f),
+            onClick = { onSelect(FeedType.DASHBOARD) }
+        )
+        FeedTypeTab(
+            label = "Global",
+            selected = selected == FeedType.GLOBAL,
+            modifier = Modifier.weight(1f),
+            onClick = { onSelect(FeedType.GLOBAL) }
+        )
+    }
+}
+
+@Composable
+private fun FeedTypeTab(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = modifier
+            .height(36.dp)
+            .selectable(
+                selected = selected,
+                onClick = onClick,
+                role = Role.Tab
+            ),
+        shape = RoundedCornerShape(11.dp),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
+        contentColor = if (selected) {
+            MaterialTheme.colorScheme.onPrimaryContainer
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium
+            )
+        }
+    }
 }

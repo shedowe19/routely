@@ -27,7 +27,15 @@ Die App nutzt einen HorizontalPager mit 4 Tabs:
 - Notifications (mit Badge bei ungelesenen)
 - Profil
 
-Die `NavigationBar` nutzt eine Surface-Optik mit tonal elevation. Ausgewählte Tabs werden über Primary-Farbe und einen dezenten Indicator hervorgehoben.
+Die `NavigationBar` liegt auf `surfaceContainer` mit einer feinen `outlineVariant`-Trennlinie.
+Ausgewählte Tabs nutzen `primaryContainer` als Indicator sowie Primary-Icon/-Text; das frühere
+tonal-elevation-10-dp-Erscheinungsbild entfällt.
+
+Der Feed schaltet `Freunde`/`Global` über den segmentierten `FeedTypeSwitcher` statt über eine
+`TabRow` mit Icons. Karten zeigen Abfahrts-/Ankunftszeiten direkt an den Stationen. Die
+Meldungsliste verwendet dichte Zeilen mit Trenner statt einer Karte pro Eintrag. Der eigene
+Profilkopf bündelt Avatar, Handle und die drei Kennzahlen in einer gemeinsamen Fläche; die
+Einstellungen sind über das Zahnrad im Profilkopf erreichbar, Abmelden über das zweite Icon.
 
 Zusätzliche Screens werden als Stack navigiert:
 

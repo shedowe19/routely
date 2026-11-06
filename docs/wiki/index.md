@@ -68,6 +68,8 @@ Die SEV-Korrektur vom 07.10.2026 behebt die fälschliche Sperre der Mülheimer R
 
 ## Entscheidungen
 
+- [06.11.2026: Design-Refresh „Klar & ruhig“](./entscheidungen/2026-11-06-design-refresh-klar-und-ruhig.md)
+
 - [03.11.2026: Sichere Storage-Recovery](./entscheidungen/2026-11-03-storage-recovery.md)
 
 - [07.10.2026: GPS-Prognose auf gemeinsamem SEV-Restweg](./entscheidungen/2026-10-07-sev-gemeinsamer-restweg.md)

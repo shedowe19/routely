@@ -2,79 +2,122 @@
 
 ## Zweck
 
-Dokumentation des Farbschemas und der Typografie.
+Dokumentation des Farbschemas, der Typografie und der Formgebung. Die Werte sind seit dem
+Design-Refresh vom 06.11.2026 tokenbasiert; Screens sollen bevorzugt `MaterialTheme.colorScheme`
+und `MaterialTheme.typography` verwenden statt eigener Farben.
 
 ## Markenfarben
 
-| Name               | Hex     | Verwendung            |
-| ------------------ | ------- | --------------------- |
-| TraewellingRed     | #C72730 | Logo, primäre Akzente |
-| TraewellingRedDark | #A51F27 | Dunklere Variante     |
+| Name               | Hex     | Verwendung                         |
+| ------------------ | ------- | ---------------------------------- |
+| TraewellingRed     | #C72730 | Träwelling-Bezug, externe Marke    |
+| TraewellingRedDark | #A51F27 | Dunklere Variante                  |
 
 ## Erweiterte Palette
 
-### Primär (Deep Indigo)
+Die Legacy-Konstanten bleiben für bestehende Importe erhalten, werden aber in Screens zunehmend
+durch Theme-Rollen ersetzt.
 
-- DeepIndigo: #1A237E (helle Primaryfarbe; Dark-/AMOLED-Primarycontainer)
-- IndigoLight: #534BAE (heller Primarycontainer; Dark-/AMOLED-Primaryfarbe)
+### Primär (Indigo)
+
+- `DeepIndigo`: #241A56 (Markenfläche, dunkler Container)
+- `IndigoLight`: #B4A6FF (Primary im Dark-/AMOLED-Theme)
 
 ### Sekundär (Teal)
 
-- TealAccent: #00897B (Fortschritt, Start/End-Badges)
-- TealLight: #B2DFDB (Container)
-- TealDark: #00695C (auf Container)
+- `TealAccent`: #2BB3A0 (Startmarker, Fortschritt)
+- `TealLight`: #BFF2E8 (Container)
+- `TealDark`: #0B6B5E (Altbestand; auf dunklen Flächen nicht als Text verwenden)
 
 ### Tertiär (Amber)
 
-- AmberAccent: #FF8F00 (persönliche Marker)
-- AmberLight: #FFF8E1 (Container)
-- AmberDark: #E65100 (auf Container)
+- `AmberAccent`: #FFB74D (Zielmarker, Punkte)
+- `AmberLight`: #FFE0B5 (Container)
+- `AmberDark`: #8A4F00 (Altbestand)
 
 ### Semantische Farben
 
-- SuccessGreen: #2E7D32 (pünktlich/früh)
-- WarningOrange: #E65100 (Verspätung)
-- ErrorRed: #C62828 (Ausfall/Fehler)
+- `SuccessGreen`: #6FE0A6 (pünktlich/früh; Dark)
+- `WarningOrange`: #FFB37A (Verspätung; Dark)
+- `ErrorRed`: #FFB4AB (Ausfall/Fehler; Dark)
+
+Auf Theme-Ebene liefert `MaterialTheme.successColor` die passende Success-Farbe für Light
+(#1B7F4B) und Dark/AMOLED (#6FE0A6). Warnungen verwenden `colorScheme.tertiary`, Fehler
+`colorScheme.error`; Container-Farben kommen aus `tertiaryContainer`, `errorContainer` und
+`secondaryContainer`.
 
 ## Material3 ColorSchemes
 
-Das Theme unterstützt nun mehrere Modi (Light, Dark, AMOLED), die reaktiv basierend auf der Nutzereinstellung über den `PreferencesManager` und `SettingsViewModel` geladen werden.
+Drei feste Schemata werden über `TraewellingTheme(theme = ...)` ausgewählt:
 
-```kotlin
-private val LightColorScheme = lightColorScheme(
-    primary = DeepIndigo,
-    secondary = TealAccent,
-    tertiary = AmberAccent,
-    error = ErrorRed,
-    background = SurfaceBlue (#FAFBFF),
-    surface = SurfaceCard (#FFFFFF)
-)
+| Rolle | Light | Dark | AMOLED |
+| --- | --- | --- | --- |
+| background | #F7F7FC | #0B0D13 | #000000 |
+| surface | #FFFFFF | #0F1118 | #000000 |
+| surfaceContainerLow | #F5F4FA | #12151E | #0A0C12 |
+| surfaceContainer | #EFEDF6 | #171A24 | #10131B |
+| surfaceContainerHigh | #E8E5F1 | #1B2030 | #161A24 |
+| surfaceContainerHighest | #E1DEEC | #202534 | #1B202D |
+| primary | #4B3BB5 | #B4A6FF | #B4A6FF |
+| primaryContainer | #E6E0FF | #3A2F73 | #352B69 |
+| secondary | #0F7669 | #6FD6C2 | #6FD6C2 |
+| tertiary | #8A4F00 | #FFC46B | #FFC46B |
+| error | #B3261E | #FFB4AB | #FFB4AB |
+| outlineVariant | #D6D2E0 | #313546 | #2A2E3E |
 
-private val DarkColorScheme = darkColorScheme(
-    primary = IndigoLight,
-    background = Color(0xFF121212),
-    surface = Color(0xFF1E1E1E)
-)
+Regeln:
 
-private val AmoledColorScheme = darkColorScheme(
-    primary = IndigoLight,
-    background = Color(0xFF000000), // Tiefes Schwarz für OLED
-    surface = Color(0xFF000000)
-)
-```
-
-## Prüfgrenze für Textakzente
-
-TODO: Kleine Primaryfarbtexte auf dunklen Grundflächen visuell und mit zugänglicher Schrift prüfen. IndigoLight auf Surface `#1E1E1E` ergibt rechnerisch 2,370:1, auf AMOLED-Schwarz 2,985:1. Das ist eine Palettenberechnung, keine Gerätebildschirmmessung. Die Semantiklücken U7 sind gemäß [Nachreview-Korrektur](../entwicklung/main-review-2026-10-06.md) behoben; die separate Farbprüfung bleibt offen.
+- Karten liegen auf `surfaceContainerLow`, verschachtelte Flächen auf `surfaceContainer`.
+- Trennlinien verwenden `outlineVariant` mit reduzierter Alpha.
+- Statusleisten-Symbole werden per `SideEffect` passend zur App-Theme-Wahl (nicht zur
+  Systemeinstellung) auf hell/dunkel gesetzt.
+- AMOLED behält echte schwarze Hintergründe; Karten bleiben über Container-Tonwerte sichtbar.
 
 ## Typografie
 
-Standard Material3 Typography (Roboto).
+Eigene Material3-`Typography` auf Basis von Roboto:
+
+| Rolle | Größe/Zeile | Gewicht |
+| --- | --- | --- |
+| displaySmall | 34/40 | SemiBold |
+| headlineSmall | 24/30 | SemiBold |
+| titleLarge | 21/27 | SemiBold |
+| titleMedium | 16/22 | SemiBold |
+| titleSmall | 14/20 | Medium |
+| bodyLarge | 16/24 | Normal |
+| bodyMedium | 14/20 | Normal |
+| bodySmall | 12/16 | Normal |
+| labelLarge | 14/20 | Medium |
+| labelMedium | 12/16 | Medium |
+| labelSmall | 11/14 | Medium |
+
+## Formen
+
+`Shapes`: extraSmall 6 dp, small 10 dp, medium 14 dp, large 18 dp, extraLarge 26 dp.
+Karten verwenden 18 dp, Routenpanels 14 dp, Chips/Badges 7–10 dp.
 
 ## TransportColors
 
-Farben für Verkehrsmittel-Kategorien (siehe [Komponenten](./komponenten.md)).
+| Kategorie           | Farbe                |
+| ------------------- | -------------------- |
+| ICE/NationalExpress | #A31E39 (Wine Red)   |
+| IC/National         | #A31E39              |
+| RE/RegionalExp      | #14618F (DB Blue)    |
+| RB/Regional         | #14618F              |
+| S-Bahn              | #2F7D32 (Green)      |
+| U-Bahn              | #1E5FA8 (Blue)       |
+| Tram                | #C62828 (Red)        |
+| Bus                 | #A3156E (Purple)     |
+| Ferry               | #0077A8 (Water Blue) |
+
+## Prüfgrenze
+
+Die Kontrastwerte wurden visuell auf dem Testgerät (SM-S948B, Android 17, Light/Dark) geprüft.
+Eine Messung mit einem Kontrastwerkzeug und eine TalkBack-Prüfung der neuen Flächen stehen
+weiterhin aus. Das ist keine amtliche Barrierefreiheitszertifizierung.
 
 ## Verwandte Seiten
 
 - [Komponenten](./komponenten.md)
+- [Screens](./screens.md)
+- [ADR Design-Refresh](../entscheidungen/2026-11-06-design-refresh-klar-und-ruhig.md)

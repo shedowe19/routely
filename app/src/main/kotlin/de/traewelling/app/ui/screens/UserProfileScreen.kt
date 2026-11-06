@@ -28,8 +28,6 @@ import de.traewelling.app.data.model.User
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
 import de.traewelling.app.ui.components.TraewellingTopAppBar
-import de.traewelling.app.ui.theme.DeepIndigo
-import de.traewelling.app.ui.theme.TealAccent
 import de.traewelling.app.viewmodel.UserProfileViewModel
 import java.util.Locale
 
@@ -118,7 +116,7 @@ fun UserProfileScreen(
                     if (uiState.statuses.isNotEmpty()) {
                         item {
                             Spacer(Modifier.height(8.dp))
-                            UserSectionTitle(Icons.Default.Route, "Fahrten", "Sichtbare Check-ins dieses Profils")
+                            UserSectionTitle("Fahrten", "Sichtbare Check-ins dieses Profils")
                         }
                         items(uiState.statuses, key = { it.id }) { status ->
                             StatusCard(
@@ -161,9 +159,10 @@ private fun UserProfileHeader(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        shape = RoundedCornerShape(28.dp),
-        elevation = CardDefaults.cardElevation(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(
             modifier = Modifier
@@ -171,13 +170,12 @@ private fun UserProfileHeader(
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            DeepIndigo,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
-                            TealAccent.copy(alpha = 0.85f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                            Color.Transparent
                         )
                     )
                 )
-                .padding(24.dp),
+                .padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (user.profilePicture != null) {
@@ -185,68 +183,77 @@ private fun UserProfileHeader(
                     model = user.profilePicture,
                     contentDescription = "Avatar",
                     modifier = Modifier
-                        .size(104.dp)
+                        .size(86.dp)
                         .clip(CircleShape)
-                        .border(3.dp, Color.White.copy(alpha = 0.75f), CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), CircleShape)
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(104.dp)
-                        .background(Color.White.copy(alpha = 0.14f), CircleShape)
-                        .border(3.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+                        .size(86.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                        .border(
+                            2.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                            CircleShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.Person,
                         null,
-                        modifier = Modifier.size(52.dp),
-                        tint = Color.White.copy(alpha = 0.85f)
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
 
             Text(
                 user.displayName ?: user.username,
-                fontWeight = FontWeight.Bold,
-                fontSize = 26.sp,
-                color = Color.White
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Surface(
-                color = Color.White.copy(alpha = 0.14f),
+                color = MaterialTheme.colorScheme.surfaceContainer,
                 shape = RoundedCornerShape(999.dp),
                 modifier = Modifier.padding(top = 6.dp)
             ) {
                 Text(
                     "@${user.username}",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
 
             user.bio?.takeIf { it.isNotBlank() }?.let { bio ->
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     bio,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.78f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
                 )
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(14.dp))
             when {
                 user.followPending == true -> {
                     OutlinedButton(
                         onClick = onToggleFollow,
                         enabled = false,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant
+                        )
                     ) {
                         if (isFollowLoading) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         } else {
                             Icon(Icons.Default.HourglassTop, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -258,11 +265,17 @@ private fun UserProfileHeader(
                     OutlinedButton(
                         onClick = onToggleFollow,
                         enabled = !isFollowLoading,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
-                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.35f))
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant
+                        )
                     ) {
                         if (isFollowLoading) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.White)
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.primary
+                            )
                         } else {
                             Icon(Icons.Default.PersonRemove, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -273,11 +286,14 @@ private fun UserProfileHeader(
                 else -> {
                     Button(
                         onClick = onToggleFollow,
-                        enabled = !isFollowLoading,
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.White, contentColor = DeepIndigo)
+                        enabled = !isFollowLoading
                     ) {
                         if (isFollowLoading) {
-                            CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = DeepIndigo)
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onPrimary
+                            )
                         } else {
                             Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
@@ -303,9 +319,12 @@ private fun UserProfileHeader(
 private fun UserStatChip(label: String, value: String, modifier: Modifier = Modifier) {
     Surface(
         modifier = modifier,
-        color = Color.White.copy(alpha = 0.13f),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+        color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.75f),
+        shape = RoundedCornerShape(14.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+        )
     ) {
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
@@ -313,36 +332,33 @@ private fun UserStatChip(label: String, value: String, modifier: Modifier = Modi
         ) {
             Text(
                 value,
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                color = Color.White,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface,
                 maxLines = 1,
                 softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
-            Text(label, style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.72f))
+            Text(
+                label,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
-private fun UserSectionTitle(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun UserSectionTitle(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp)
     ) {
-        Surface(
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-            shape = CircleShape
-        ) {
-            Icon(icon, null, modifier = Modifier.padding(8.dp).size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        }
-        Spacer(Modifier.width(10.dp))
-        Column {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-        }
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

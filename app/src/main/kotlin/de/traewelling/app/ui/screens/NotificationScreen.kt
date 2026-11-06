@@ -1,15 +1,12 @@
 package de.traewelling.app.ui.screens
 
-import androidx.compose.ui.unit.sp
-
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -17,6 +14,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -25,7 +23,6 @@ import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.ui.navigation.NotificationTarget
 import de.traewelling.app.ui.navigation.NotificationTargetResolver
-import de.traewelling.app.ui.theme.TealDark
 import de.traewelling.app.viewmodel.NotificationViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -112,14 +109,22 @@ fun NotificationScreen(
                         message = "Du hast aktuell keine Benachrichtigungen."
                     )
                 else -> {
-                    LazyColumn(state = listState, modifier = Modifier.fillMaxSize()) {
-                        items(uiState.notifications, key = { it.id }) { notification ->
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(vertical = 4.dp)
+                    ) {
+                        itemsIndexed(
+                            uiState.notifications,
+                            key = { _, notification -> notification.id }
+                        ) { index, notification ->
                             val target = remember(notification.link, serverUrl) {
                                 NotificationTargetResolver.resolve(notification.link, serverUrl)
                             }
                             NotificationItem(
                                 notification = notification,
                                 target = target,
+                                showDivider = index < uiState.notifications.lastIndex,
                                 onClick = {
                                     if (notification.readAt == null) {
                                         viewModel.markAsRead(notification.id)
@@ -141,7 +146,12 @@ fun NotificationScreen(
 }
 
 @Composable
-private fun NotificationItem(notification: Notification, target: NotificationTarget?, onClick: () -> Unit) {
+private fun NotificationItem(
+    notification: Notification,
+    target: NotificationTarget?,
+    showDivider: Boolean,
+    onClick: () -> Unit
+) {
     val isUnread = notification.readAt == null
     val icon = when {
         notification.type?.contains("Liked", ignoreCase = true) == true -> Icons.Default.Favorite
@@ -157,97 +167,91 @@ private fun NotificationItem(notification: Notification, target: NotificationTar
         else -> MaterialTheme.colorScheme.primary
     }
 
-    val bgColor = if (isUnread) MaterialTheme.colorScheme.primary.copy(alpha = 0.05f) else MaterialTheme.colorScheme.surface
-
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 6.dp)
-            .clickable(
-                enabled = isUnread || target != null,
-                onClickLabel = when (target) {
-                    is NotificationTarget.Status -> "Fahrt öffnen"
-                    is NotificationTarget.UserProfile -> "Profil öffnen"
-                    null -> "Als gelesen markieren"
-                },
-                onClick = onClick
-            ),
-        shape = RoundedCornerShape(20.dp),
-        elevation = CardDefaults.cardElevation(if (isUnread) 5.dp else 2.dp),
-        border = BorderStroke(1.dp, iconTint.copy(alpha = if (isUnread) 0.20f else 0.08f)),
-        colors = CardDefaults.cardColors(containerColor = bgColor)
-    ) {
-        Row(modifier = Modifier.height(IntrinsicSize.Min)) {
+    Column {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (isUnread) {
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.045f)
+                    } else {
+                        Color.Transparent
+                    }
+                )
+                .clickable(
+                    enabled = isUnread || target != null,
+                    onClickLabel = when (target) {
+                        is NotificationTarget.Status -> "Fahrt öffnen"
+                        is NotificationTarget.UserProfile -> "Profil öffnen"
+                        null -> "Als gelesen markieren"
+                    },
+                    onClick = onClick
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.Top
+        ) {
             Box(
                 modifier = Modifier
-                    .fillMaxHeight()
-                    .width(if (isUnread) 4.dp else 0.dp)
-                    .background(iconTint.copy(alpha = 0.8f))
-            )
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.Top
+                    .size(38.dp)
+                    .background(iconTint.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center
             ) {
-                Surface(
-                    color = iconTint.copy(alpha = 0.12f),
-                    shape = androidx.compose.foundation.shape.CircleShape
-                ) {
-                    Icon(icon, null, tint = iconTint, modifier = Modifier.padding(10.dp).size(24.dp))
-                }
-                Spacer(Modifier.width(16.dp))
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        notification.lead ?: "",
-                        fontWeight = if (isUnread) FontWeight.Bold else FontWeight.Medium,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = if (isUnread) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.9f)
-                    )
-                    if (!notification.notice.isNullOrBlank()) {
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            notification.notice,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                            lineHeight = 16.sp,
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-                    Text(
-                        notification.createdAtForHumans ?: "",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
-                    )
-                }
-                if (isUnread || target != null) {
-                    Spacer(Modifier.width(8.dp))
-                    Column(horizontalAlignment = Alignment.End) {
-                        if (isUnread) {
-                            Surface(
-                                color = TealDark.copy(alpha = 0.12f),
-                                shape = RoundedCornerShape(999.dp)
-                            ) {
-                                Text(
-                                    "Neu",
-                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = TealDark,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                        if (target != null) {
-                            Icon(
-                                Icons.Default.ChevronRight,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.padding(top = if (isUnread) 8.dp else 0.dp).size(20.dp)
-                            )
-                        }
-                    }
-                }
+                Icon(icon, null, tint = iconTint, modifier = Modifier.size(20.dp))
             }
+
+            Spacer(Modifier.width(12.dp))
+
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    notification.lead ?: "",
+                    fontWeight = if (isUnread) FontWeight.SemiBold else FontWeight.Normal,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                if (!notification.notice.isNullOrBlank()) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(
+                        notification.notice,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    notification.createdAtForHumans ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                )
+            }
+
+            if (isUnread) {
+                Spacer(Modifier.width(8.dp))
+                Box(
+                    Modifier
+                        .padding(top = 6.dp)
+                        .size(7.dp)
+                        .background(MaterialTheme.colorScheme.primary, CircleShape)
+                )
+            }
+            if (target != null) {
+                Spacer(Modifier.width(4.dp))
+                Icon(
+                    Icons.Default.ChevronRight,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .padding(top = 8.dp)
+                        .size(18.dp)
+                )
+            }
+        }
+        if (showDivider) {
+            HorizontalDivider(
+                modifier = Modifier.padding(start = 66.dp, end = 16.dp),
+                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+            )
         }
     }
 }

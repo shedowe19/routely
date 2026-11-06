@@ -19,18 +19,15 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import coil3.compose.AsyncImage
 import de.traewelling.app.data.model.StatisticsData
 import de.traewelling.app.data.model.User
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusCard
 import de.traewelling.app.ui.components.TraewellingTopAppBar
-import de.traewelling.app.ui.theme.DeepIndigo
-import de.traewelling.app.ui.theme.TealAccent
-import de.traewelling.app.ui.theme.TealDark
 import de.traewelling.app.viewmodel.AuthViewModel
 import de.traewelling.app.viewmodel.ProfileViewModel
 import java.util.Locale
@@ -54,7 +51,10 @@ fun ProfileScreen(
             TraewellingTopAppBar(
                 title = "Profil",
                 actions = {
-                    IconButton(onClick = authViewModel::logout) {
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(Icons.Default.Settings, "Einstellungen")
+                    }
+                    IconButton(onClick = { authViewModel.logout() }) {
                         Icon(Icons.AutoMirrored.Filled.Logout, "Abmelden")
                     }
                 }
@@ -100,8 +100,8 @@ fun ProfileScreen(
                 }
                 if (uiState.recentStatuses.isNotEmpty()) {
                     item {
-                        Spacer(Modifier.height(8.dp))
-                        SectionTitle(Icons.Default.Route, "Letzte Fahrten", "Deine neuesten Check-ins")
+                        Spacer(Modifier.height(6.dp))
+                        SectionTitle("Letzte Fahrten", "Deine neuesten Check-ins")
                     }
                     items(uiState.recentStatuses, key = { it.id }) { status ->
                         StatusCard(
@@ -112,30 +112,7 @@ fun ProfileScreen(
                     }
                 }
                 item {
-                    Spacer(Modifier.height(16.dp))
-
-                    OutlinedButton(
-                        onClick = onSettingsClick,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
-                    ) {
-                        Icon(Icons.Default.Settings, contentDescription = "Einstellungen")
-                        Spacer(Modifier.width(8.dp))
-                        Text("Einstellungen")
-                    }
-
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(
-                        onClick = { authViewModel.logout() },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        )
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.Logout, null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Abmelden")
-                    }
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(14.dp))
                 }
                 item {
                     Box(
@@ -160,9 +137,10 @@ fun ProfileScreen(
 private fun ProfileHeader(user: User) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        shape = RoundedCornerShape(28.dp),
-        elevation = CardDefaults.cardElevation(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(22.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(
             modifier = Modifier
@@ -170,13 +148,12 @@ private fun ProfileHeader(user: User) {
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(
-                            DeepIndigo,
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
-                            TealAccent.copy(alpha = 0.85f)
+                            MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
+                            Color.Transparent
                         )
                     )
                 )
-                .padding(24.dp),
+                .padding(18.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             if (user.profilePicture != null) {
@@ -184,60 +161,88 @@ private fun ProfileHeader(user: User) {
                     model = user.profilePicture,
                     contentDescription = "Avatar",
                     modifier = Modifier
-                        .size(104.dp)
+                        .size(86.dp)
                         .clip(CircleShape)
-                        .border(3.dp, Color.White.copy(alpha = 0.75f), CircleShape)
+                        .border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.45f), CircleShape)
                 )
             } else {
                 Box(
                     modifier = Modifier
-                        .size(104.dp)
-                        .background(Color.White.copy(alpha = 0.14f), CircleShape)
-                        .border(3.dp, Color.White.copy(alpha = 0.35f), CircleShape),
+                        .size(86.dp)
+                        .background(MaterialTheme.colorScheme.primaryContainer, CircleShape)
+                        .border(
+                            2.dp,
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.35f),
+                            CircleShape
+                        ),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
                         Icons.Default.Person,
                         null,
-                        modifier = Modifier.size(52.dp),
-                        tint = Color.White.copy(alpha = 0.85f)
+                        modifier = Modifier.size(40.dp),
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
             }
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(12.dp))
             Text(
                 user.displayName ?: user.username,
-                fontWeight = FontWeight.Bold,
-                fontSize = 26.sp,
-                color = Color.White
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center
             )
             Surface(
-                color = Color.White.copy(alpha = 0.14f),
+                color = MaterialTheme.colorScheme.surfaceContainer,
                 shape = RoundedCornerShape(999.dp),
                 modifier = Modifier.padding(top = 6.dp)
             ) {
                 Text(
                     "@${user.username}",
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Medium
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.labelMedium
                 )
             }
             user.bio?.takeIf { it.isNotBlank() }?.let { bio ->
-                Spacer(Modifier.height(14.dp))
+                Spacer(Modifier.height(10.dp))
                 Text(
                     bio,
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.78f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
                 )
             }
-            Spacer(Modifier.height(24.dp))
-            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                StatChip("Distanz", formatDistanceKm(user.totalDistance ?: 0L), Modifier.weight(1f))
-                StatChip("Zeit", formatDuration(user.totalDuration ?: 0), Modifier.weight(1f))
-                if (user.pointsEnabled != false) {
-                    StatChip("Punkte", (user.points ?: 0).toString(), Modifier.weight(1f))
+            Spacer(Modifier.height(14.dp))
+
+            val stats = buildList {
+                add("Distanz" to formatDistanceKm(user.totalDistance ?: 0L))
+                add("Zeit" to formatDuration(user.totalDuration ?: 0))
+                if (user.pointsEnabled != false) add("Punkte" to (user.points ?: 0).toString())
+            }
+
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                color = MaterialTheme.colorScheme.surfaceContainer.copy(alpha = 0.75f),
+                shape = RoundedCornerShape(14.dp),
+                border = BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f)
+                )
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 9.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    stats.forEachIndexed { index, (label, value) ->
+                        if (index > 0) {
+                            VerticalDivider(
+                                modifier = Modifier.height(26.dp),
+                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f)
+                            )
+                        }
+                        StatCell(label = label, value = value, modifier = Modifier.weight(1f))
+                    }
                 }
             }
         }
@@ -245,29 +250,25 @@ private fun ProfileHeader(user: User) {
 }
 
 @Composable
-private fun StatChip(label: String, value: String, modifier: Modifier = Modifier) {
-    Surface(
-        modifier = modifier,
-        color = Color.White.copy(alpha = 0.13f),
-        shape = RoundedCornerShape(16.dp),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.16f))
+private fun StatCell(label: String, value: String, modifier: Modifier = Modifier) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier.padding(horizontal = 6.dp)
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp)
-        ) {
-            Text(
-                value,
-                fontWeight = FontWeight.Bold,
-                fontSize = 17.sp,
-                color = Color.White,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis
-            )
-            Text(label, style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.72f))
-        }
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+            maxLines = 1,
+            softWrap = false,
+            overflow = TextOverflow.Ellipsis
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -279,45 +280,73 @@ private fun StatisticsSection(stats: StatisticsData) {
     val totalCount    = categories.sumOf { it.count ?: 0 }
     val totalDuration = categories.sumOf { it.duration ?: 0 }
 
+    val maxCount = categories.maxOfOrNull { it.count ?: 0 }?.coerceAtLeast(1) ?: 1
+
     Card(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        shape = RoundedCornerShape(22.dp),
-        elevation = CardDefaults.cardElevation(5.dp),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+        shape = RoundedCornerShape(18.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow)
     ) {
         Column(Modifier.padding(16.dp)) {
-            Text("Fahrten (letzte 28 Tage)",
-                fontWeight = FontWeight.Bold,
-                style = MaterialTheme.typography.titleMedium)
-            Spacer(Modifier.height(16.dp))
-            Row(modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceAround) {
-                StatItem(Icons.Default.Train,    "Fahrten",  totalCount.toString())
-                StatItem(Icons.Default.Schedule, "Zeit",     formatDuration(totalDuration))
+            Text(
+                "Fahrten (letzte 28 Tage)",
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(Modifier.height(14.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceAround
+            ) {
+                StatItem(Icons.Default.Train, "Fahrten", totalCount.toString())
+                StatItem(Icons.Default.Schedule, "Zeit", formatDuration(totalDuration))
             }
-            if (categories.isNotEmpty()) {
-                Spacer(Modifier.height(12.dp))
-                HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                Spacer(Modifier.height(12.dp))
-                Text("Verkehrsmittel", style = MaterialTheme.typography.labelMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.6f))
-                Spacer(Modifier.height(8.dp))
-                categories.take(4).forEach { cat ->
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+            Spacer(Modifier.height(14.dp))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Verkehrsmittel",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(Modifier.height(6.dp))
+            categories.take(4).forEach { cat ->
+                val count = cat.count ?: 0
+                Column(Modifier.fillMaxWidth().padding(vertical = 5.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
                             localiseCategory(cat.name ?: ""),
-                            style = MaterialTheme.typography.bodyMedium
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                         Text(
-                            "${cat.count ?: 0}×  ${formatDuration(cat.duration ?: 0)}",
-                            style = MaterialTheme.typography.bodyMedium,
-                            fontWeight = FontWeight.SemiBold,
-                            color = TealDark
+                            "${count}× · ${formatDuration(cat.duration ?: 0)}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Spacer(Modifier.height(5.dp))
+                    Box(
+                        Modifier
+                            .fillMaxWidth()
+                            .height(4.dp)
+                            .background(
+                                MaterialTheme.colorScheme.surfaceContainerHigh,
+                                RoundedCornerShape(2.dp)
+                            )
+                    ) {
+                        Box(
+                            Modifier
+                                .fillMaxWidth((count.toFloat() / maxCount).coerceIn(0f, 1f))
+                                .height(4.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
+                                    RoundedCornerShape(2.dp)
+                                )
                         )
                     }
                 }
@@ -327,22 +356,16 @@ private fun StatisticsSection(stats: StatisticsData) {
 }
 
 @Composable
-private fun SectionTitle(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String) {
-    Row(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically
+private fun SectionTitle(title: String, subtitle: String) {
+    Column(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 9.dp)
     ) {
-        Surface(
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
-            shape = CircleShape
-        ) {
-            Icon(icon, null, modifier = Modifier.padding(8.dp).size(18.dp), tint = MaterialTheme.colorScheme.primary)
-        }
-        Spacer(Modifier.width(10.dp))
-        Column {
-            Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-            Text(subtitle, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f))
-        }
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Text(
+            subtitle,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
@@ -354,15 +377,27 @@ private fun StatItem(
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Surface(
-            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f),
+            color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f),
             shape = CircleShape
         ) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.padding(8.dp).size(24.dp))
+            Icon(
+                icon,
+                null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(7.dp).size(20.dp)
+            )
         }
-        Spacer(Modifier.height(8.dp))
-        Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.bodyLarge)
-        Text(label, style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
+        Spacer(Modifier.height(6.dp))
+        Text(
+            value,
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.SemiBold
+        )
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 
