@@ -47,11 +47,16 @@ fun NotificationScreen(
         }
     }
 
-    // Auto-load more
-    val shouldLoadMore = remember {
+    val notificationGroups = remember(uiState.notifications) {
+        uiState.notifications.groupBy { notificationDay(it.createdAt) }
+    }
+    val renderedItemCount = uiState.notifications.size + notificationGroups.size
+
+    // Auto-load more; the lazy-list index also counts the day headers.
+    val shouldLoadMore = remember(renderedItemCount) {
         derivedStateOf {
             val lastVisible = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisible >= uiState.notifications.size - 3 && uiState.hasMore && !uiState.isLoading &&
+            lastVisible >= renderedItemCount - 3 && uiState.hasMore && !uiState.isLoading &&
                 !uiState.isRefreshing && uiState.error == null
         }
     }
@@ -114,9 +119,7 @@ fun NotificationScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(vertical = 4.dp)
                     ) {
-                        uiState.notifications
-                            .groupBy { notificationDay(it.createdAt) }
-                            .forEach { (day, dayNotifications) ->
+                        notificationGroups.forEach { (day, dayNotifications) ->
                                 item(key = "day-$day") {
                                     NotificationDayHeader(day)
                                 }
