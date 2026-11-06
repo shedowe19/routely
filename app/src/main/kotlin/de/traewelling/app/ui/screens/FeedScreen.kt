@@ -74,7 +74,7 @@ fun FeedScreen(
                         BadgedBox(
                             badge = {
                                 if (selectedCategory != null) {
-                                    Badge()
+                                    Badge(containerColor = MaterialTheme.colorScheme.primary)
                                 }
                             }
                         ) {
@@ -226,7 +226,12 @@ private fun FeedFilterSheet(
                     FilterChip(
                         selected = selectedCategory == id,
                         onClick = { onSelect(id) },
-                        label = { Text(label) }
+                        label = { Text(label) },
+                        colors = FilterChipDefaults.filterChipColors(
+                            selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
+                            selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            selectedLeadingIconColor = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
                     )
                 }
             }
