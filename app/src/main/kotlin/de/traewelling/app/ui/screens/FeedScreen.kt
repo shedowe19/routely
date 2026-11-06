@@ -40,9 +40,10 @@ fun FeedScreen(
     val listState   = rememberLazyListState()
     var showFilters by rememberSaveable { mutableStateOf(false) }
     var selectedCategory by rememberSaveable { mutableStateOf<String?>(null) }
-    val filteredStatuses = remember(uiState.statuses, selectedCategory) {
-        selectedCategory?.let { category ->
-            uiState.statuses.filter { it.checkin?.category == category }
+    val selectedCategories = selectedCategory?.let { FeedCategoryFilters[it] }
+    val filteredStatuses = remember(uiState.statuses, selectedCategories) {
+        selectedCategories?.let { categories ->
+            uiState.statuses.filter { it.checkin?.category in categories }
         } ?: uiState.statuses
     }
     // Trigger initial load
@@ -182,6 +183,16 @@ fun FeedScreen(
 }
 }
 
+private val FeedCategoryFilters = mapOf(
+    "national" to setOf("nationalExpress", "national"),
+    "regional" to setOf("regionalExp", "regional"),
+    "suburban" to setOf("suburban"),
+    "subway" to setOf("subway"),
+    "tram" to setOf("tram"),
+    "bus" to setOf("bus"),
+    "ferry" to setOf("ferry")
+)
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 private fun FeedFilterSheet(
@@ -191,8 +202,8 @@ private fun FeedFilterSheet(
 ) {
     val categories = listOf(
         null to "Alle",
-        "nationalExpress" to "Fernverkehr",
-        "regionalExp" to "Regional",
+        "national" to "Fernverkehr",
+        "regional" to "Regional",
         "suburban" to "S-Bahn",
         "subway" to "U-Bahn",
         "tram" to "Tram",
