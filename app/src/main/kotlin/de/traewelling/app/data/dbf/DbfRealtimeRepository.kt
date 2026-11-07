@@ -50,7 +50,9 @@ class DbfRealtimeRepository internal constructor(
         if (!isRail(checkin) || (checkin.journeyNumber ?: 0) <= 0 || stops.isEmpty() || !isEnabled()) return stops
         val now = nowMillis()
         val candidates = stops.withIndex().mapNotNull { (index, stop) ->
-            val eva = stop.station?.ibnr?.toString()?.takeIf(EVA::matches) ?: return@mapNotNull null
+            val eva = stop.station?.ibnr?.toString()?.takeIf { DbfJsonParser.normalizedEva(it) != null }
+            val stationKey = eva ?: DbfJsonParser.normalizedStationKey(stop.station?.name)
+                ?: return@mapNotNull null
             val planned = listOfNotNull(parseInstant(stop.arrivalPlanned), parseInstant(stop.departurePlanned))
             if (planned.isEmpty()) return@mapNotNull null
             // A delayed current train may have no usable primary realtime. Its bounded
@@ -58,30 +60,30 @@ class DbfRealtimeRepository internal constructor(
             val markers = (planned + listOfNotNull(parseInstant(stop.arrivalReal), parseInstant(stop.departureReal))).distinct()
             val event = markers.filter { it.toEpochMilli() in (now - PAST_WINDOW_MILLIS)..(now + FUTURE_WINDOW_MILLIS) }
                 .minByOrNull { abs(it.toEpochMilli() - now) } ?: return@mapNotNull null
-            Candidate(index, eva, event.toEpochMilli(), stop.matchesStopover(checkin.destination))
+            Candidate(index, stationKey, event.toEpochMilli(), stop.matchesStopover(checkin.destination))
         }
         // Current/next visit first, then the exit if its event is inside the board horizon.
         val sorted = candidates.sortedBy { abs(it.eventMillis - now) }
-        val selectedEvas = buildList {
-            sorted.firstOrNull()?.let { add(it.eva) }
-            sorted.firstOrNull { it.destination && it.eva !in this }?.let { add(it.eva) }
-            sorted.firstOrNull { it.eva !in this }?.let { if (size < MAX_STATIONS) add(it.eva) }
+        val selectedKeys = buildList {
+            sorted.firstOrNull()?.let { add(it.stationKey) }
+            sorted.firstOrNull { it.destination && it.stationKey !in this }?.let { add(it.stationKey) }
+            sorted.firstOrNull { it.stationKey !in this }?.let { if (size < MAX_STATIONS) add(it.stationKey) }
         }.take(MAX_STATIONS)
-        val selected = candidates.filter { it.eva in selectedEvas }.take(MAX_VISITS)
+        val selected = candidates.filter { it.stationKey in selectedKeys }.take(MAX_VISITS)
         if (selected.isEmpty()) return stops
         val result = stops.toMutableList()
         // Parallel boards allow two fresh stations without serially blocking the primary snapshot.
         // A timed-out caller cannot cancel a shared board that another screen/service awaits.
         withTimeoutOrNull(ENRICHMENT_TIMEOUT_MILLIS) {
             coroutineScope {
-                selected.groupBy { it.eva }.map { (eva, visits) -> async {
-                    val board = store.get(eva) ?: return@async
+                selected.groupBy { it.stationKey }.map { (stationKey, visits) -> async {
+                    val board = store.get(stationKey) ?: return@async
                     val fetchedAt = board.fetchedAt.toEpochMilli()
                     if (fetchedAt > nowMillis() || nowMillis() - fetchedAt > LIVE_TTL_MILLIS) return@async
                     for (candidate in visits) {
                         currentCoroutineContext().ensureActive()
                         val stop = stops[candidate.index]
-                        val delta = DbfMatcher.match(board, eva, checkin.journeyNumber?.toString(),
+                        val delta = DbfMatcher.match(board, stationKey, checkin.journeyNumber?.toString(),
                             parseInstant(stop.arrivalPlanned), parseInstant(stop.departurePlanned)) ?: continue
                         result[candidate.index] = applyDelta(stop, delta)
                     }
@@ -101,7 +103,7 @@ class DbfRealtimeRepository internal constructor(
         false
     }
 
-    private data class Candidate(val index: Int, val eva: String, val eventMillis: Long, val destination: Boolean)
+    private data class Candidate(val index: Int, val stationKey: String, val eventMillis: Long, val destination: Boolean)
 
     companion object {
         const val LIVE_TTL_MILLIS = 60_000L
@@ -111,7 +113,6 @@ class DbfRealtimeRepository internal constructor(
         private const val MAX_VISITS = 6
         private const val PAST_WINDOW_MILLIS = 60 * 60_000L
         private const val FUTURE_WINDOW_MILLIS = 2 * 60 * 60_000L
-        private val EVA = Regex("[0-9]{7}")
         private val RAIL_CATEGORIES = setOf("nationalexpress", "national", "regionalexp", "regional", "suburban")
         private val sharedStore: DbfBoardStore by lazy { DbfBoardStore(DbfBoardHttp()::fetch) }
 
@@ -180,21 +181,21 @@ internal class DbfBoardStore(
 
     init { require(cacheLimit > 0 && inFlightLimit > 0) }
 
-    suspend fun get(eva: String): DbfBoard? {
-        if (!Regex("[0-9]{7}").matches(eva)) return null
+    suspend fun get(stationKey: String): DbfBoard? {
+        if (DbfJsonParser.normalizedStationKey(stationKey) == null) return null
         val task = synchronized(lock) {
             if (closed) return null
             val now = nowMillis()
-            entries[eva]?.let { if (now < it.expiresAtMillis) return it.board else entries.remove(eva) }
-            pending[eva] ?: run {
-                if (pending.size >= inFlightLimit || !reserveStart(eva, now)) return null
+            entries[stationKey]?.let { if (now < it.expiresAtMillis) return it.board else entries.remove(stationKey) }
+            pending[stationKey] ?: run {
+                if (pending.size >= inFlightLimit || !reserveStart(stationKey, now)) return null
                 scope.async(start = CoroutineStart.LAZY) {
                     var finished = false
                     var fetched = DbfFetchResult(null)
                     try {
-                        fetched = fetch(eva)
-                        // The requested EVA scopes the anonymous board; do not cache a mismatched fixture/source.
-                        if (fetched.board?.eva?.let { it != eva } == true) fetched = DbfFetchResult(null)
+                        fetched = fetch(stationKey)
+                        // The requested key scopes the anonymous board; do not cache a mismatched fixture/source.
+                        if (fetched.board?.eva?.let { it != stationKey } == true) fetched = DbfFetchResult(null)
                         finished = true
                         fetched.board
                     } catch (cancelled: CancellationException) {
@@ -204,19 +205,19 @@ internal class DbfBoardStore(
                         null
                     } finally {
                         synchronized(lock) {
-                            pending.remove(eva)
+                            pending.remove(stationKey)
                             if (!closed && finished) {
                                 val completed = nowMillis()
                                 if (fetched.retryAfterMillis > 0) pauseUntil = maxOf(pauseUntil,
                                     expiry(completed, fetched.retryAfterMillis.coerceAtLeast(60_000L)))
                                 val ttl = if (fetched.board == null) maxOf(DbfRealtimeRepository.FAILURE_TTL_MILLIS,
                                     fetched.retryAfterMillis) else DbfRealtimeRepository.LIVE_TTL_MILLIS
-                                entries[eva] = Entry(fetched.board, expiry(completed, ttl))
+                                entries[stationKey] = Entry(fetched.board, expiry(completed, ttl))
                                 while (entries.size > cacheLimit) entries.remove(entries.keys.first())
                             }
                         }
                     }
-                }.also { pending[eva] = it }
+                }.also { pending[stationKey] = it }
             }
         }
         task.start()
@@ -224,12 +225,12 @@ internal class DbfBoardStore(
     }
 
     /** Never wait for a quota slot: optional data falls back promptly to the primary provider. */
-    private fun reserveStart(eva: String, now: Long): Boolean {
+    private fun reserveStart(stationKey: String, now: Long): Boolean {
         while (starts.firstOrNull()?.let { now - it >= WINDOW_MILLIS } == true) starts.removeFirst()
         stationStarts.entries.removeAll { now - it.value >= WINDOW_MILLIS }
-        if (now < pauseUntil || starts.size >= MAX_STARTS || eva in stationStarts) return false
+        if (now < pauseUntil || starts.size >= MAX_STARTS || stationKey in stationStarts) return false
         starts.addLast(now)
-        stationStarts[eva] = now
+        stationStarts[stationKey] = now
         return true
     }
 
@@ -258,9 +259,9 @@ internal class DbfBoardHttp(
         .build(),
     private val nowMillis: () -> Long = System::currentTimeMillis
 ) {
-    internal fun request(eva: String): Request {
-        require(Regex("[0-9]{7}").matches(eva))
-        val url = BASE_URL.toHttpUrl().newBuilder().addPathSegment("$eva.json")
+    internal fun request(stationKey: String): Request {
+        require(DbfJsonParser.normalizedStationKey(stationKey) != null)
+        val url = BASE_URL.toHttpUrl().newBuilder().addPathSegment("$stationKey.json")
             .addQueryParameter("version", "3")
             // Without this flag DBF combines nearby stations, and v3 rows contain no station ID.
             .addQueryParameter("no_related", "1")
@@ -271,8 +272,8 @@ internal class DbfBoardHttp(
             .build()
     }
 
-    suspend fun fetch(eva: String): DbfFetchResult = suspendCancellableCoroutine { continuation ->
-        val request = request(eva)
+    suspend fun fetch(stationKey: String): DbfFetchResult = suspendCancellableCoroutine { continuation ->
+        val request = request(stationKey)
         val call = client.newCall(request)
         continuation.invokeOnCancellation { call.cancel() }
         call.enqueue(object : Callback {
@@ -280,13 +281,13 @@ internal class DbfBoardHttp(
                 if (continuation.isActive) continuation.resume(DbfFetchResult(null))
             }
             override fun onResponse(call: Call, response: Response) {
-                val result = decodeResponse(response, request, eva)
+                val result = decodeResponse(response, request, stationKey)
                 if (continuation.isActive) continuation.resume(result)
             }
         })
     }
 
-    internal fun decodeResponse(response: Response, request: Request, eva: String): DbfFetchResult = runCatching {
+    internal fun decodeResponse(response: Response, request: Request, stationKey: String): DbfFetchResult = runCatching {
         response.use {
             if (it.request.url != request.url) return@use DbfFetchResult(null)
             if (!it.isSuccessful) return@use DbfFetchResult(null,
@@ -305,7 +306,7 @@ internal class DbfBoardHttp(
             val json = Charsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
                 .onUnmappableCharacter(CodingErrorAction.REPORT)
                 .decode(ByteBuffer.wrap(buffer.readByteArray())).toString()
-            DbfFetchResult(DbfJsonParser.parse(json, eva, Instant.ofEpochMilli(nowMillis())))
+            DbfFetchResult(DbfJsonParser.parse(json, stationKey, Instant.ofEpochMilli(nowMillis())))
         }
     }.getOrElse { DbfFetchResult(null) }
 

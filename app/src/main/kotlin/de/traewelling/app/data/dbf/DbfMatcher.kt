@@ -20,7 +20,7 @@ object DbfMatcher {
         arrivalPlanned: Instant?,
         departurePlanned: Instant?
     ): DbfStopDelta? {
-        val station = DbfJsonParser.normalizedEva(eva) ?: return null
+        val station = DbfJsonParser.normalizedStationKey(eva) ?: return null
         if (station != board.eva) return null
         val number = trainNumber(journeyNumber) ?: return null
         val rows = board.departures.filter { trainNumber(it.trainNumber) == number }

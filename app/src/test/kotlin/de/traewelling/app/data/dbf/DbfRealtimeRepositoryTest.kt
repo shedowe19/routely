@@ -47,9 +47,13 @@ class DbfRealtimeRepositoryTest {
         assertFalse(http.client.followSslRedirects)
         assertFalse(http.client.retryOnConnectionFailure)
         assertEquals(6_000, http.client.callTimeoutMillis)
-        listOf("Hannover", "8000152/else", "123", "8000152?token=x").forEach {
+        listOf("0", "8000152/else", "123", "8000152?token=x", "0000000").forEach {
             assertTrue(runCatching { http.request(it) }.isFailure)
         }
+        assertEquals(
+            "https://dbf.finalrewind.org/Hannover%20Hbf.json?version=3&no_related=1&past=1",
+            http.request("Hannover Hbf").url.toString()
+        )
     }
 
     @Test fun decoderRejectsForeignUrlRedirectOversizeAndMalformedUtf8() {

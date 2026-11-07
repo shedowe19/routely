@@ -18,8 +18,9 @@ object DbfJsonParser {
     private val integerPattern = Regex("-?(?:0|[1-9]\\d*)")
 
     /** Throw on a failed or unexpected response instead of treating it as an empty board. */
-    fun parse(json: String, eva: String, fetchedAt: Instant = Instant.now()): DbfBoard {
-        require(normalizedEva(eva) != null) { "Invalid DBF station EVA" }
+    fun parse(json: String, stationKey: String, fetchedAt: Instant = Instant.now()): DbfBoard {
+        val key = normalizedStationKey(stationKey)
+            ?: error("Invalid DBF station key")
         require(json.length <= MAX_JSON_CHARS) { "DBF response is too large" }
         val reader = JsonReader(StringReader(json)).apply { strictness = Strictness.STRICT }
         val root = reader.use {
@@ -52,11 +53,23 @@ object DbfJsonParser {
                 messages = obj.messages()
             )
         }
-        return DbfBoard(eva.trim(), departures.toList(), fetchedAt)
+        return DbfBoard(key, departures.toList(), fetchedAt)
     }
 
     internal fun normalizedEva(value: String?): String? = value?.trim()
         ?.takeIf { it.length == 7 && it.all(Char::isDigit) && it.toLongOrNull() != 0L }
+
+    /**
+     * DBF accepts either the seven-digit EVA or an exact station name in the path.
+     * Träwelling currently omits station identifiers on some responses, so the name
+     * is the conservative fallback; `no_related=1` keeps the board station-local.
+     */
+    internal fun normalizedStationKey(value: String?): String? {
+        val trimmed = value?.trim()?.takeIf(String::isNotEmpty) ?: return null
+        if (trimmed.length > 120 || trimmed.any(Char::isISOControl)) return null
+        if (trimmed.any { it in "/\\?#" }) return null
+        return trimmed.takeIf { normalizedEva(it) != null || it.any(Char::isLetter) }
+    }
 
     private fun JsonObject.string(key: String): String? = get(key)?.takeUnless(JsonElement::isJsonNull)
         ?.takeIf { it.isJsonPrimitive && it.asJsonPrimitive.isString }

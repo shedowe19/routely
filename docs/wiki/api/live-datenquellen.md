@@ -32,10 +32,10 @@ Ein anderer Zugang zu demselben Transitous-Feed erweitert dessen Echtzeitabdecku
 ## Vertrag und Abgleich
 
 ```text
-GET https://dbf.finalrewind.org/<EVA>.json?version=3&no_related=1&past=1
+GET https://dbf.finalrewind.org/<EVA oder exakter Stationsname>.json?version=3&no_related=1&past=1
 ```
 
-Die dokumentierte JSON-Version 3 ist stabil. `no_related=1` ist zwingend: Ohne diese Einschränkung kann DBF Halte verwandter Bahnhöfe aufnehmen, während die JSON-Zeile selbst keine Stationskennung enthält. Die EVA stammt aus `station.identifiers.de_db_ibnr`; interne Träwelling-Stations-IDs sind keine EVA.
+Die dokumentierte JSON-Version 3 ist stabil. `no_related=1` ist zwingend: Ohne diese Einschränkung kann DBF Halte verwandter Bahnhöfe aufnehmen, während die JSON-Zeile selbst keine Stationskennung enthält. Bevorzugt stammt die EVA aus `station.identifiers.de_db_ibnr`; interne Träwelling-Stations-IDs sind keine EVA. Fehlt der IBNR in einer Antwort, verwendet Routely den exakten Träwelling-Stationsnamen als Pfadsegment. DBF löst diesen Namen serverseitig auf; `no_related=1` hält die Tafel stationslokal. Namen mit Pfadtrennzeichen, Steuerzeichen oder ohne Buchstaben werden verworfen. Liefert der Name keine passende Tafel, bleiben die Träwelling-Werte erhalten.
 
 `past=1` nimmt auch die vergangene Stunde auf; der Standard-Vorblick beträgt 180 Minuten. Bei verspäteten Fahrten wird der Fensterabgleich am belegten verzögerten Ereignis geprüft, sodass eine vor mehr als 20 Minuten geplante, jetzt aktuelle Fahrt nicht allein wegen ihrer Verspätung entfällt. DBF hält IRIS-Echtzeit laut geprüftem Quellcode selbst etwa 70 Sekunden im Cache. Der zusätzliche Clientcache kann deshalb keinen sekundengenauen Providerstand garantieren.
 
@@ -47,7 +47,7 @@ Die Tafel enthält nullable Minutenverspätungen, `platform`, `scheduledPlatform
 
 - Die Quelle ist standardmäßig aktiv und über **Zusätzliche Bahn-Livedaten** abschaltbar. Es wird ausschließlich die benötigte öffentliche Bahnhofstafel angefragt; Bearer-Token, Kontoinformationen und Gerätepositionen gehen nicht an DBF.
 - Der Prozess teilt Cache und laufende Abrufe zwischen Detailansicht und Begleitungsservice. Höchstens zehn Request-Starts in 60 Sekunden und einer je EVA in 60 Sekunden entsprechen der aktuellen Dienstvorgabe; auch fehlgeschlagene Starts zählen. Die Quote gilt je App-Prozess, keine flottenweite Kapazitätszusage.
-- Erfolgreiche Tafeln werden mindestens 60 Sekunden wiederverwendet. Fehlversuche und `Retry-After` begrenzen erneute Anfragen. Wenige zeitnahe Bahnhöfe und eine kurze Gesamtfrist begrenzen den Zusatzabruf; historische Fahrten, andere Verkehrsmittel, fehlende Kennungen und uneindeutige Treffer behalten Träwelling-Werte.
+- Erfolgreiche Tafeln werden mindestens 60 Sekunden wiederverwendet. Fehlversuche und `Retry-After` begrenzen erneute Anfragen. Wenige zeitnahe Bahnhöfe und eine kurze Gesamtfrist begrenzen den Zusatzabruf; historische Fahrten, andere Verkehrsmittel, fehlende Kennungen und uneindeutige Treffer behalten Träwelling-Werte. Fehlt nur der IBNR, greift der exakte Stationsname als Tafel-Schlüssel.
 - Zeiten, Gleise und Ausfälle erhalten getrennte Quell-/Abrufinformationen, ausschließlich wenn das jeweilige Feld übernommen wurde. Ein erfolgreicher HTTP-Abruf ohne passenden Wert erneuert keine beibehaltenen Fremdwerte.
 - Zusatzdaten werden nur lokal angezeigt und für die bestehende Begleitung verwendet. Sie lösen keinen Check-in-PUT aus. Manuelle Korrekturen und lokale GPS-Zeiten behalten ihre bisherige Priorität.
 - Der Änderungsmonitor behandelt einen bekannten Wechsel der jeweiligen Zeit-/Gleisquelle als neue Vergleichsbasis. Der Rückfall auf einen anders bezogenen Wert erzeugt keine scheinbare Verspätungsverbesserung, Gleisänderung oder Ausfallrücknahme. Neu bestätigte komplette Ausfälle bleiben meldbar.
