@@ -69,10 +69,11 @@ Kartenvorschau im Fahrtdetail (`ui/components/JourneyMap.kt`, Modell in
   fehlende Abschnitte werden geradlinig ergänzt, sodass kein Restabschnitt oder
   Ziel aus dem Kartenausschnitt fällt. Ohne nutzbare Form eine schematische
   Verbindung der Haltkoordinaten.
-- Marker: GPS-Cursor des Trackings oder zeitbasierte Fahrplaninterpolation,
-  auf die Streckenform geschnappt. Ein vorhandener Service-Cursor begrenzt auch
-  den Fahrplan-Rückfall; gestrichene Halte bleiben sichtbar, sind aber von der
-  Positionsinterpolation ausgeschlossen. Keine Fahrzeug- oder Geräte-GPS-Position.
+- Marker: GPS-Cursor nur der eigenen aktiven Fahrt, sonst zeitbasierte
+  Fahrplaninterpolation, auf die Streckenform geschnappt. Ein vorhandener
+  Service-Cursor begrenzt auch den Fahrplan-Rückfall; gestrichene Halte bleiben
+  sichtbar, sind aber von der Positionsinterpolation ausgeschlossen. Keine
+  Fahrzeug- oder Geräte-GPS-Position.
 - Hell/Dunkel folgt der `MaterialTheme`-Hintergrundhelligkeit; Kartenstile sind
   OpenFreeMap Liberty beziehungsweise Dark.
 
