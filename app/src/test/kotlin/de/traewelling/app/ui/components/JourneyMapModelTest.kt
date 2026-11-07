@@ -200,6 +200,28 @@ class JourneyMapModelTest {
         assertEquals(51.0, model.position!!.latitude, 0.0001)
     }
 
+    @Test fun cancelledVisitKeepsOriginalLegIndices() {
+        val stops = listOf(
+            stop("A", 50.0, 8.0, start, start),
+            stop("B", 50.0, 8.5, start.plusSeconds(1_200), start.plusSeconds(1_400))
+                .copy(cancelled = true),
+            stop("C", 50.0, 9.0, start.plusSeconds(2_400), start.plusSeconds(2_400)),
+            stop("D", 50.0, 10.0, end, end),
+        )
+        val model = buildJourneyMapModel(
+            stops = stops,
+            progress = StopTimelineProgress(),
+            nowMillis = start.plusSeconds(1_800).toEpochMilli(),
+            originIndex = 0,
+            destinationIndex = 3,
+            geometry = geometryWithSkippedVisit(),
+        )!!
+        assertEquals(
+            listOf(0 to 2, 2 to 3),
+            model.routeLegs.map { it.fromOriginalIndex to it.toOriginalIndex }
+        )
+    }
+
     @Test fun refusesMissingCoordinatesOrIncompleteRange() {
         val onlyOne = listOf(stop("A", 50.0, 8.0, start, start))
         assertNull(buildJourneyMapModel(onlyOne, StopTimelineProgress(), start.toEpochMilli(), 0, 0, null))
@@ -255,6 +277,49 @@ class JourneyMapModelTest {
                         from = RoutePoint(50.0, 8.0),
                         to = RoutePoint(50.0, 8.5),
                         alternatives = listOf(path),
+                        fetchedAtMillis = 1L,
+                    ),
+                    source = GpsGeometrySource.TRIP_POLYLINE,
+                )
+            ),
+            fetchedAtMillis = 1L,
+        )
+    }
+
+    private fun geometryWithSkippedVisit(): TransitRouteGeometry {
+        val request = TransitRouteRequest(
+            statusId = 1,
+            tripIdentity = "1:uuid",
+            visits = listOf(
+                TransitRouteVisit("a", null, null, null, null, RoutePoint(50.0, 8.0)),
+                TransitRouteVisit("b", null, null, null, null, RoutePoint(50.0, 8.5), cancelled = true),
+                TransitRouteVisit("c", null, null, null, null, RoutePoint(50.0, 9.0)),
+                TransitRouteVisit("d", null, null, null, null, RoutePoint(50.0, 10.0)),
+            ),
+        )
+        val first = listOf(RoutePoint(50.0, 8.0), RoutePoint(50.5, 8.5), RoutePoint(50.0, 9.0))
+        val second = listOf(RoutePoint(50.0, 9.0), RoutePoint(50.5, 9.5), RoutePoint(50.0, 10.0))
+        return TransitRouteGeometry(
+            request = request,
+            segments = listOf(
+                GpsSegmentGeometry(
+                    fromKey = "a",
+                    toKey = "c",
+                    geometry = RouteGeometry(
+                        from = RoutePoint(50.0, 8.0),
+                        to = RoutePoint(50.0, 9.0),
+                        alternatives = listOf(first),
+                        fetchedAtMillis = 1L,
+                    ),
+                    source = GpsGeometrySource.TRIP_POLYLINE,
+                ),
+                GpsSegmentGeometry(
+                    fromKey = "c",
+                    toKey = "d",
+                    geometry = RouteGeometry(
+                        from = RoutePoint(50.0, 9.0),
+                        to = RoutePoint(50.0, 10.0),
+                        alternatives = listOf(second),
                         fetchedAtMillis = 1L,
                     ),
                     source = GpsGeometrySource.TRIP_POLYLINE,

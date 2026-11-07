@@ -287,18 +287,23 @@ private data class RouteAssembly(
  * response must not silently drop a whole leg or shrink the camera to the first leg.
  */
 private fun TransitRouteGeometry.routeAssembly(): RouteAssembly? {
-    val active = request.visits.filterNot { it.cancelled }
+    // Keep each visit's original request index so cancelled stops cannot shift later legs.
+    val active = request.visits.mapIndexedNotNull { index, visit ->
+        if (visit.cancelled) null else index to visit
+    }
     val pairs = active.zipWithNext()
     if (pairs.isEmpty()) return null
     val byPair = segments.associateBy { it.fromKey to it.toKey }
     var covered = 0
-    val legs = pairs.mapIndexed { index, (from, to) ->
+    val legs = pairs.map { (fromEntry, toEntry) ->
+        val (fromIndex, from) = fromEntry
+        val (toIndex, to) = toEntry
         val path = byPair[from.key to to.key]?.geometry?.alternatives?.firstOrNull()
         if (path != null && path.size >= 2) {
             covered++
-            AssembledRouteLeg(index, index + 1, path)
+            AssembledRouteLeg(fromIndex, toIndex, path)
         } else {
-            AssembledRouteLeg(index, index + 1, listOf(from.point, to.point))
+            AssembledRouteLeg(fromIndex, toIndex, listOf(from.point, to.point))
         }
     }
     return RouteAssembly(legs, covered, covered == pairs.size)
