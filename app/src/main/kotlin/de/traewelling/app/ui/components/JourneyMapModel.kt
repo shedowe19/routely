@@ -24,6 +24,12 @@ internal data class JourneyMapStop(
     val cancelled: Boolean,
 )
 
+internal data class JourneyMapRouteLeg(
+    val fromOriginalIndex: Int,
+    val toOriginalIndex: Int,
+    val points: List<RoutePoint>,
+)
+
 internal data class JourneyMapPosition(
     val latitude: Double,
     val longitude: Double,
@@ -33,6 +39,7 @@ internal data class JourneyMapPosition(
 internal data class JourneyMapModel(
     val stops: List<JourneyMapStop>,
     val route: List<RoutePoint>,
+    val routeLegs: List<JourneyMapRouteLeg>,
     val position: JourneyMapPosition?,
     val sourceLabel: String,
     val routeKind: JourneyMapRouteKind,
@@ -86,6 +93,13 @@ internal fun buildJourneyMapModel(
     val route = assembly?.points?.takeIf {
         routeKind != JourneyMapRouteKind.SCHEMATIC && it.size >= 2
     } ?: mapStops.map { RoutePoint(it.latitude, it.longitude) }
+    val routeLegs = assembly?.legs.orEmpty().map { leg ->
+        JourneyMapRouteLeg(
+            fromOriginalIndex = originIndex + leg.fromVisitIndex,
+            toOriginalIndex = originIndex + leg.toVisitIndex,
+            points = leg.points,
+        )
+    }
 
     // Cancelled visits stay visible, but must never pull the live marker onto a skipped stop.
     val positionStops = mapStops.filterNot { it.cancelled }
@@ -94,10 +108,10 @@ internal fun buildJourneyMapModel(
     val rawPosition = when {
         progress.source == TimelinePositionSource.WAITING -> null
         progress.source == TimelinePositionSource.GPS ->
-            cursorPosition(positionStops, progress, route, nowMillis)
-        serviceCursor -> cursorPosition(positionStops, progress, route, nowMillis)
-            ?: timetablePosition(positionStops, nowMillis, route)
-        else -> timetablePosition(positionStops, nowMillis, route)
+            cursorPosition(positionStops, progress, route, routeLegs, nowMillis)
+        serviceCursor -> cursorPosition(positionStops, progress, route, routeLegs, nowMillis)
+            ?: timetablePosition(positionStops, progress, nowMillis, route, routeLegs)
+        else -> timetablePosition(positionStops, progress, nowMillis, route, routeLegs)
     }
 
     val currentIndex = progress.currentIndex
@@ -119,6 +133,7 @@ internal fun buildJourneyMapModel(
     return JourneyMapModel(
         stops = mapStops,
         route = route,
+        routeLegs = routeLegs,
         position = position,
         sourceLabel = when (progress.source) {
             TimelinePositionSource.GPS -> "Position per GPS-Fortschritt"
@@ -134,6 +149,7 @@ private fun cursorPosition(
     stops: List<JourneyMapStop>,
     progress: StopTimelineProgress,
     route: List<RoutePoint>,
+    legs: List<JourneyMapRouteLeg>,
     nowMillis: Long,
 ): JourneyMapPosition? {
     val current = stops.firstOrNull { it.originalIndex == progress.currentIndex }
@@ -154,25 +170,33 @@ private fun cursorPosition(
     if (previous == null) {
         return JourneyMapPosition(next.latitude, next.longitude, "Start: ${next.name}")
     }
-    return between(previous, next, nowMillis, route, next.name)
+    return between(previous, next, nowMillis, route, legs, next.name)
 }
 
 private fun timetablePosition(
     stops: List<JourneyMapStop>,
+    progress: StopTimelineProgress,
     nowMillis: Long,
     route: List<RoutePoint>,
+    legs: List<JourneyMapRouteLeg>,
 ): JourneyMapPosition? {
     val first = stops.firstOrNull() ?: return null
     val firstArrival = first.arrivalMillis ?: first.departureMillis
     if (firstArrival != null && nowMillis < firstArrival) {
         return JourneyMapPosition(first.latitude, first.longitude, "Start: ${first.name}")
     }
-    for (stop in stops) {
+    // The timeline resolves overlapping dwells to the last matching visit.
+    val current = stops.firstOrNull { it.originalIndex == progress.currentIndex }
+    if (current != null) {
+        return JourneyMapPosition(current.latitude, current.longitude, "Halt: ${current.name}")
+    }
+    val dwell = stops.lastOrNull { stop ->
         val arrival = stop.arrivalMillis ?: stop.departureMillis
         val departure = stop.departureMillis ?: arrival
-        if (arrival != null && departure != null && nowMillis in arrival..departure) {
-            return JourneyMapPosition(stop.latitude, stop.longitude, "Halt: ${stop.name}")
-        }
+        arrival != null && departure != null && nowMillis in arrival..departure
+    }
+    if (dwell != null) {
+        return JourneyMapPosition(dwell.latitude, dwell.longitude, "Halt: ${dwell.name}")
     }
     for (index in 0 until stops.lastIndex) {
         val from = stops[index]
@@ -180,7 +204,7 @@ private fun timetablePosition(
         val start = from.departureMillis ?: from.arrivalMillis ?: continue
         val end = to.arrivalMillis ?: to.departureMillis ?: continue
         if (nowMillis in start..end) {
-            return between(from, to, nowMillis, route, to.name)
+            return between(from, to, nowMillis, route, legs, to.name)
         }
     }
     val last = stops.last()
@@ -192,6 +216,7 @@ private fun between(
     to: JourneyMapStop,
     nowMillis: Long,
     route: List<RoutePoint>,
+    legs: List<JourneyMapRouteLeg>,
     nextName: String,
 ): JourneyMapPosition {
     val start = from.departureMillis ?: from.arrivalMillis
@@ -205,15 +230,57 @@ private fun between(
         from.latitude + (to.latitude - from.latitude) * fraction,
         from.longitude + (to.longitude - from.longitude) * fraction,
     )
-    val snapped = snapToRoute(raw, route)
+    val snapped = snapToRoute(raw, pathForPair(from, to, route, legs))
     return JourneyMapPosition(snapped.latitude, snapped.longitude, "Unterwegs nach $nextName")
 }
 
-private data class RouteAssembly(
+/** Only the current stop-to-stop leg may capture the marker; a looping later leg must not. */
+private fun pathForPair(
+    from: JourneyMapStop,
+    to: JourneyMapStop,
+    route: List<RoutePoint>,
+    legs: List<JourneyMapRouteLeg>,
+): List<RoutePoint> {
+    val matched = legs
+        .filter { it.fromOriginalIndex >= from.originalIndex && it.toOriginalIndex <= to.originalIndex }
+        .sortedBy { it.fromOriginalIndex }
+    if (matched.isEmpty()) {
+        return listOf(
+            RoutePoint(from.latitude, from.longitude),
+            RoutePoint(to.latitude, to.longitude),
+        )
+    }
+    val points = ArrayList<RoutePoint>()
+    matched.forEach { leg ->
+        leg.points.forEach { point ->
+            if (points.lastOrNull() != point) points.add(point)
+        }
+    }
+    return points.takeIf { it.size >= 2 } ?: route
+}
+
+private data class AssembledRouteLeg(
+    val fromVisitIndex: Int,
+    val toVisitIndex: Int,
     val points: List<RoutePoint>,
+)
+
+private data class RouteAssembly(
+    val legs: List<AssembledRouteLeg>,
     val covered: Int,
     val complete: Boolean,
-)
+) {
+    val points: List<RoutePoint>
+        get() {
+            val result = ArrayList<RoutePoint>()
+            legs.forEach { leg ->
+                leg.points.forEach { point ->
+                    if (result.lastOrNull() != point) result.add(point)
+                }
+            }
+            return result
+        }
+}
 
 /**
  * Fills missing provider segments with straight stop-to-stop connections. A partial
@@ -224,24 +291,17 @@ private fun TransitRouteGeometry.routeAssembly(): RouteAssembly? {
     val pairs = active.zipWithNext()
     if (pairs.isEmpty()) return null
     val byPair = segments.associateBy { it.fromKey to it.toKey }
-    val points = ArrayList<RoutePoint>()
     var covered = 0
-
-    fun add(point: RoutePoint) {
-        if (points.lastOrNull() != point) points.add(point)
-    }
-
-    for ((from, to) in pairs) {
+    val legs = pairs.mapIndexed { index, (from, to) ->
         val path = byPair[from.key to to.key]?.geometry?.alternatives?.firstOrNull()
         if (path != null && path.size >= 2) {
             covered++
-            path.forEach(::add)
+            AssembledRouteLeg(index, index + 1, path)
         } else {
-            add(from.point)
-            add(to.point)
+            AssembledRouteLeg(index, index + 1, listOf(from.point, to.point))
         }
     }
-    return RouteAssembly(points, covered, covered == pairs.size)
+    return RouteAssembly(legs, covered, covered == pairs.size)
 }
 
 private fun snapToRoute(point: RoutePoint, route: List<RoutePoint>): RoutePoint {
