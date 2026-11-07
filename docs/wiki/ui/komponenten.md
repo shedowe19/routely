@@ -66,9 +66,13 @@ Kartenvorschau im Fahrtdetail (`ui/components/JourneyMap.kt`, Modell in
 - Die Vollbildansicht ist interaktiv (Verschieben, Zoom, Rotation) und bietet
   „Route zentrieren“ sowie Schließen.
 - Strecke: `Träwelling-Streckenverlauf` aus `GET /api/v1/polyline/{statusId}`;
-  ohne nutzbare Form eine schematische Verbindung der Haltkoordinaten.
+  fehlende Abschnitte werden geradlinig ergänzt, sodass kein Restabschnitt oder
+  Ziel aus dem Kartenausschnitt fällt. Ohne nutzbare Form eine schematische
+  Verbindung der Haltkoordinaten.
 - Marker: GPS-Cursor des Trackings oder zeitbasierte Fahrplaninterpolation,
-  auf die Streckenform geschnappt. Keine Fahrzeug- oder Geräte-GPS-Position.
+  auf die Streckenform geschnappt. Ein vorhandener Service-Cursor begrenzt auch
+  den Fahrplan-Rückfall; gestrichene Halte bleiben sichtbar, sind aber von der
+  Positionsinterpolation ausgeschlossen. Keine Fahrzeug- oder Geräte-GPS-Position.
 - Hell/Dunkel folgt der `MaterialTheme`-Hintergrundhelligkeit; Kartenstile sind
   OpenFreeMap Liberty beziehungsweise Dark.
 

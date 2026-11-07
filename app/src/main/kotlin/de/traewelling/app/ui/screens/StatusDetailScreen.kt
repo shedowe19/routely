@@ -265,11 +265,13 @@ private fun StatusDetailContent(
         resolveStopTimelineProgress(clockStopovers, nowMillis, uiState.trackingState, destinationIdx)
     }
     val journeyMapModel = remember(
-        clockStopovers, timelineProgress, nowMillis, originIdx, destinationIdx, uiState.routeGeometry
+        clockStopovers, timelineProgress, nowMillis, originIdx, destinationIdx,
+        uiState.routeGeometry, uiState.trackingState
     ) {
         if (originIdx >= 0 && destinationIdx > originIdx) {
             buildJourneyMapModel(
-                clockStopovers, timelineProgress, nowMillis, originIdx, destinationIdx, uiState.routeGeometry
+                clockStopovers, timelineProgress, nowMillis, originIdx, destinationIdx,
+                uiState.routeGeometry, hasServiceCursor = uiState.trackingState != null
             )
         } else {
             null

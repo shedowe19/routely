@@ -108,7 +108,7 @@ Der [Signierworkflow 41678670414](https://github.com/shedowe19/routely/actions/r
 
 ## Live-Karte vom 07.11.2026
 
-Der lokale Ausbau ergänzt sechs Unit-Fälle in `JourneyMapModelTest`: Fahrplaninterpolation, Halt/Start/Ziel, GPS-Cursor, Streckenform mit Marker-Snap, fehlende Koordinaten und den Wartezustand ohne Marker. Der lokale Lauf bestand **1.077 Android-Unit-Tests**, ohne Fehler, Fehlschläge oder übersprungene Fälle; Debug-Build und Debug-Installation auf dem SM-S948B waren erfolgreich. Auf dem Gerät wurden die Vorschau, das Scrollen der Detailseite über die Karte, die Vollbildansicht sowie eine echte S5-Fahrt mit geladenem Träwelling-Streckenverlauf geprüft. Die Karte ist kein Ersatz für eine reale Fahrzeugpositionsprüfung; Marker bleiben Fahrplan-/GPS-Cursor-Schätzungen.
+Der lokale Ausbau ergänzt neun Unit-Fälle in `JourneyMapModelTest`: Fahrplaninterpolation, Halt/Start/Ziel, GPS-Cursor, Streckenform mit Marker-Snap, fehlende Koordinaten, Wartezustand ohne Marker, partielle Anbietergeometrie mit ergänztem Restabschnitt, ausgelassene gestrichene Halte bei der Positionsberechnung und den erhaltenen Service-Cursor im Fahrplan-Rückfall. Der lokale Lauf bestand **1.080 Android-Unit-Tests**, ohne Fehler, Fehlschläge oder übersprungene Fälle; Debug-Build und Debug-Installation auf dem SM-S948B waren erfolgreich. Auf dem Gerät wurden die Vorschau, das Scrollen der Detailseite über die Karte, die Vollbildansicht sowie eine echte S5-Fahrt mit geladenem Träwelling-Streckenverlauf geprüft. Die Karte ist kein Ersatz für eine reale Fahrzeugpositionsprüfung; Marker bleiben Fahrplan-/GPS-Cursor-Schätzungen.
 
 ## Voraussetzungen
 

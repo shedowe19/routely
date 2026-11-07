@@ -142,7 +142,7 @@ internal fun JourneyMapCard(
                         fontWeight = FontWeight.Bold,
                     )
                     Text(
-                        model.sourceLabel + if (model.detailedRoute) " · Strecke aus Träwelling" else " · Strecke schematisch",
+                        model.sourceLabel + " · " + routeLabel(model.routeKind),
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                     )
@@ -209,7 +209,7 @@ private fun JourneyMapDialog(
                     Column(Modifier.weight(1f)) {
                         Text("Live-Karte", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                         Text(
-                            model.sourceLabel + if (model.detailedRoute) " · Strecke aus Träwelling" else " · Strecke schematisch",
+                            model.sourceLabel + " · " + routeLabel(model.routeKind),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                         )
@@ -534,6 +534,12 @@ private fun addJourneyLayers(
             circleStrokeWidth(3f),
         )
     )
+}
+
+private fun routeLabel(kind: JourneyMapRouteKind): String = when (kind) {
+    JourneyMapRouteKind.DETAILED -> "Strecke aus Träwelling"
+    JourneyMapRouteKind.PARTIAL -> "Strecke teilweise aus Träwelling"
+    JourneyMapRouteKind.SCHEMATIC -> "Strecke schematisch"
 }
 
 private fun Color.toHex(): String = String.format(Locale.ROOT, "#%06X", toArgb() and 0xFFFFFF)

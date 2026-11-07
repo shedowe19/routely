@@ -11,6 +11,8 @@ import kotlin.math.cos
 
 internal enum class JourneyMapStopRole { STOP, ORIGIN, DESTINATION }
 
+internal enum class JourneyMapRouteKind { DETAILED, PARTIAL, SCHEMATIC }
+
 internal data class JourneyMapStop(
     val originalIndex: Int,
     val name: String,
@@ -33,7 +35,7 @@ internal data class JourneyMapModel(
     val route: List<RoutePoint>,
     val position: JourneyMapPosition?,
     val sourceLabel: String,
-    val detailedRoute: Boolean,
+    val routeKind: JourneyMapRouteKind,
 )
 
 /**
@@ -47,6 +49,7 @@ internal fun buildJourneyMapModel(
     originIndex: Int,
     destinationIndex: Int,
     geometry: TransitRouteGeometry?,
+    hasServiceCursor: Boolean = false,
 ): JourneyMapModel? {
     if (originIndex !in stops.indices || destinationIndex !in stops.indices || destinationIndex <= originIndex) {
         return null
@@ -57,15 +60,13 @@ internal fun buildJourneyMapModel(
         val latitude = station.latitude ?: return@mapIndexedNotNull null
         val longitude = station.longitude ?: return@mapIndexedNotNull null
         if (!validCoordinate(latitude, longitude)) return@mapIndexedNotNull null
-        val arrival = epochMillis(stop.effectiveArrival)
-        val departure = epochMillis(stop.effectiveDeparture)
         JourneyMapStop(
             originalIndex = originIndex + offset,
             name = stop.stationName ?: "Unbekannte Station",
             latitude = latitude,
             longitude = longitude,
-            arrivalMillis = arrival,
-            departureMillis = departure,
+            arrivalMillis = epochMillis(stop.effectiveArrival),
+            departureMillis = epochMillis(stop.effectiveDeparture),
             role = when (originIndex + offset) {
                 originIndex -> JourneyMapStopRole.ORIGIN
                 destinationIndex -> JourneyMapStopRole.DESTINATION
@@ -76,13 +77,29 @@ internal fun buildJourneyMapModel(
     }
     if (mapStops.size < 2) return null
 
-    val detailedRoute = geometry?.polyline().orEmpty().takeIf { it.size >= 2 }
-    val route = detailedRoute ?: mapStops.map { RoutePoint(it.latitude, it.longitude) }
-    val rawPosition = when (progress.source) {
-        TimelinePositionSource.WAITING -> null
-        TimelinePositionSource.GPS -> gpsPosition(mapStops, progress, route, nowMillis)
-        TimelinePositionSource.TIMETABLE -> timetablePosition(mapStops, nowMillis, route)
+    val assembly = geometry?.routeAssembly()
+    val routeKind = when {
+        assembly == null || assembly.covered == 0 || assembly.points.size < 2 -> JourneyMapRouteKind.SCHEMATIC
+        assembly.complete -> JourneyMapRouteKind.DETAILED
+        else -> JourneyMapRouteKind.PARTIAL
     }
+    val route = assembly?.points?.takeIf {
+        routeKind != JourneyMapRouteKind.SCHEMATIC && it.size >= 2
+    } ?: mapStops.map { RoutePoint(it.latitude, it.longitude) }
+
+    // Cancelled visits stay visible, but must never pull the live marker onto a skipped stop.
+    val positionStops = mapStops.filterNot { it.cancelled }
+    val serviceCursor = hasServiceCursor &&
+        (progress.currentIndex != null || progress.nextIndex != null || progress.passedThroughIndex >= 0)
+    val rawPosition = when {
+        progress.source == TimelinePositionSource.WAITING -> null
+        progress.source == TimelinePositionSource.GPS ->
+            cursorPosition(positionStops, progress, route, nowMillis)
+        serviceCursor -> cursorPosition(positionStops, progress, route, nowMillis)
+            ?: timetablePosition(positionStops, nowMillis, route)
+        else -> timetablePosition(positionStops, nowMillis, route)
+    }
+
     val currentIndex = progress.currentIndex
     val nextIndex = progress.nextIndex
     val progressLabel = when {
@@ -108,11 +125,12 @@ internal fun buildJourneyMapModel(
             TimelinePositionSource.WAITING -> "Position wird ermittelt"
             TimelinePositionSource.TIMETABLE -> "Position aus Fahrplan geschätzt"
         },
-        detailedRoute = detailedRoute != null,
+        routeKind = routeKind,
     )
 }
 
-private fun gpsPosition(
+/** Current/next cursor position, used for GPS and for a retained timetable fallback cursor. */
+private fun cursorPosition(
     stops: List<JourneyMapStop>,
     progress: StopTimelineProgress,
     route: List<RoutePoint>,
@@ -191,17 +209,39 @@ private fun between(
     return JourneyMapPosition(snapped.latitude, snapped.longitude, "Unterwegs nach $nextName")
 }
 
-private fun TransitRouteGeometry.polyline(): List<RoutePoint> {
+private data class RouteAssembly(
+    val points: List<RoutePoint>,
+    val covered: Int,
+    val complete: Boolean,
+)
+
+/**
+ * Fills missing provider segments with straight stop-to-stop connections. A partial
+ * response must not silently drop a whole leg or shrink the camera to the first leg.
+ */
+private fun TransitRouteGeometry.routeAssembly(): RouteAssembly? {
+    val active = request.visits.filterNot { it.cancelled }
+    val pairs = active.zipWithNext()
+    if (pairs.isEmpty()) return null
     val byPair = segments.associateBy { it.fromKey to it.toKey }
     val points = ArrayList<RoutePoint>()
-    request.visits.filterNot { it.cancelled }.zipWithNext().forEach { (from, to) ->
-        val segment = byPair[from.key to to.key] ?: return@forEach
-        val path = segment.geometry.alternatives.firstOrNull() ?: return@forEach
-        path.forEach { point ->
-            if (points.lastOrNull() != point) points.add(point)
+    var covered = 0
+
+    fun add(point: RoutePoint) {
+        if (points.lastOrNull() != point) points.add(point)
+    }
+
+    for ((from, to) in pairs) {
+        val path = byPair[from.key to to.key]?.geometry?.alternatives?.firstOrNull()
+        if (path != null && path.size >= 2) {
+            covered++
+            path.forEach(::add)
+        } else {
+            add(from.point)
+            add(to.point)
         }
     }
-    return points
+    return RouteAssembly(points, covered, covered == pairs.size)
 }
 
 private fun snapToRoute(point: RoutePoint, route: List<RoutePoint>): RoutePoint {

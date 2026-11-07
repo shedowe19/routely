@@ -12,7 +12,6 @@ import de.traewelling.app.data.model.TransitRouteVisit
 import de.traewelling.app.ui.screens.StopTimelineProgress
 import de.traewelling.app.ui.screens.TimelinePositionSource
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -35,7 +34,7 @@ class JourneyMapModelTest {
         assertEquals("Unterwegs nach B", model.position!!.label)
         assertEquals(50.0, model.position!!.latitude, 0.0001)
         assertEquals(8.5, model.position!!.longitude, 0.0001)
-        assertFalse(model.detailedRoute)
+        assertEquals(JourneyMapRouteKind.SCHEMATIC, model.routeKind)
     }
 
     @Test fun dwellAtStopAndStartAndDestinationLabels() {
@@ -93,9 +92,69 @@ class JourneyMapModelTest {
             destinationIndex = 1,
             geometry = geometry,
         )!!
-        assertTrue(model.detailedRoute)
+        assertEquals(JourneyMapRouteKind.DETAILED, model.routeKind)
         assertEquals(3, model.route.size)
         assertTrue("marker should snap to the curved track, was ${model.position}", model.position!!.latitude > 50.05)
+    }
+
+    @Test fun partialProviderGeometryKeepsUncoveredLegAndDestination() {
+        val stops = listOf(
+            stop("A", 50.0, 8.0, start, start),
+            stop("B", 50.0, 8.5, start.plusSeconds(1_800), start.plusSeconds(1_800)),
+            stop("C", 50.0, 9.0, end, end),
+        )
+        val model = buildJourneyMapModel(
+            stops = stops,
+            progress = StopTimelineProgress(),
+            nowMillis = start.plusSeconds(900).toEpochMilli(),
+            originIndex = 0,
+            destinationIndex = 2,
+            geometry = geometryWithPartialSegments(),
+        )!!
+        assertEquals(JourneyMapRouteKind.PARTIAL, model.routeKind)
+        assertTrue("route must not end at the last detailed leg", model.route.size >= 3)
+        assertEquals(9.0, model.route.last().longitude, 0.0001)
+        assertEquals(50.0, model.route.last().latitude, 0.0001)
+    }
+
+    @Test fun cancelledStopDoesNotCaptureMarker() {
+        val stops = listOf(
+            stop("A", 50.0, 8.0, start, start),
+            stop("B", 50.0, 8.5, start.plusSeconds(1_200), start.plusSeconds(2_400))
+                .copy(cancelled = true),
+            stop("C", 50.0, 9.0, end, end),
+        )
+        val model = buildJourneyMapModel(
+            stops = stops,
+            progress = StopTimelineProgress(),
+            nowMillis = start.plusSeconds(900).toEpochMilli(),
+            originIndex = 0,
+            destinationIndex = 2,
+            geometry = null,
+        )!!
+        assertTrue(model.stops.any { it.cancelled })
+        assertEquals(8.25, model.position!!.longitude, 0.0001)
+    }
+
+    @Test fun serviceTimetableCursorConstrainsClockFallback() {
+        val stops = listOf(
+            stop("A", 50.0, 8.0, start, start),
+            stop("B", 50.0, 8.5, start.plusSeconds(3_600), start.plusSeconds(3_600)),
+            stop("C", 50.0, 9.0, start.plusSeconds(7_200), start.plusSeconds(7_200)),
+        )
+        val progress = StopTimelineProgress(nextIndex = 1, source = TimelinePositionSource.TIMETABLE)
+        val now = start.plusSeconds(6_600).toEpochMilli()
+
+        val constrained = buildJourneyMapModel(
+            stops, progress, now, 0, 2, null, hasServiceCursor = true
+        )!!
+        assertEquals("Unterwegs nach B", constrained.position!!.label)
+        assertEquals(8.5, constrained.position!!.longitude, 0.0001)
+
+        val clock = buildJourneyMapModel(
+            stops, progress, now, 0, 2, null, hasServiceCursor = false
+        )!!
+        assertTrue("without a service cursor the clock may advance", clock.position!!.longitude > 8.5)
     }
 
     @Test fun refusesMissingCoordinatesOrIncompleteRange() {
@@ -131,6 +190,36 @@ class JourneyMapModelTest {
         arrivalPlanned = arrival.toString(),
         departurePlanned = departure.toString(),
     )
+
+    private fun geometryWithPartialSegments(): TransitRouteGeometry {
+        val request = TransitRouteRequest(
+            statusId = 1,
+            tripIdentity = "1:uuid",
+            visits = listOf(
+                TransitRouteVisit("a", null, null, null, null, RoutePoint(50.0, 8.0)),
+                TransitRouteVisit("b", null, null, null, null, RoutePoint(50.0, 8.5)),
+                TransitRouteVisit("c", null, null, null, null, RoutePoint(50.0, 9.0)),
+            ),
+        )
+        val path = listOf(RoutePoint(50.0, 8.0), RoutePoint(50.2, 8.5), RoutePoint(50.0, 8.5))
+        return TransitRouteGeometry(
+            request = request,
+            segments = listOf(
+                GpsSegmentGeometry(
+                    fromKey = "a",
+                    toKey = "b",
+                    geometry = RouteGeometry(
+                        from = RoutePoint(50.0, 8.0),
+                        to = RoutePoint(50.0, 8.5),
+                        alternatives = listOf(path),
+                        fetchedAtMillis = 1L,
+                    ),
+                    source = GpsGeometrySource.TRIP_POLYLINE,
+                )
+            ),
+            fetchedAtMillis = 1L,
+        )
+    }
 
     private fun geometryWithCurve(): TransitRouteGeometry {
         val request = TransitRouteRequest(
