@@ -48,6 +48,8 @@ import de.traewelling.app.service.JourneyTime
 import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.JourneyTimeSource
 import de.traewelling.app.service.TrackingSource
+import de.traewelling.app.ui.components.JourneyMapCard
+import de.traewelling.app.ui.components.buildJourneyMapModel
 import de.traewelling.app.ui.components.StateMessage
 import de.traewelling.app.ui.components.StatusVisibilitySelector
 import de.traewelling.app.ui.components.TraewellingTopAppBar
@@ -262,6 +264,19 @@ private fun StatusDetailContent(
     val timelineProgress = remember(clockStopovers, now, nowMillis, uiState.trackingState, destinationIdx) {
         resolveStopTimelineProgress(clockStopovers, nowMillis, uiState.trackingState, destinationIdx)
     }
+    val journeyMapModel = remember(
+        clockStopovers, timelineProgress, nowMillis, originIdx, destinationIdx,
+        uiState.routeGeometry, uiState.trackingState
+    ) {
+        if (originIdx >= 0 && destinationIdx > originIdx) {
+            buildJourneyMapModel(
+                clockStopovers, timelineProgress, nowMillis, originIdx, destinationIdx,
+                uiState.routeGeometry, hasServiceCursor = uiState.trackingState != null
+            )
+        } else {
+            null
+        }
+    }
 
     val isLoading = uiState.isLoading
     val hasStopovers = stopovers.isNotEmpty()
@@ -339,6 +354,25 @@ private fun StatusDetailContent(
                 ) {
                     TripInfoCard(status, gpsTimes, nowMillis, isReplacementBus,
                         sevStops.isNotEmpty(), uiState.isLoadingSevStops, uiState.realtimeRefreshFailed)
+                }
+            }
+        }
+
+        if (checkin != null && journeyMapModel != null) {
+            item {
+                AnimatedVisibility(
+                    visible = isVisible,
+                    enter = fadeIn(animationSpec = tween(400, delayMillis = 150)) + slideInVertically(
+                        initialOffsetY = { 50 },
+                        animationSpec = tween(400, delayMillis = 150)
+                    )
+                ) {
+                    JourneyMapCard(
+                        model = journeyMapModel,
+                        lineName = checkin.lineName,
+                        accent = TransportColors.forCategory(checkin.category),
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
                 }
             }
         }

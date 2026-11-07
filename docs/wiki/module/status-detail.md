@@ -18,6 +18,8 @@ Zeigt einen einzelnen Status mit vollem Timeline-Verlauf der Haltestellen. Ermö
 - `app/src/main/kotlin/de/traewelling/app/ui/components/StatusVisibilitySelector.kt`
 - `app/src/main/kotlin/de/traewelling/app/viewmodel/DeletedStatusCompletion.kt`
 - `app/src/main/kotlin/de/traewelling/app/ui/screens/StopTimelineProgress.kt`
+- `app/src/main/kotlin/de/traewelling/app/ui/components/JourneyMap.kt`
+- `app/src/main/kotlin/de/traewelling/app/ui/components/JourneyMapModel.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/TrackingLiveState.kt`
 - `app/src/main/kotlin/de/traewelling/app/service/JourneyTimeResolver.kt`
 
@@ -73,6 +75,12 @@ Bestätigte Ankunfts-/Abfahrtsereignisse können als `GPS beobachtet` sichtbar s
 Die frühere `propagateDelays()`-Vererbung einschließlich synthetischer Puffer wurde entfernt. Ein Rückfall zeigt dadurch tatsächliche vorhandene Providerwerte und bewahrt Verfrühungen, statt eine ältere positive Verzögerung auf weitere Halte zu übertragen. GPS-Prognosen verändern weder die API-Echtzeitfelder noch die gespeicherten Check-in-Zeiten. Das Bearbeitungsformular verwendet ausdrücklich den Resolver ohne GPS-Daten; eine Schätzung wird nicht beim Speichern zur manuellen Istzeit. Die Prognosebedingungen stehen unter [GPS-Zeiten](./gps-zeiten.md).
 
 Bei Straßenalternativen mit streng belegtem gemeinsamem Restweg und höchstens einer Minute Modellstreuung kann der Schätzer seit 07.10.2026 die späteste passende ETA liefern, ohne die frühere Anfahrtsroute zu behaupten. Eine neue GPS-Schätzung erscheint erst nach dem vollständigen Bewegungsbeleg jedes Kandidaten; während dessen Aufbau kann der Mehrdeutigkeitshinweis bereits auf fehlende Fahrbewegung wechseln. Die UI selbst glättet keine Ablehnung und berechnet keinen Ersatzwert. Der genaue Vertrag steht unter [GPS-Zeiten](./gps-zeiten.md).
+
+### Live-Karte
+
+Nach dem veröffentlichten Status-/Halte-Snapshot lädt `StatusDetailViewModel` den optionalen `Träwelling-Streckenverlauf` über den vorhandenen `TransitRouteRepository` (`GET /api/v1/polyline/{statusId}`). Die Anfrage wird nur aus dem eindeutig begrenzten Einstiegs-/Zielbereich und den geordneten Besuchsschlüsseln gebildet; Fehler oder eine unbrauchbare Form blockieren weder Timeline noch Auto-Refresh. `JourneyMapModel` filtert auf mindestens zwei Halte mit gültigen Koordinaten und baut daraus Start, Ziel, Haltpunkte und die aktuelle Position.
+
+Die Position folgt bei aktivem Tracking dem GPS-Besuchscursor, sonst der zeitlichen Interpolation zwischen Abfahrt und nächster Ankunft. GPS-Fortschritt fließt ausschließlich in die eigene, aktuell beobachtete Fahrt ein; fremde und vergangene Fahrten nutzen ausschließlich die Fahrplan-Schätzung. Ein vom Service gehaltener Cursor begrenzt die Position auch im Fahrplan-Rückfall; nur ohne Service-Cursor wird frei nach Uhr interpoliert. Überlappende Halteaufenthalte verwenden denselben zuletzt passenden Besuch wie die Timeline. Bei vorhandener Träwelling-Form wird der Punkt auf die nächste Kante des aktuellen Halt-zu-Halt-Abschnitts geschnappt, nicht auf eine spätere Schleife; ohne Form bleibt eine schematische Haltverbindung. Fehlt nur ein Teil der Anbieterform, werden die nicht abgedeckten Abschnitte geradlinig ergänzt und die Karte als teilweise aus Träwelling gekennzeichnet, statt einen Restabschnitt oder das Ziel aus dem Kartenausschnitt zu verlieren. Gestrichene Halte bleiben sichtbar, werden aber nicht für die Positionsinterpolation verwendet. `JourneyMapCard` zeigt zunächst eine nicht gestenfähige Vorschau, damit die Detailseite weiter scrollt. Ein Tipp öffnet die interaktive Vollbildkarte; Kacheln und Stile kommen von OpenFreeMap, die Attribution nennt OpenFreeMap, OpenMapTiles und OpenStreetMap. Es werden nur öffentliche Halt-/Streckendaten und der sichtbare Kartenausschnitt an den Kachelanbieter übertragen, keine Geräteposition und kein Träwelling-Token.
 
 ### SEV-Ersatzhaltestellen
 
@@ -168,6 +176,7 @@ Die Linie wird mit `drawBehind` über die vollständige Zeilenhöhe gezeichnet. 
 | `trackingState` | TrackingLiveState? | Passender eigener aktiver Service-Fortschritt |
 | `sevStops` | Map<String, SevStopInfo> | Besuchsbezogene SEV-Positionen beziehungsweise Quellenhinweise des Detailabrufs |
 | `isLoadingSevStops` | Boolean | Öffentliche Karten werden im Hintergrund gesucht |
+| `routeGeometry` | TransitRouteGeometry? | Optionaler Träwelling-Streckenverlauf für die Live-Karte; Fehler lassen die schematische Haltverbindung |
 | `isEditing`   | Boolean           | Bearbeitungsmodus               |
 | `editInitialStatus` | Status? | Beim Öffnen gebundener Edit-Anfangsstatus |
 | `editArrivalManuallyChanged` | Boolean? | Explizite Ankunftseingabe gegenüber automatisch angepasster Zielzeit |

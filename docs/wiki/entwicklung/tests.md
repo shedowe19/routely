@@ -106,6 +106,10 @@ Die [CI 41677528286](https://github.com/shedowe19/routely/actions/runs/416775282
 
 Der [Signierworkflow 41678670414](https://github.com/shedowe19/routely/actions/runs/41678670414) veröffentlichte anschließend `v1.12.0` mit Code `21` aus genau demselben Commit. Seine 56 Releaseguardtests und Test-/Release-Build sind erfolgreich. Die tatsächliche öffentliche APK wurde heruntergeladen und unabhängig auf Manifest, v2-/v3-Signaturen, unverändertes Zertifikat, Größe, Hashes sowie Tag-/Claim-/Metadaten-/Workflowbindung geprüft; vollständiger Nachweis unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1120). Keine reale Geräte-, Restore-, Fahrt- oder schreibende Träwelling-Prüfung durch diese CI- und Artefaktkontrolle.
 
+## Live-Karte vom 07.11.2026
+
+Der lokale Ausbau ergänzt zwölf Unit-Fälle in `JourneyMapModelTest`: Fahrplaninterpolation, Halt/Start/Ziel, GPS-Cursor, Streckenform mit Marker-Snap, fehlende Koordinaten, Wartezustand ohne Marker, partielle Anbietergeometrie mit ergänztem Restabschnitt, ausgelassene gestrichene Halte bei der Positionsberechnung, den erhaltenen Service-Cursor im Fahrplan-Rückfall, den auf den aktuellen Abschnitt begrenzten Snap bei Schleifen, den letzten überlappenden Halt und unveränderte Besuchsindizes bei ausgelassenen Halten. Der lokale Lauf bestand **1.083 Android-Unit-Tests**, ohne Fehler, Fehlschläge oder übersprungene Fälle; Debug-Build und Debug-Installation auf dem SM-S948B waren erfolgreich. Auf dem Gerät wurden die Vorschau, das Scrollen der Detailseite über die Karte, die Vollbildansicht sowie eine echte S5-Fahrt mit geladenem Träwelling-Streckenverlauf geprüft. Die Karte ist kein Ersatz für eine reale Fahrzeugpositionsprüfung; Marker bleiben Fahrplan-/GPS-Cursor-Schätzungen.
+
 ## Voraussetzungen
 
 - Lokale Gradle-Aufrufe benötigen JDK 17.

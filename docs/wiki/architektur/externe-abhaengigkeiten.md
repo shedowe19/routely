@@ -12,6 +12,7 @@ Dokumentation wichtiger 3rd-Party-Bibliotheken und Dienste.
 - **JSON Parsing**: `com.google.code.gson:gson`
 - **Image Loading**: `io.coil-kt.coil3:coil-compose`, explizites `coil-network-okhttp` und `coil-network-cache-control`; zentraler Loader über `SingletonImageLoader.Factory` mit User-Agent und `CacheControlCacheStrategy`.
 - **Location Services**: `com.google.android.gms:play-services-location` (Standort für die Stationssuche und Standort-Callbacks im `TripTrackingService` sowie Opt-in-`RideRecognitionService`).
+- **Karte**: `org.maplibre.gl:android-sdk` (BSD-2-Clause) für die native Kartenvorschau und die interaktive Vollbildkarte im Fahrtdetail; Kacheln und Stile liefert OpenFreeMap.
 - **Coroutines**: `org.jetbrains.kotlinx:kotlinx-coroutines-android`; `kotlinx-coroutines-test` ausschließlich als Testabhängigkeit mit derselben Version 1.11.0 für kontrollierte Controller-Requestfolgen.
 
 ## Gewählter Versionsstand vom 06.10.2026
@@ -33,6 +34,7 @@ Quelle der tatsächlich angeforderten Werte ist `gradle/libs.versions.toml`. And
 | Coroutines / Gson / Browser | 1.11.0 / 2.14.0 / 1.10.0 |
 | Coil inklusive Netzwerk-/Cache-Control-Module | 3.4.0 |
 | Play Services Location | 21.4.0 |
+| MapLibre Android | 13.7.1 |
 
 Höhere Releases werden nicht pauschal übernommen: Core 1.19.1, Lifecycle 2.11, Navigation 2.10 und neuere Compose-BOM-Stände verlangen API 37 beziehungsweise AGP 9.1 in den geprüften AAR-Metadaten. Auch die tatsächlich von Gradle gewählte Android-Variante von OkHttp 5.5.0 verlangt compileSdk 37; deshalb wird 5.4.0 mit API-36-Anforderung verwendet. Ein passendes JVM-POM allein reicht für Android-Kompatibilität nicht aus. Kotlin 2.4.20 verlangt neueres R8 als das zu AGP 8.13.2 passende 8.13.19. Coil 3.6.x verlangt API 37, 3.5.0 bringt eine Kotlin-2.4-Standardbibliothek mit; 3.4.0 passt zum gewählten Kotlin-2.3-Stand. Diese Auswahl erhält minSdk 26, targetSdk 34 und compileSdk 36, statt neben dem Bibliotheksupdate weitere Plattformverträge zu verändern.
 
@@ -52,9 +54,15 @@ Das Manifest deklariert `location|dataSync` und `FOREGROUND_SERVICE_LOCATION`. D
 
 Stationskoordinaten stammen grundsätzlich aus Träwelling-Stopovers. Für erkannte Ersatzverkehrsfahrten kann die [SEV-Zuordnung](../module/sev-haltestellen.md) einen eindeutigen aktuellen Punkt aus der öffentlichen bahnhof.de-Karte in die lokale Tracking-Projektion übernehmen. Bei fehlender oder mehrdeutiger Zuordnung bleibt die API-Koordinate erhalten. Die Annäherung wird lokal berechnet; Gerätepositionen werden nicht gespeichert oder an Träwelling beziehungsweise bahnhof.de gesendet. Eine bereits geladene Haltfolge und Besuchsfortschritt werden in DataStore gecacht und können unabhängig von weiteren API-Erfolgen verwendet werden.
 
+## Kartenanzeige im Fahrtdetail
+
+Die `JourneyMapCard` nutzt MapLibre Android 13.7.1 und die öffentlichen OpenFreeMap-Stile `liberty` beziehungsweise `dark`. Es wird kein API-Schlüssel, kein Konto und kein gerätebezogener Standort an den Kachelanbieter übertragen. Der sichtbare Kartenausschnitt und die übliche Verbindung offenbaren dem Anbieter ungefähre Kartennutzung; Träwelling-Bearer, Kontodaten und Geräteposition bleiben außerhalb des Kartenabrufs. Attribution: OpenFreeMap, OpenMapTiles und OpenStreetMap.
+
+Der Streckenverlauf stammt aus dem bereits vorhandenen Träwelling-Endpunkt `polyline/{statusId}`; die Karte führt keinen zusätzlichen Routing- oder Transitous-Client ein. Ohne nutzbare Form verbindet sie die öffentlichen Haltkoordinaten schematisch. Die Position wird aus Fahrplan beziehungsweise dem lokalen GPS-Besuchscursor geschätzt und ist keine Fahrzeug- oder Geräte-GPS-Position. Die Vorschau bleibt nicht gestenfähig, damit die Detailseite scrollbar bleibt; erst die Vollbildansicht verarbeitet Karten-Gesten. Details: [StatusDetail](../module/status-detail.md) und [Externe Schnittstellen](../api/externe-schnittstellen.md).
+
 ## Öffentliche Ersatzhaltestellen
 
-`BahnhofSevParser` verwendet vorhandenes Gson für JSON-Datensätze der Bahnhofskarten; der separate öffentliche Abruf verwendet vorhandenes OkHttp. Es wird weder eine PDF-/QR-Bibliothek noch ein Karten-, Routing- oder Geocoding-SDK ergänzt. Die Website-Quelle benötigt keinen Bearer-Token. Geänderte HTML-Daten sind ein möglicher Quellenfehler und dürfen das bestehende Tracking nicht blockieren. Details: [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
+`BahnhofSevParser` verwendet vorhandenes Gson für JSON-Datensätze der Bahnhofskarten; der separate öffentliche Abruf verwendet vorhandenes OkHttp. Für diese Quelle selbst wird kein zusätzliches Karten-, Routing- oder Geocoding-SDK ergänzt; die separate Fahrtdetail-Karte nutzt MapLibre. Die Website-Quelle benötigt keinen Bearer-Token. Geänderte HTML-Daten sind ein möglicher Quellenfehler und dürfen das bestehende Tracking nicht blockieren. Details: [SEV-Ersatzhaltestellen](../module/sev-haltestellen.md).
 
 ## Nativer Bahn-/Tram-Streckenverlauf
 
@@ -70,7 +78,7 @@ Das Pkw-Profil liefert mögliche Straßenwege, keine offiziellen Ersatzbusfahrwe
 
 Die [Fahrterkennung](../module/ride-recognition.md) nutzt dieselbe Träwelling-Schnittstelle und Play Services, hat aber einen getrennten sichtbaren Location-Service. Ihre Stationssuche überträgt aus dem aktuellen Fix berechnete Bounding-Box-Grenzen an `GET /api/v1/stations`; lokale Zuordnung und RAM-Historie liegen in der App. Die Boxmitte entspricht dem verwendeten Standort. Der aktive Stationsalarm selbst überträgt keine Gerätepositionen.
 
-Der [Reisefortschritt](../module/trip-progress.md) nutzt ab API 36 die Framework-Notification-API und auf älteren Geräten AndroidX-Core 1.18.0. Der aktuelle SDK-/Toolchainstand steht oben; targetSdk 34/minSdk 26 bleiben bestehen. Für GPS-Geometrie, Fahrterkennung und Fortschritt wurde kein zusätzliches Routing-, Karten- oder KI-SDK eingeführt.
+Der [Reisefortschritt](../module/trip-progress.md) nutzt ab API 36 die Framework-Notification-API und auf älteren Geräten AndroidX-Core 1.18.0. Der aktuelle SDK-/Toolchainstand steht oben; targetSdk 34/minSdk 26 bleiben bestehen. Für GPS-Geometrie, Fahrterkennung und Fortschritt wurde kein zusätzliches Routing- oder KI-SDK eingeführt; die separate Fahrtdetail-Karte nutzt MapLibre und OpenFreeMap.
 
 ## Verwandte Seiten
 

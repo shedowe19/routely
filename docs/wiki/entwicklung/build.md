@@ -22,6 +22,7 @@ Dokumentiert den Build-Prozess und Deployment (CI/CD).
 - **KSP / Compose BOM**: 2.3.12 / 2026.06.01
 - **minSdk**: 26
 - **targetSdk**: 34
+- **Native ABIs**: `arm64-v8a` und `armeabi-v7a`; die emulator-only MapLibre-Bibliotheken für x86/x86_64 werden nicht in die APK gepackt.
 - **Java/Kotlin**: JDK 17, JVM Target 17
 - **Zeilenenden**: `.gitattributes` erzwingt LF für `gradlew` und zentrale Projekttextdateien, damit der Unix-Wrapper in Linux-basierten CI-Umgebungen ausführbar bleibt.
 

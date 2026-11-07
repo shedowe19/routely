@@ -15,7 +15,7 @@
 | ProfileScreen      | `ui/screens/ProfileScreen.kt`      | Eigenes Profil + letzte Fahrten           |
 | UserProfileScreen  | `ui/screens/UserProfileScreen.kt`  | Fremdes Profil                            |
 | UserSearchScreen   | `ui/screens/UserSearchScreen.kt`   | Benutzer-Suche                            |
-| StatusDetailScreen | `ui/screens/StatusDetailScreen.kt` | Status-Detail mit Timeline und Reisegrund |
+| StatusDetailScreen | `ui/screens/StatusDetailScreen.kt` | Status-Detail mit Timeline, Reisegrund und Live-Karte |
 | SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme, GPS, Fahrterkennung, Änderungen, Fortschritt, TTS und Android-Akku-Ausnahmestatus |
 
 ## Navigation
@@ -76,6 +76,8 @@ Feed, Check-in, StatusDetail, Profile, UserProfile, UserSearch und Notifications
 Fehler beim Refresh, Follow, Speichern oder Löschen werden auch bei bereits vorhandenen Inhalten angezeigt. Automatisches Nachladen weiterer Feed-/Meldungs-/Profilseiten pausiert bei einem Fehler; es wiederholt einen gescheiterten Auftrag nicht allein wegen unveränderter Scrollposition. Reine Profilkarten besitzen ausdrücklich deaktivierte Herz-Aktionen, offene private Folgeanfragen keinen unbelegten Abbruchbutton.
 
 Die Status-Detail-Timeline nutzt für die eigene aktive Fahrt einen gemeinsamen Besuchscursor des Tracking-Service. GPS-Ankunft, Annäherung und ungefähre Fahrplanposition erhalten unterschiedliche Markierungen; die durchgehende Verbindungslinie verwendet denselben Fortschritt wie die Haltepunkte. Einzelheiten stehen unter [StatusDetail](../module/status-detail.md).
+
+Zwischen Fahrtkarte und Haltestellenverlauf erscheint die `JourneyMapCard`, sofern Einstieg und Ziel eindeutig in der Haltfolge liegen und mindestens zwei Halte Koordinaten besitzen. Die Vorschau ist bewusst nicht gestenfähig, damit vertikales Scrollen der Detailseite nicht von der Karte abgefangen wird. Ein Tipp öffnet die interaktive Vollbildkarte mit Zoom, Verschieben und „Route zentrieren“. Die Karte zeigt den Träwelling-Streckenverlauf, sonst eine schematische Verbindung der Haltpunkte, sowie Start, Ziel und eine geschätzte Position. Sie ersetzt keine Fahrzeug- oder Geräte-GPS-Position.
 
 Header und Haltzeiten verwenden den gemeinsamen `JourneyTimeResolver` einschließlich frischer lokaler [GPS-Zeiten](../module/gps-zeiten.md). Jede Zeit kennzeichnet beobachtet, geschätzt, manuell, API-Echtzeit oder Fahrplan. GPS-Verlust wechselt die Zeitquelle, ohne für eine etablierte eigene Fahrt einen neuen Uhrzeitcursor zu erfinden. Fremde oder frühere Fahrten erhalten keine aktuellen GPS-Prognosen; das Bearbeitungsformular bleibt ebenfalls ohne GPS-Werte.
 

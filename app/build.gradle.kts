@@ -22,6 +22,10 @@ android {
         vectorDrawables {
             useSupportLibrary = true
         }
+        ndk {
+            // MapLibre ships four native ABIs. Phones use ARM; skip emulator-only x86 libs.
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildTypes {
@@ -92,6 +96,7 @@ dependencies {
     implementation(libs.coroutines.android)
     implementation(libs.gson)
     implementation(libs.play.services.location)
+    implementation(libs.maplibre.android)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)

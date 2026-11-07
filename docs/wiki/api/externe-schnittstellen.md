@@ -10,7 +10,7 @@ Die primäre externe Schnittstelle ist die Träwelling RESTful API.
 
 - **Basis-URL**: Laufzeitwert aus `PreferencesManager`, Standard `https://traewelling.de`. Der manuelle Login erlaubt eine gültige HTTPS-Server-URL ohne eingebettete Zugangsdaten, Query oder Fragment; keine Gradle-Property setzt den API-Server.
 - **Authentifizierung**: Geschützte Endpunkte erhalten einen Bearer-Token. Der erreichbare Login nimmt ihn manuell entgegen und prüft `GET /api/v1/auth/user`, bevor die Sitzung gespeichert wird. `OAuthApiService` (`POST /oauth/token`) enthält zusätzliche Austausch-/Refresh-Helfer, die noch nicht an den Login oder einen automatischen Refresh angebunden sind.
-- **Provider (Transitous/MOTIS)**: Der am 10.10.2026 geprüfte Träwelling-Upstream verwendet Transitous für Stations-, Abfahrts- und Fahrtdaten. Die alten `hafasTripId`-Bezeichnungen im Clientvertrag belegen keinen aktuellen DB-HAFAS-Zugriff. Routely `main` enthält keinen direkten Transitous-Live-Datenclient. Quellenvergleich, Backend-Aktualisierung und offene Aktualitätsgrenzen stehen unter [Live-Datenquellen](./live-datenquellen.md).
+- **Provider (Transitous/MOTIS)**: Der am 10.10.2026 geprüfte Träwelling-Upstream verwendet Transitous für Stations-, Abfahrts- und Fahrtdaten. Die alten `hafasTripId`-Bezeichnungen im Clientvertrag belegen keinen aktuellen DB-HAFAS-Zugriff. Routely `main` enthält keinen direkten Transitous-Live-Datenclient. Die Fahrtdetail-Karte nutzt OpenFreeMap-Kacheln und den Träwelling-Streckenverlauf. Quellenvergleich, Backend-Aktualisierung und offene Aktualitätsgrenzen stehen unter [Live-Datenquellen](./live-datenquellen.md).
 
 Besonderheiten beim Umgang mit den von Träwelling gelieferten Transit-Daten:
 
@@ -64,6 +64,10 @@ Der feste HTTPS-Endpunkt erlaubt weder Redirects noch HTTP-Rückfall; Call-/Conn
 Nach der [Anbieterseite](https://routing.openstreetmap.de/about.html) betreibt FOSSGIS den OSRM-Dienst mit OpenStreetMap-Daten. Sie verlangt Attribution, einen Link zur Kartenkorrektur, identifizierbaren User-Agent, höchstens eine Anfrage pro Sekunde und begrenzte Nutzung. Die Ersatzbus-Detailansicht zeigt die Quellenangabe und einen Kartenkorrektur-Link. Die Anbieterseite erklärt außerdem, dass Routenanfragen serverseitig protokolliert werden; die öffentlichen Haltpaare und übliche Verbindungsdaten sind dem Anbieter sichtbar. TODO: Belastung und Eignung des öffentlichen Dienstes bei wachsender Installation prüfen; das Request-Limit gilt pro App-Prozess und ersetzt keine Gesamtkapazitätsplanung.
 
 Vertrag: [offizielle OSRM-HTTP-Dokumentation](https://project-osrm.org/docs/v5.24.0/api/). Geometrien bleiben unpersistiert im RAM. Keine neue Preference, Retrofit-Route, Datenbanktabelle oder Android-Bibliothek. Unpassende oder mehrdeutige Wege verwenden den bestehenden GPS-/API-/Plan-Rückfall; die Stationsengine bleibt unverändert.
+
+## OpenFreeMap-Kartenkacheln
+
+Die Fahrtdetail-Karte lädt Stildefinitionen und Vektorkacheln von `https://tiles.openfreemap.org/styles/liberty` beziehungsweise `.../styles/dark`. Es gibt keinen API-Schlüssel, kein Konto und keinen Proxy. Der Anbieter sieht die übliche Netzwerkverbindung einschließlich IP-Adresse, User-Agent und den angeforderten Kartenausschnitt; Geräteposition, Träwelling-Bearer und Kontodaten werden nicht übertragen. Die App zeigt OpenFreeMap, OpenMapTiles und OpenStreetMap als Quellen. Ohne Netzwerk bleibt die Karte leer beziehungsweise unvollständig; Timeline, Haltdaten und DBF/IRIS funktionieren unabhängig davon. Die Kartenansicht ist kein Transitous-Client und kein Routingdienst.
 
 ## Verwandte Seiten
 

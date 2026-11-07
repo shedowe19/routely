@@ -12,13 +12,18 @@ import de.traewelling.app.data.model.Status
 import de.traewelling.app.data.model.StatusVisibility
 import de.traewelling.app.data.model.StopStation
 import de.traewelling.app.data.model.TrainStation
+import de.traewelling.app.data.model.TransitRouteGeometry
+import de.traewelling.app.data.model.TransitRouteRequest
 import de.traewelling.app.data.repository.TraewellingRepository
 import de.traewelling.app.data.repository.StatusWriteAcceptedException
+import de.traewelling.app.data.routing.TransitRouteRepository
 import de.traewelling.app.data.sev.SevJourneyEnricher
 import de.traewelling.app.data.sev.SevStopResolver
 import de.traewelling.app.service.JourneyTimeResolver
 import de.traewelling.app.service.TrackingLiveState
+import de.traewelling.app.service.TransitRouteSelection
 import de.traewelling.app.service.TripTrackingService
+import de.traewelling.app.service.activeTripStopKey
 import de.traewelling.app.util.PreferencesManager
 import de.traewelling.app.util.runStorageAction
 import de.traewelling.app.util.isPreferenceStorageFailure
@@ -34,6 +39,8 @@ import kotlinx.coroutines.ensureActive
 import kotlin.coroutines.coroutineContext
 import java.time.Instant
 
+private const val ROUTE_RETRY_INTERVAL_MILLIS = 2 * 60_000L
+
 data class StatusDetailUiState(
     val isLoading: Boolean = false,
     val status: Status? = null,
@@ -47,6 +54,7 @@ data class StatusDetailUiState(
     val trackingState: TrackingLiveState? = null,
     val sevStops: Map<String, SevStopInfo> = emptyMap(),
     val isLoadingSevStops: Boolean = false,
+    val routeGeometry: TransitRouteGeometry? = null,
     val nowTimeNotice: String? = null,
 
     // Editing state
@@ -85,6 +93,11 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
     private var sevGeneration = 0L
     private var sevSnapshot: SevDetailSnapshot? = null
     private var statusSession: AuthSession? = null
+    private var routeGeometryJob: Job? = null
+    private var routeRepository: TransitRouteRepository? = null
+    private var routeRepositorySession: AuthSession? = null
+    private var routeRequest: TransitRouteRequest? = null
+    private var routeAttemptedAtMillis = 0L
 
     private fun launchStorageAction(block: suspend CoroutineScope.() -> Unit): Job = viewModelScope.launch {
         runStorageAction(onFailure = { failure ->
@@ -128,6 +141,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             mutationJob?.cancel()
             statusSession = null
             cancelSevEnrichment()
+            clearRouteGeometry()
         }
         loadStatusDetail(statusId)
         return attachment
@@ -139,6 +153,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         loadJob?.cancel()
         autoRefreshJob?.cancel()
         cancelSevEnrichment()
+        clearRouteGeometry()
         _uiState.update { it.copy(isLoading = false, isLoadingSevStops = false) }
     }
 
@@ -234,7 +249,80 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
             )
         }
         enrichSevStops(status, _uiState.value.stopovers)
+        loadRouteGeometry(statusId, _uiState.value.status, session, _uiState.value.stopovers)
         if (showLoading) checkIfOwnStatus(status)
+    }
+
+    /**
+     * Loads the server-provided route geometry after the timetable is visible.
+     * A failure only leaves the schematic stop-to-stop line in the map.
+     */
+    private fun loadRouteGeometry(
+        statusId: Int,
+        status: Status?,
+        session: AuthSession,
+        stops: List<StopStation>
+    ) {
+        val checkin = status?.checkin
+        if (checkin == null || stops.isEmpty()) {
+            clearRouteGeometry()
+            return
+        }
+        val originIndex = stops.indexOfFirst { it.matchesStopover(checkin.origin) }
+        val destinationIndex = stops.indexOfFirst { it.matchesStopover(checkin.destination) }
+        if (originIndex < 0 || destinationIndex <= originIndex) {
+            clearRouteGeometry()
+            return
+        }
+        val checkedStops = stops.subList(originIndex, destinationIndex + 1)
+        val keys = checkedStops.mapIndexed { index, stop ->
+            activeTripStopKey(stop, originIndex + index)
+        }
+        val request = TransitRouteSelection.request(statusId, checkin, stops, checkedStops, keys)
+        if (request == null) {
+            clearRouteGeometry()
+            return
+        }
+        val retryDue = System.currentTimeMillis() - routeAttemptedAtMillis >= ROUTE_RETRY_INTERVAL_MILLIS
+        if (request == routeRequest && (_uiState.value.routeGeometry != null || !retryDue)) return
+        routeRequest = request
+        routeAttemptedAtMillis = System.currentTimeMillis()
+        routeGeometryJob?.cancel()
+        _uiState.update { if (it.routeGeometry == null) it else it.copy(routeGeometry = null) }
+        routeGeometryJob = viewModelScope.launch {
+            val repository = transitRouteRepository(session) ?: return@launch
+            val geometry = try {
+                repository.getRoute(request)
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
+            }
+            if (currentStatusId != statusId || statusSession != session || routeRequest != request) return@launch
+            _uiState.update { it.copy(routeGeometry = geometry) }
+        }
+    }
+
+    private fun transitRouteRepository(session: AuthSession): TransitRouteRepository? {
+        if (routeRepositorySession != session) {
+            routeRepository?.close()
+            routeRepository = runCatching { TransitRouteRepository(session) }.getOrNull()
+            routeRepositorySession = session
+        }
+        return routeRepository
+    }
+
+    private fun clearRouteGeometry() {
+        routeGeometryJob?.cancel()
+        routeGeometryJob = null
+        routeRequest = null
+        routeAttemptedAtMillis = 0L
+        routeRepository?.close()
+        routeRepository = null
+        routeRepositorySession = null
+        if (_uiState.value.routeGeometry != null) {
+            _uiState.update { it.copy(routeGeometry = null) }
+        }
     }
 
     /** Public map requests run after the API snapshot is visible and never block its refresh. */
@@ -579,6 +667,7 @@ class StatusDetailViewModel(application: Application) : AndroidViewModel(applica
         super.onCleared()
         autoRefreshJob?.cancel()
         cancelSevEnrichment()
+        clearRouteGeometry()
     }
 }
 

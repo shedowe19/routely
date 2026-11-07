@@ -54,6 +54,30 @@ Karten liegen auf `surfaceContainerLow` mit 18-dp-Radius und einer feinen
 ohne Handler oder bei `status.isLikable = false` ist die Herz-Aktion deaktiviert.
 Feedkarten besitzen einen Handler; eigene und fremde Profilkarten übergeben `null`.
 
+### JourneyMapCard
+
+Kartenvorschau im Fahrtdetail (`ui/components/JourneyMap.kt`, Modell in
+`ui/components/JourneyMapModel.kt`).
+
+- 238-dp-Vorschau mit 18-dp-Karte, Linienchip, Positionslabel und
+  OpenFreeMap-/OpenMapTiles-/OpenStreetMap-Attribution.
+- Die Vorschau ist absichtlich nicht gestenfähig. Ein transparenter Tippbereich
+  öffnet die Vollbildkarte; vertikale Gesten bleiben beim `LazyColumn`.
+- Die Vollbildansicht ist interaktiv (Verschieben, Zoom, Rotation) und bietet
+  „Route zentrieren“ sowie Schließen.
+- Strecke: `Träwelling-Streckenverlauf` aus `GET /api/v1/polyline/{statusId}`;
+  fehlende Abschnitte werden geradlinig ergänzt, sodass kein Restabschnitt oder
+  Ziel aus dem Kartenausschnitt fällt. Ohne nutzbare Form eine schematische
+  Verbindung der Haltkoordinaten.
+- Marker: GPS-Cursor nur der eigenen aktiven Fahrt, sonst zeitbasierte
+  Fahrplaninterpolation, auf den aktuellen Halt-zu-Halt-Abschnitt geschnappt.
+  Ein vorhandener Service-Cursor begrenzt auch den Fahrplan-Rückfall;
+  gestrichene Halte bleiben sichtbar, sind aber von der Positionsinterpolation
+  ausgeschlossen. Überlappende Aufenthalte folgen demselben zuletzt passenden
+  Besuch wie die Timeline. Keine Fahrzeug- oder Geräte-GPS-Position.
+- Hell/Dunkel folgt der `MaterialTheme`-Hintergrundhelligkeit; Kartenstile sind
+  OpenFreeMap Liberty beziehungsweise Dark.
+
 ### StateMessage
 
 Einheitliche Darstellung für Fehler- und Empty-States in Screens. Der Icon-Kreis ist

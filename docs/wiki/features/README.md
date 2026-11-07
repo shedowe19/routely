@@ -4,6 +4,8 @@
 
 Codebasierte Übersicht des veröffentlichten Stands `v1.12.0` (Releasecommit `94bf23c`) vom 03.11.2026. Enthalten sind Storage-Recovery und native Datum-/Uhrzeitfelder mit Jetzt-Aktionen im Fahrteditor. Signatur-, Versions- und Prüfungsnachweise stehen unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1120). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
+Der aktuelle Arbeitsstand auf `main` enthält zusätzlich den Design-Refresh, die DBF-Stationsnamen-Auflösung und die Live-Karte im Fahrtdetail. Diese Arbeitsstände sind noch keine belegte Release-Veröffentlichung.
+
 ## Vorhandene Funktionen
 
 | Bereich | Erreichbarer Funktionsumfang |
@@ -11,6 +13,7 @@ Codebasierte Übersicht des veröffentlichten Stands `v1.12.0` (Releasecommit `9
 | [Anmeldung](../module/auth.md) | Server-URL und manueller Access-Token, Tokenprüfung, Willkommen-Hinweis und Logout. |
 | [Check-in](../module/checkin.md) | Stationssuche, nahe Stationen, Datum-/Uhrzeitwahl auch für vergessene Fahrten, Abfahrten mit Betreiber/Gleis/Verspätung/Ausfall, Fahrt und Ausstieg, Text, Reisegrund, Sichtbarkeit und manuelle Zeiten. Beendete Nachträge starten keine Begleitung. |
 | [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit, lokale GPS-Zeiten, Gleise, Ausfälle und Reisefortschritt. Eigene Fahrt bearbeiten/löschen; im Editor Abfahrt/Ankunft per Jetzt-Knopf oder nativen Datum-/Uhrzeitdialogen wählen und gemeinsam speichern. Angenommene Jetzt-Ankunft beendet nur die passende Begleitung. |
+| [Live-Karte](../module/status-detail.md) | Kartenvorschau im Fahrtdetail mit Träwelling-Streckenverlauf oder schematischem Haltelauf, Start-/Zielmarkern und geschätzter Position aus Fahrplan beziehungsweise GPS-Cursor; Vollbildansicht mit OpenFreeMap-Kacheln. |
 | [Zusätzliche Bahn-Livedaten](../api/live-datenquellen.md) | Anonyme DBF-/IRIS-Werte für eindeutig zugeordnete Zugfahrten; Quellen- und Abrufalteranzeige sowie Soll-/Ist-Gleisvergleich. Ergänzt lokale Anzeigen ohne Rückschreiben nach Träwelling. |
 | [Stationsalarm](../module/trip-tracking.md) | Geordnete GPS-Halterkennung, Zielhinweis, automatische oder feste Ansageentfernung, gekennzeichneter Fahrplan-Rückfall. |
 | [GPS-Zeiten](../module/gps-zeiten.md) | Lokale beobachtete Ankunft und konservative Prognose aus räumlichem Fortschritt und geplanten Fahrintervallen. Geeignete native Träwelling-Linienzüge für Bahn/Tram, getrennte Straßenprojektion für SEV sowie gemeinsame Quellenwahl und API-/Plan-Rückfall. |
@@ -38,9 +41,9 @@ Codebasierte Übersicht des veröffentlichten Stands `v1.12.0` (Releasecommit `9
 ## Grenzen des aktuellen Begleitmodus
 
 - Die Begleitung hängt an einem Träwelling-Check-in und verfolgt eine Fahrt; eine gespeicherte Reise mit mehreren Etappen, Anschlussüberwachung und Ersatzverbindungen ist nicht implementiert.
-- GPS steuert Stationsalarme. Es gibt keine Kartenansicht, keine Fußweg-/Straßennavigation und keinen Reisebetrieb ohne Anmeldung/Check-in.
+- GPS steuert Stationsalarme. Es gibt eine Kartenvorschau im Fahrtdetail, aber keine freie Fahrzeugkarte, keine Fußweg-/Straßennavigation und keinen Reisebetrieb ohne Anmeldung/Check-in.
 - Es gibt keine Ticketverwaltung, Wear-OS-App, Pendelstrecken-/Favoritenverwaltung oder gesonderten Dienstmodus.
-- Die Transitous-Live-Karte aus PR #35 wurde nicht übernommen; der PR ist geschlossen und ungemergt. Im geprüften App-Code existiert kein Transitous-Client.
+- Die Transitous-Live-Karte aus PR #35 wurde nicht übernommen; der PR ist geschlossen und ungemergt. Im geprüften App-Code existiert kein Transitous-Client. Die Detailkarte nutzt stattdessen MapLibre, OpenFreeMap-Kacheln und den Träwelling-Streckenverlauf.
 - Träwelling-Providerfelder bleiben erhalten; eindeutig zugeordnete anonyme DBF-/IRIS-Werte ergänzen die lokale Bahnansicht mit eigener Quellenkennzeichnung. GPS-Zeiten sind lokale Anzeigeprognosen und können bei ungeeigneten Koordinaten oder Bewegungsverläufen trotz Signal auf API/Plan zurückfallen. GPS-Nähe allein liefert keine genaue ETA; Gerätesignale, Prognosegüte, Audioausgabe und kurze Halte müssen weiterhin auf echten Fahrten geprüft werden.
 - Native Bahn-/Tramformen stammen vom konfigurierten Träwelling-Server, ohne zusätzlichen Transitous-Client. Der Backend-Linienzug kann Stationssehnen enthalten; nur eindeutig geordnete Abschnitte mit zusätzlichem Formbeleg ersetzen die bisherige Geradenprojektion. Es gibt keine garantierte amtliche aktuelle Gleisführung und keine GPS-Position aus einer Form während eines Tunnels. Die RAM-Geometrie gilt höchstens 15 Minuten; Neustart benötigt einen erneuten Abruf.
 - Display-aus-Begleitung benötigt weiterhin Android-Freigaben und geeignete Hersteller-/TTS-Einstellungen. CPU-WakeLock und gewährte Akku-Ausnahme garantieren keinen Weiterbetrieb nach Nutzer-Force-Stop und keine festen GPS-/Netzwerkintervalle. Die [Geräteprüfung](../entwicklung/tests.md) bleibt offen.
