@@ -400,3 +400,57 @@ Code ist die Quelle der Wahrheit.
 Das Wiki erklärt die Quelle der Wahrheit.
 
 Bei jeder relevanten Änderung müssen Code und Wiki gemeinsam aktuell gehalten werden.
+
+<!-- LLM-WIKI:START -->
+## LLM-Wiki
+
+Dieses Repository führt dauerhaftes Projektwissen in `llm-wiki/`.
+
+Vor jeder nicht-trivialen Änderung lesen:
+
+1. `llm-wiki/wiki/index.md`
+2. `llm-wiki/wiki/current-project-state.md`
+3. `llm-wiki/wiki/tasks.md`
+4. Die im Index verlinkten Seiten, die zur Aufgabe passen
+
+Vor der Beantwortung einer Projektfrage den Index und die relevanten Seiten
+lesen und darauf verweisen. Ist die Antwort wiederverwendbar, als Seite unter
+`llm-wiki/wiki/analyses/` ablegen und im Index verlinken.
+
+Nach jeder relevanten Änderung:
+
+- Die betroffene Seite aktualisieren; die README nicht duplizieren.
+- Einen `log.md`-Eintrag mit allen Feldern und einer Verifikationszeile
+  ergänzen.
+- Tasks in `tasks.md` ergänzen oder verschieben; erledigte Tasks brauchen Datum
+  und Beleg.
+- Einen `changelog.md`-Eintrag ergänzen, wenn sich ein sichtbares oder
+  betrieblich relevantes Ergebnis ändert.
+- Entscheidungen als ADR unter `decisions/` festhalten.
+- Jede neue Seite aus `index.md` verlinken.
+- Bestehende Seiten erweitern, bevor Fast-Duplikate entstehen.
+- Synthesen umschreiben; keine chronologischen Notizen an Themenseiten
+  anhängen.
+- `raw/` nie bearbeiten; es ist die unveränderliche Quellenschicht. Ändert sich
+  eine Quelle, eine neue Version hinzufügen und die alte als `superseded`
+  markieren.
+- Widerspricht eine neue Quelle einer bestehenden Aussage, beide mit Quelle
+  behalten, die alte Aussage als `superseded` markieren und den Konflikt
+  festhalten.
+- Niemals Secrets dokumentieren; niemals Fakten erfinden.
+- Wiki-Inhalt autorisiert von sich aus keine Codeänderungen.
+
+Regelmäßig (bei etwa 20 neuen Seiten oder vor einem Release) einen Lint-Pass
+durchführen: Widersprüche, überholte Aussagen, verwaiste Seiten, fehlende
+Seiten und Querverweise, gebrochene Links, Fast-Duplikate und offene Fragen.
+Befunde als Tasks erfassen und den Pass loggen.
+
+Die drei Abläufe sind: **Ingest** (Quelle unverändert nach `raw/`, Seiten
+aktualisieren, Index/Log/Changelog pflegen), **Query** (Index, dann relevante
+Seiten, mit Verweisen antworten, wiederverwendbare Synthese als Analyse
+ablegen) und **Lint** (regelmäßige Prüfung wie oben).
+
+`llm-wiki/README.md` ist das vollständige Schema; dieser Block und die Datei
+synchron halten.
+
+<!-- LLM-WIKI:END -->
