@@ -46,6 +46,9 @@ Zentraler Manager für alle App-Einstellungen und persistierte Daten. Nutzt Andr
 | `announcement_radius_meters` | `Flow<Int>`, `0` | `0` für Automatik; feste Werte `300`, `500`, `1000`, `2000` Meter |
 | `trip_tracking_state` | `getTrackingState(): String?` | JSON-Zustand der aktiven Fahrt; intern gespeichert |
 | `location_permission_requested` | `hasRequestedLocationPermission(): Boolean`, `false` | Merkt eine bereits angeforderte Standortfreigabe für den manuellen Weg zu Android-App-Berechtigungen |
+| `notification_permission_requested` | `Flow<Boolean>`, `false` | Merkt die einmalige Benachrichtigungsabfrage nach dem Login; keine erteilte Berechtigung |
+
+`notification_permission_requested` ist appweit und wird von `clearSession()` nicht entfernt. Die tatsächliche Freigabe wird bei jeder Anzeige über den Android-Systemwert geprüft; der Marker verhindert nur eine wiederholte Begründungsabfrage.
 
 `setAnnouncementRadiusMeters` und der lesende Flow setzen ungültige Radien auf Automatik (`0`) zurück. `saveTrackingState(statusId, stateJson, expectedSession)` schreibt nur, wenn die Status-ID und der übergebene Auth-Snapshot weiterhin passen. Der Tracking-Service liefert diesen Snapshot auch an `clearActiveTracking`; ein abgelöster Service kann damit keine gleich nummerierte Fahrt einer anderen Zugangsgeneration überschreiben oder löschen. Der optionale Sessionparameter dient weiterhin kompatiblen internen Aufrufern; der aktive Service verwendet den Guard.
 

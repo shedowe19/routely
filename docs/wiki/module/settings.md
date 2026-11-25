@@ -2,7 +2,7 @@
 
 ## Zweck
 
-Dieses Modul verwaltet Theme (Hell, Dunkel, AMOLED), GPS-Stationsalarme, Fahrterkennung, Fahrtänderungen, Live-Fortschritt, Sperrbildschirmdetails und Sprachausgabe (TTS). Es zeigt außerdem den aktuellen Android-Akkuoptimierungsstatus und bietet eine ausdrückliche Freigabeaktion für die Begleitung bei ausgeschaltetem Display.
+Dieses Modul verwaltet Theme (Hell, Dunkel, AMOLED), GPS-Stationsalarme, Fahrterkennung, Fahrtänderungen, Live-Fortschritt, Sperrbildschirmdetails, Sprachausgabe (TTS) und den Android-Benachrichtigungsstatus. Es zeigt außerdem den aktuellen Android-Akkuoptimierungsstatus und bietet eine ausdrückliche Freigabeaktion für die Begleitung bei ausgeschaltetem Display.
 
 ## Kontext
 
@@ -23,13 +23,19 @@ Das `SettingsViewModel` liest und schreibt Präferenzen asynchron mittels des `P
 ### UI-Darstellung
 
 - Nutzt `TraewellingTopAppBar` für konsistente Routely-Navigation
-- Theme-Auswahl wird als direkte `FilterChip`-Auswahl (`Hell`, `Dunkel`, `AMOLED`) dargestellt
+- Theme-Auswahl wird als dreiteilige Vorschau (`Hell`, `Dunkel`, `AMOLED`) dargestellt
 - Einstellungsbereiche werden als abgerundete Cards mit Icon, Beschreibung und dezentem Border angezeigt
 - TTS-Optionen bleiben als Dropdowns verfügbar, sobald Haltestellenansagen aktiviert sind
 
 TTS-Aktivierung, Engine, Sprache und Stimme werden als gemeinsame Konfiguration verarbeitet. Initialisierung und Enginewechsel tragen eine Generation; späte Callbacks einer verworfenen Engine dürfen keine neue Auswahl überschreiben. `null` bezeichnet die Android-Standardengine und ist ein gültiger Initialisierungszustand. Verfügbare Sprachen kommen aus `TextToSpeech.availableLanguages`, Stimmen aus der gewählten Engine; es wird nicht jede mögliche Java-Locale einzeln über Binder geprüft. Ausschalten und ViewModel-Ende geben die Testinstanz frei. Der aktive Tracking-Service beobachtet dieselbe Konfiguration unabhängig, erneuert seine eigene Sprachengine bei Engine-/Enablewechsel und übernimmt Sprach-/Stimmänderungen. Initialisierungsfrist, begrenzte Wiederholung und aktuelle Ansagerelevanz beschreibt [TripTracking](./trip-tracking.md).
 
 Das Manifest deklariert `android.intent.action.TTS_SERVICE` unter `<queries>`, damit installierte Sprachengines bei eingeschränkter Paketsichtbarkeit auffindbar bleiben. Dies ist keine zusätzliche Berechtigung. Der [Android-Vertrag zur Paketsichtbarkeit](https://developer.android.com/training/package-visibility/use-cases) beschreibt diese TTS-Service-Abfrage.
+
+### Benachrichtigungen
+
+Die Android-Benachrichtigungs-Permission wird nicht mehr beim App-Start über dem Login angefragt. `MainActivity` zeigt nach einem erfolgreichen Login einmalig einen Begründungsdialog; `Aktivieren` startet die Runtimefreigabe, `Später` oder ein Tipp außerhalb merkt die Anfrage in `notification_permission_requested`. Der Marker ist appweit und wird bei Logout nicht zurückgesetzt; die tatsächliche Freigabe wird bei jeder Anzeige über den Systemwert geprüft. Bei dauerhafter Ablehnung führt die Einstellungs-Card in die Android-App-Benachrichtigungseinstellungen.
+
+Die Card `Benachrichtigungen` liest `NotificationManagerCompat.areNotificationsEnabled()` beim Einfügen und bei `Lifecycle.Event.ON_RESUME`. Sie zeigt `Benachrichtigungen erlaubt` beziehungsweise `Benachrichtigungen nicht erlaubt` und öffnet über `SystemSettingsNavigation.notifications` die App-Benachrichtigungseinstellungen mit Rückfall auf App-Details und allgemeine Android-Einstellungen. Ohne Freigabe bleiben Reiseänderungen, Live-Fortschritt und sonstige Hinweise unsichtbar; Tracking und App-Funktionen laufen weiter.
 
 ### Stationsansagen mit GPS
 
@@ -75,11 +81,13 @@ Der Audit vom 03.11.2026 hat hier einen konkreten Fehlerpfad korrigiert: Der let
 - `android.speech.tts.TextToSpeech`
 - `TraewellingTheme` (für das reaktive Styling)
 - Android `PowerManager`, Akkuoptimierungs- und App-Einstellungsintents
+- `NotificationManagerCompat` und Android-Benachrichtigungseinstellungen
 
 ## Offene Fragen
 
 - Speicherfehler werden über den gemeinsamen [Recoveryablauf](../konfiguration/preferences-manager.md#lese--und-schreibfehler) sichtbar behandelt. Setter fangen typisierte Speicherfehler ab und verändern ihre bestätigten Anzeigezustände erst nach Persistenz; ein fehlgeschlagener Auftrag bleibt als Hinweis erkennbar und wird nicht automatisch wiederholt. Der TTS-Initialisierer wird bei fehlender Speicherbereitschaft deaktiviert und erst aus bestätigten Einstellungen wieder gestartet. Geräte- und TalkBackbedienung der Recoveryoberfläche bleibt praktisch zu prüfen.
 - TODO: Auswahl und Wechsel von TTS-Engine, Sprache und Stimme mit den tatsächlich installierten Engines auf einem Gerät prüfen; die Auswahl ist bereits integriert.
+- TODO: Benachrichtigungsdialog, Systemfreigabe, Ablehnung und Rückkehr aus den Android-Einstellungen auf einem Gerät prüfen.
 - TODO: Freigabe, Ablehnung, spätere Änderung und fehlende System-Activities auf Android/Samsung einschließlich Rückkehr zur Card prüfen.
 
 ## Verwandte Seiten

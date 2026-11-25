@@ -28,11 +28,29 @@ Auch fehlgeschlagene Builds und Signierungen verbrauchen Code und Versionsname. 
 
 Claims müssen dauerhaft erhalten bleiben. Create-only in diesem Helfer ist kein zusätzlich eingerichtetes GitHub-Ruleset gegen Administratorlöschung. Werden gezielt Claim und sämtliche weiteren Versionsnachweise entfernt, kann die gelöschte Historie nicht rekonstruiert werden. Die R4-Korrektur schützt Release-Rücknahme bei erhaltenem Claim und stoppt bei fehlendem eigenen Claim vor weiterer Publikation.
 
+Nach `create-ref` kann der neue Ref kurz unsichtbar bleiben. Der Guard wiederholt deshalb den exakten Claim-Readback bis zu fünfmal mit einer Sekunde Pause. Ein abweichender, fehlender oder konkurrierender Claim wird weiterhin abgelehnt; die Wiederholung lockert die Identitätsprüfung nicht.
+
 ## Fehler nach der Reservierung
 
 Ein Netzwerk-/Upload-/Prüffehler kann einen bereits reservierten Tag oder einen unveröffentlichten Draft mit Teilassets zurücklassen. Der Workflow überschreibt oder entfernt sie nicht automatisch; ein Rerun mit derselben Version wird abgewiesen. Den fehlgeschlagenen Lauf und den Draft zuerst prüfen. Danach eine neue Version mit höherem Code wählen. Der verbrauchte Codeclaim wird auch bei einer nachweislich unveröffentlichten Fehlreservierung nicht bereinigt. Bereits veröffentlichte Tags, Releases und Assets werden durch diesen Ablauf nicht repariert oder ersetzt. Ein Fehler bei der Abschlusskontrolle kann auch nach erfolgreichem `draft:false` auftreten; zuerst den tatsächlichen veröffentlichten Zustand prüfen.
 
-Die neuen Schutzpfade sind mit API-Doubles getestet. Während der historischen Befundkorrektur wurde kein signierter Release ausgelöst. Der inzwischen vorhandene reale Lauf wurde am 03.11.2026 wie unten beschrieben unabhängig geprüft.
+Die neuen Schutzpfade sind mit API-Doubles getestet. Während der historischen Befundkorrektur wurde kein signierter Release ausgelöst. Die inzwischen vorhandenen realen Läufe wurden am 03.11.2026 und am 25.11.2026 wie unten beschrieben unabhängig geprüft.
+
+## Verifizierte Veröffentlichung v1.13.1
+
+Der [Release v1.13.1](https://github.com/shedowe19/routely/releases/tag/v1.13.1) wurde am 25.11.2026 mit dem [Signierworkflow 45601407537](https://github.com/shedowe19/routely/actions/runs/45601407537) erfolgreich veröffentlicht. Release-ID `458004124`, Tag, Metadaten und der dauerhaft reservierte Claim `routely-version-code/23` binden Commit `099a5784c9909d7c7b2d962c4341662bc01d4a71`. Der Versionscode wurde automatisch als nächster freier Wert gewählt. Der Workflowlauf benötigte 7 Minuten 21 Sekunden und bestand seine 57 Releaseguardtests.
+
+Der Preflight für `v1.13.0` hatte am selben Tag den Claim `routely-version-code/22` erstellt, brach aber ab, weil GitHub den neuen Ref beim direkten Zurücklesen noch nicht sichtbar machte. Der Claim bleibt dauerhaft verbraucht; `v1.13.0` wurde nicht veröffentlicht. Der begrenzte Readback-Retry aus PR #46 verhindert diesen Fehler bei künftigen Releases, ohne die exakte Claim-Prüfung zu lockern. `v1.13.1` ist damit der erste veröffentlichte Stand nach `v1.12.0`.
+
+Die tatsächlich veröffentlichte APK wurde separat heruntergeladen und unabhängig geprüft:
+
+- Paket `de.traewelling.app`, Versionsname `1.13.1`, Code `23`, compileSdk `36`, minSdk `26`, targetSdk `34`.
+- APK-Signaturen v2 und v3 gültig, ein Signer. Das Zertifikat stimmt mit den zuvor geprüften Releases überein; SHA-256 `a9b2e1874c53db597fb15b73e47f6cf40da6a61521a230f97a3f7120ccb684dd`.
+- Datei `routely-v1.13.1.apk`, Größe `16590715` Bytes, SHA-256 `22f048ce5da8c9b22e9a744fa6b1751665cdc5aaebdd37baddcb921e204a8944`; Größe und Prüfsumme entsprechen `release-version.json` und GitHubs Asset-Digest.
+- Metadaten: `343` Bytes, SHA-256 `be23980e56c6480f761face954f72e135d9044db6415ccdd7713df05baff0d48`. Claim und Metadaten bestätigen Version, Code, Tag und Commit; der annotierte Claim nennt Workflowlauf `45601407537` und Versuch 1.
+- Die lokale Prüfung bestätigt 1.076 Unit-Tests in 93 Klassen ohne Fehler sowie Debug-Lint mit 0 Fehlern und 55 Warnungen. Debug- und Release-Build waren erfolgreich; der Signierlauf führt zusätzlich die 57 Releaseguardtests aus.
+
+Dieser Release enthält den Design-Refresh, den DBF-Stationsnamen-Fallback, die Benachrichtigungs-Permission nach dem Login mit Begründung und Statuskarte, die bestätigte Abmeldung sowie den Hinweis bei abgelaufener Sitzung. Die APK-Prüfung ist kein Installations-, TalkBack-, Fahrt- oder Live-Schreibtest; die Debug-App `de.traewelling.app.debug` bleibt separat und wurde nicht durch die Release-APK ersetzt.
 
 ## Verifizierte Veröffentlichung v1.12.0
 
