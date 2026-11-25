@@ -39,7 +39,7 @@ Der anschließende Arbeitsstand ergänzt Betreiberanzeige, Sichtbarkeitsauswahl,
 - Der Check führt höchstens 16 GET-Anfragen aus. Er prüft aktuelle Auth-/Status-/Abfahrtsfelder und verschachtelte Stationen. Fehlende Stichproben bei gültigen leeren Listen werden ausdrücklich als `skipped` gemeldet; fehlerhafte Antworten als `failed`.
 - Keine Redirectweitergabe von Credentials; HTTPS-Serverprüfung, identifizierbare Clientkennung, 20 Sekunden je Anfrage und acht MiB Antwortgrenze. HTTP-/Parserfehler enthalten keine Rohantwort oder private Ziel-URL.
 - Der aktuelle CLI-Stand wurde live mit **16 passed, 0 failed, 0 skipped** geprüft. Das ist eine Momentaufnahme, kein fortlaufender Monitor und kein Schreibtest.
-- Offline: `python -B -m unittest discover -s .github/tests -p 'test_*.py'`, **65 Tests bestanden** (56 Releaseguards und neun API-Checktests). CI führt diese fiktiven Antworten aus und benötigt keinen Kontotoken.
+- Offline: `python -B -m unittest discover -s .github/tests -p 'test_*.py'`, **66 Tests bestanden** (57 Releaseguards und neun API-Checktests). CI führt diese fiktiven Antworten aus und benötigt keinen Kontotoken.
 
 ### Zusätzliche Android-Regressionen
 
@@ -105,6 +105,12 @@ Die fünf Reviewachsen wurden unabhängig ohne verbleibende Produktbefunde abges
 Die [CI 41677528286](https://github.com/shedowe19/routely/actions/runs/41677528286) für Commit `94bf23cc13063195376a7e2fdcdc8596b740f8c4` bestand vollständig. Die heruntergeladenen JUnit-Berichte bestätigen **1.065 Tests in 91 Klassen**, keine Fehler, Fehlschläge oder Skips. Suiteattribute und tatsächliche Testcase-Elemente wurden unabhängig gezählt. Vollständiges Debug-Lint: **0 Fehler / 55 Warnungen**. Alle **65 Offlineprüfungen** wurden für diesen Commit erneut erfolgreich ausgeführt. Der frische Android-Gesamtlauf bestand in **5 min 1 s** mit allen 108 Aufgaben ausgeführt, einschließlich Debug- und unsigniertem Release-Build sowie Release-Vital-Lint. Alle 30 Storagefälle einschließlich der echten Datei-/Reopenprüfung sind auch unter Linux erfolgreich.
 
 Der [Signierworkflow 41678670414](https://github.com/shedowe19/routely/actions/runs/41678670414) veröffentlichte anschließend `v1.12.0` mit Code `21` aus genau demselben Commit. Seine 56 Releaseguardtests und Test-/Release-Build sind erfolgreich. Die tatsächliche öffentliche APK wurde heruntergeladen und unabhängig auf Manifest, v2-/v3-Signaturen, unverändertes Zertifikat, Größe, Hashes sowie Tag-/Claim-/Metadaten-/Workflowbindung geprüft; vollständiger Nachweis unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1120). Keine reale Geräte-, Restore-, Fahrt- oder schreibende Träwelling-Prüfung durch diese CI- und Artefaktkontrolle.
+
+### GitHub-Nachweis für Release v1.13.1
+
+Der [Signierworkflow 45601407537](https://github.com/shedowe19/routely/actions/runs/45601407537) veröffentlichte `v1.13.1` mit Code `23` aus Commit `099a5784c9909d7c7b2d962c4341662bc01d4a71`. Die lokale Suite bestand **1.076 Tests in 93 Klassen** ohne Fehler, Fehlschläge oder Skips; vollständiges Debug-Lint bestätigt **0 Fehler / 55 Warnungen**. Die **66 Offlineprüfungen** (57 Releaseguards und neun API-Checktests) bestanden. Der Workflowlauf benötigte **7 min 21 s** und bestand seine 57 Releaseguardtests sowie Test-/Release-Build. Die tatsächliche öffentliche APK wurde auf Manifest, v2-/v3-Signaturen, unverändertes Zertifikat, Größe, Hashes sowie Tag-/Claim-/Metadaten-/Workflowbindung geprüft; vollständiger Nachweis unter [Deployment](./deployment.md#verifizierte-veröffentlichung-v1131).
+
+Der Preflight für `v1.13.0` hatte Code `22` korrekt beansprucht, brach aber wegen einer kurzen GitHub-Ref-Unsichtbarkeit beim direkten Readback ab. Der Claim bleibt verbraucht; `v1.13.0` wurde nicht veröffentlicht. Der begrenzte Readback-Retry aus PR #46 ist durch einen Regressionstest abgesichert. Keine reale Geräte-, Restore-, Fahrt- oder schreibende Träwelling-Prüfung durch diese CI- und Artefaktkontrolle.
 
 ## Voraussetzungen
 

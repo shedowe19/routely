@@ -16,7 +16,7 @@
 | UserProfileScreen  | `ui/screens/UserProfileScreen.kt`  | Fremdes Profil                            |
 | UserSearchScreen   | `ui/screens/UserSearchScreen.kt`   | Benutzer-Suche                            |
 | StatusDetailScreen | `ui/screens/StatusDetailScreen.kt` | Status-Detail mit Timeline und Reisegrund |
-| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme, GPS, Fahrterkennung, Änderungen, Fortschritt, TTS und Android-Akku-Ausnahmestatus |
+| SettingsScreen     | `ui/screens/SettingsScreen.kt`     | Theme, GPS, Fahrterkennung, Änderungen, Fortschritt, TTS, Benachrichtigungsstatus und Android-Akku-Ausnahmestatus |
 
 ## Navigation
 
@@ -39,7 +39,7 @@ Pünktlich-/Verspätungs-/Ausfall-Chip. Beim ersten Laden erscheinen Skeleton-Ka
 Spinners. Die Meldungsliste verwendet dichte Zeilen mit Trenner, Tagesgruppen (`Heute`,
 `Gestern`, …) und einem Skeleton beim Erstladen. Der eigene Profilkopf bündelt Avatar, Handle
 und die drei Kennzahlen in einer gemeinsamen Fläche; die Einstellungen sind über das Zahnrad
-im Profilkopf erreichbar, Abmelden über das zweite Icon. Im Check-in bietet die
+im Profilkopf erreichbar, Abmelden über das zweite Icon nach einer Bestätigung. Im Check-in bietet die
 Abfahrtsschnellwahl `Jetzt`, `+15 min`, `+30 min` und `+1 h`.
 
 Zusätzliche Screens werden als Stack navigiert:

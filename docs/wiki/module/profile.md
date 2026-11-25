@@ -26,6 +26,10 @@ Profil-Refresh ersetzt den bisherigen Ladeauftrag und erhöht eine Generation. S
 
 Der `ProfileScreen` enthält einen Button zum `SettingsScreen`. Dort werden Theme und TTS konfiguriert.
 
+### Abmelden
+
+Das zweite Icon im Profilkopf öffnet einen `AlertDialog` mit dem Hinweis, dass der Access-Token von diesem Gerät entfernt wird und beim nächsten Login erneut eingegeben werden muss. Erst `Abmelden` ruft `authViewModel.logout()` auf; `Abbrechen` und ein Tipp außerhalb schließen nur den Dialog. Der eigentliche Logout- und Sitzungsvertrag steht unter [Auth](./auth.md).
+
 ### Statistiken
 
 Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
@@ -39,6 +43,7 @@ Zeigt Fahrten (letzte 28 Tage) nach Verkehrsmittel kategorisiert:
 - Statistik-Chips zeigen Distanz, Zeit und Punkte kompakt einzeilig; Kilometer werden mit deutschem Tausenderpunkt formatiert
 - Lade- und Fehlerzustände via `StateMessage`
 - Letzte Fahrten werden über `StatusCard` dargestellt. Das Profil übergibt `onLike = null`; die Herz-Aktion ist dadurch ausdrücklich deaktiviert. Like/Unlike ist derzeit im Feed verfügbar.
+- Das Logout-Icon öffnet einen Bestätigungsdialog; erst `Abmelden` entfernt den lokalen Token.
 
 ## UI-Zustand (ProfileUiState)
 

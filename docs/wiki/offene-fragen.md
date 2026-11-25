@@ -7,7 +7,7 @@ Aktuelle offene Arbeit, praktische Prüfbedingungen und Produktentscheidungen. D
 ## Offene Punkte
 
 - **A01 – laufender API-Abgleich:** Der geprüfte Träwelling-Stand ist develop 6051078ef10246d931a34c72d12ad3f96c8a53bc mit Changelog 4035dadd77fc2fe692396aa4e9a5dcea5a1a6c67. Keine weitere Pflichtmigration wurde gefunden. Weitere Änderungen sind regelmäßig gegen tatsächliche Routen, Ressourcen und Clientverbraucher zu prüfen. Operator-IDs bleiben im geprüften Server noch numerisch; continuationTrip ist dort trotz Changelog nicht im TripResource ausgegeben. Siehe [API-Kompatibilität](./api/traewelling-kompatibilitaet.md).
-- **Bestätigter Validierungsstand:** Der als `v1.12.0` veröffentlichte Recovery-/Zeitdialogausbau besteht 1.065 Android-Unit-Tests in 91 Klassen ohne Fehler oder Skips, vollständiges Debug-Lint ohne Fehler (55 Warnungen), Debug- und unsignierten Release-Build sowie 65 erneut erfolgreiche Offlineprüfungen. Die signierte öffentliche APK ist mit Version 1.12.0/Code 21, unverändertem Zertifikat und exakter Commitbindung unter [Deployment](./entwicklung/deployment.md#verifizierte-veröffentlichung-v1120) geprüft. Frühere lesende Live-Stichproben behalten ihren ursprünglichen Prüfstand. Details und Geräteprüfgrenzen stehen unter [Tests](./entwicklung/tests.md).
+- **Bestätigter Validierungsstand:** Der als `v1.13.1` veröffentlichte Stand besteht 1.076 Android-Unit-Tests in 93 Klassen ohne Fehler oder Skips, vollständiges Debug-Lint ohne Fehler (55 Warnungen), Debug- und Release-Build sowie 57 Releaseguardtests. Die signierte öffentliche APK ist mit Version 1.13.1/Code 23, unverändertem Zertifikat und exakter Commitbindung unter [Deployment](./entwicklung/deployment.md#verifizierte-veröffentlichung-v1131) geprüft. Der Preflight für `v1.13.0` hat Code 22 dauerhaft verbraucht, aber nicht veröffentlicht; der begrenzte Readback-Retry ist mit PR #46 dokumentiert. Frühere lesende Live-Stichproben behalten ihren ursprünglichen Prüfstand. Details und Geräteprüfgrenzen stehen unter [Tests](./entwicklung/tests.md).
 
 ## Noch nötige System- und Fahrttests
 
@@ -36,6 +36,8 @@ Diese Punkte sind geklärte Funktionsgrenzen oder optionale Erweiterungen, keine
 - **U05:** Mehrere Reiseetappen, Anschlüsse, vollständige Offlineplanung, Karte, Tickets und Wear OS. Der aktuelle Begleiter verfolgt einen Check-in.
 
 ## Geklärte und korrigierte Fragen
+
+- **Release-Readback:** Der Preflight für `v1.13.0` hat den Claim `routely-version-code/22` korrekt erstellt, ihn aber wegen einer kurzen GitHub-Ref-Unsichtbarkeit nicht direkt zurückgelesen. Der Claim bleibt verbraucht; `v1.13.0` wurde nicht veröffentlicht. PR #46 ergänzt einen begrenzten Readback-Retry mit exakter Identitätsprüfung; `v1.13.1` ist der veröffentlichte Stand.
 
 - **P12 – Storage-Recovery:** Mit v1.12.0 veröffentlicht: gemeinsame Fehlerzustände, begrenztes Wiederholen, sichtbare Retryoberfläche, ausdrücklich bestätigter Korruptionsreset und nicht destruktive Servicepause. Letzte bestätigte Werte bleiben erhalten; schreibende und Startentscheidungen benötigen frische Daten. Implementierungsvertrag und Praxisgrenzen stehen in der [Recovery-Entscheidung](./entscheidungen/2026-11-03-storage-recovery.md), tatsächliche Ergebnisse unter [Tests](./entwicklung/tests.md).
 

@@ -24,10 +24,12 @@ Die Authentifizierung ist der initiale Einstiegspunkt für den Nutzer, um person
 Der erreichbare `SetupScreen` bietet ausschließlich den manuellen Token-Login:
 
 1. `AuthViewModel.loginWithToken()` lässt `AuthRepository` eine gültige HTTPS-Server-URL ohne Zugangsdaten, Query oder Fragment und einen nicht leeren Token prüfen. Erst nach erfolgreichem `GET /api/v1/auth/user` mit vorhandenem Nutzername werden Server, Token und Nutzer atomar gespeichert. OAuth und PKCE werden dabei nicht verwendet; eine fehlerhafte Anmeldung erzeugt keine vorläufige Sitzung.
-2. Beim App-Start wird ein gespeicherter Token erneut geprüft. Nur HTTP 401/403 löscht genau die weiterhin passende Sitzung; Netzwerkfehler, Rate-Limit, Serverfehler und unvollständige Antworten lassen sie bestehen. Verspätete Antworten dürfen eine neuere Sitzung weder ändern noch löschen.
-3. Logout löscht zunächst die passende lokale Sitzung und versucht danach mit deren altem Snapshot die API-Abmeldung. Ein Netzfehler kann die lokale Abmeldung nicht verhindern; ein inzwischen erfolgter neuer Login wird nicht gelöscht.
+2. Beim App-Start wird ein gespeicherter Token erneut geprüft. Nur HTTP 401/403 löscht genau die weiterhin passende Sitzung; Netzwerkfehler, Rate-Limit, Serverfehler und unvollständige Antworten lassen sie bestehen. Verspätete Antworten dürfen eine neuere Sitzung weder ändern noch löschen. Eine unerwartete Löschung setzt `SESSION_EXPIRED_MESSAGE` und erscheint als Fehlerhinweis im `SetupScreen`; ein beabsichtigter Logout bleibt still.
+3. Logout löscht zunächst die passende lokale Sitzung und versucht danach mit deren altem Snapshot die API-Abmeldung. Ein Netzfehler kann die lokale Abmeldung nicht verhindern; ein inzwischen erfolgter neuer Login wird nicht gelöscht. Der sichtbare Abmeldeweg im Profil verlangt zuvor eine Bestätigung und nennt den Verlust des Access-Tokens.
 
 Scheitert bereits die lokale Persistenz der Abmeldung, bleibt die gespeicherte Sitzung erhalten und die UI meldet den Fehler. Ein bloßer erfolgreicher Netzwerkaufruf darf diesen Speicherfehler nicht als lokale Abmeldung darstellen.
+
+`AuthViewModel.afterAuthSession()` unterscheidet eine beabsichtigte Abmeldung von einer unerwartet verschwundenen Sitzung. `logoutRequested` wird beim Logout gesetzt und beim nächsten Login zurückgesetzt; nur eine unerwartete Löschung bei zuvor angemeldetem Zustand erzeugt den Sitzungshinweis. Ein Tokenwechsel mit weiterhin vorhandenem Access-Token bleibt eine reguläre Anmeldung und löscht keinen bestehenden Fehler.
 
 `AuthSession` enthält Server, Token und eine Revisionskennung als atomaren DataStore-Snapshot. Jede neue validierte Anmeldung, Abmeldung oder Tokenänderung erneuert diese Kennung; auch Abmelden und erneutes Anmelden mit denselben Zugangsdaten bilden verschiedene Generationen. Neue Anmeldung und Logout entfernen alte Refresh-/Clientdaten, aktive Fahrt, Fahrtcache und den Fahrterkennungs-Opt-in. Vergleichende Schreiboperationen prüfen die erwartete Session in derselben DataStore-Transaktion.
 
@@ -39,7 +41,7 @@ Das `AuthViewModel` propagiert den aktuellen Authentifizierungsstatus (eingelogg
 
 ### SetupScreen UI
 
-Der initiale `SetupScreen` nutzt einen Gradient-Hero mit Routely-Branding, Feature-Chips und eine Login-Card für Server-URL und manuellen Access-Token. Fehlermeldungen werden innerhalb der Card als getönter Error-Hinweis dargestellt. Echte Tokenwerte dürfen nicht dokumentiert werden.
+Der initiale `SetupScreen` nutzt einen Gradient-Hero mit Routely-Branding, Feature-Chips und eine Login-Card für Server-URL und manuellen Access-Token. Fehlermeldungen werden innerhalb der Card als getönter Error-Hinweis dargestellt; dazu gehört auch `Deine Sitzung ist abgelaufen. Bitte gib deinen Access-Token erneut ein.` nach einer unerwarteten 401/403-Löschung. Echte Tokenwerte dürfen nicht dokumentiert werden.
 
 Der Token-Hilfelink prüft die eingegebene Serveradresse vor dem Browserstart. Ungültige URL oder fehlende Browser-App zeigen einen Hinweis in der Card, statt den Setup-Ablauf abstürzen zu lassen.
 

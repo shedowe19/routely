@@ -2,13 +2,14 @@
 
 ## Zweck
 
-Codebasierte Übersicht des veröffentlichten Stands `v1.12.0` (Releasecommit `94bf23c`) vom 03.11.2026. Enthalten sind Storage-Recovery und native Datum-/Uhrzeitfelder mit Jetzt-Aktionen im Fahrteditor. Signatur-, Versions- und Prüfungsnachweise stehen unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1120). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
+Codebasierte Übersicht des veröffentlichten Stands `v1.13.1` (Releasecommit `099a578`) vom 25.11.2026. Enthalten sind der Design-Refresh, der DBF-Stationsnamen-Fallback, die Benachrichtigungs-Permission nach dem Login, die bestätigte Abmeldung und der Hinweis bei abgelaufener Sitzung. Signatur-, Versions- und Prüfungsnachweise stehen unter [Deployment](../entwicklung/deployment.md#verifizierte-veröffentlichung-v1131). Erreichbare Funktionen und vorhandene Hilfsfunktionen werden getrennt beschrieben.
 
 ## Vorhandene Funktionen
 
 | Bereich | Erreichbarer Funktionsumfang |
 | --- | --- |
-| [Anmeldung](../module/auth.md) | Server-URL und manueller Access-Token, Tokenprüfung, Willkommen-Hinweis und Logout. |
+| [Anmeldung](../module/auth.md) | Server-URL und manueller Access-Token, Tokenprüfung, Willkommen-Hinweis, bestätigte Abmeldung und Hinweis bei abgelaufener Sitzung. |
+| [Benachrichtigungen](../module/settings.md) | Permission-Abfrage erst nach dem Login mit Begründung; Status und Android-Systemeinstellungen in den Einstellungen. Ohne Freigabe keine sichtbaren Reisehinweise. |
 | [Check-in](../module/checkin.md) | Stationssuche, nahe Stationen, Datum-/Uhrzeitwahl auch für vergessene Fahrten, Abfahrten mit Betreiber/Gleis/Verspätung/Ausfall, Fahrt und Ausstieg, Text, Reisegrund, Sichtbarkeit und manuelle Zeiten. Beendete Nachträge starten keine Begleitung. |
 | [Fahrtdetail](../module/status-detail.md) | Haltfolge, Plan-/Echtzeit, lokale GPS-Zeiten, Gleise, Ausfälle und Reisefortschritt. Eigene Fahrt bearbeiten/löschen; im Editor Abfahrt/Ankunft per Jetzt-Knopf oder nativen Datum-/Uhrzeitdialogen wählen und gemeinsam speichern. Angenommene Jetzt-Ankunft beendet nur die passende Begleitung. |
 | [Zusätzliche Bahn-Livedaten](../api/live-datenquellen.md) | Anonyme DBF-/IRIS-Werte für eindeutig zugeordnete Zugfahrten; Quellen- und Abrufalteranzeige sowie Soll-/Ist-Gleisvergleich. Ergänzt lokale Anzeigen ohne Rückschreiben nach Träwelling. |
