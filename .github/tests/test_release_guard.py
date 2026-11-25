@@ -205,6 +205,25 @@ class ReleaseGuardTest(unittest.TestCase):
                 guard.reserve(self.client, self.floor, metadata(), "notes", run_id, attempt)
         self.assertEqual(self.writes(), [])
 
+    def test_claim_readback_retries_until_the_new_ref_is_visible(self):
+        selected = guard.plan(REPO, "1.9.0", 14, SHA)
+        real_version_claims = guard.version_claims
+        calls = []
+
+        def delayed(client):
+            calls.append(1)
+            if len(calls) == 2:
+                return {}
+            return real_version_claims(client)
+
+        with mock.patch.object(guard, "version_claims", side_effect=delayed), \
+                mock.patch.object(guard.time, "sleep") as sleep:
+            claimed = guard.claim_version(self.client, self.floor, selected, RUN_ID, RUN_ATTEMPT)
+
+        self.assertEqual(claimed["version_code"], 14)
+        self.assertEqual(len(calls), 3)
+        sleep.assert_called_once_with(1)
+
     def test_pending_draft_cannot_be_published_by_another_run_or_attempt(self):
         self.claim()
         rid = guard.reserve(self.client, self.floor, metadata(), "notes", RUN_ID, RUN_ATTEMPT)

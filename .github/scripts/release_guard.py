@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -403,8 +404,14 @@ def claim_version(client, floor_path, selected, run_id, attempt):
     # failed build permanently consumes this ref; it is never updated/deleted.
     ref = client.json("POST", f"/repos/{client.repo}/git/refs", {"ref": "refs/tags/" + tag, "sha": tag_sha})
     require(isinstance(ref, dict) and ref.get("ref") == "refs/tags/" + tag, "Version-code claim reservation failed.")
-    require(version_claims(client).get(selected["version_code"]) == claim, "Created version-code claim differs from its workflow/commit.")
-    return claim
+    # Git refs can be briefly invisible to a read immediately after create-ref. Retry only the
+    # readback and still require exact equality; a competing or altered claim never passes.
+    for retry in range(5):
+        if version_claims(client).get(selected["version_code"]) == claim:
+            return claim
+        if retry < 4:
+            time.sleep(1)
+    raise GuardError("Created version-code claim differs from its workflow/commit.")
 
 
 def apk_metadata(release_plan, apk_path, aapt):
