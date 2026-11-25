@@ -41,9 +41,36 @@ fun ProfileScreen(
     onSettingsClick: () -> Unit = {}
 ) {
     val uiState by profileViewModel.uiState.collectAsState()
+    var showLogoutDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         profileViewModel.loadProfile()
+    }
+
+    if (showLogoutDialog) {
+        AlertDialog(
+            onDismissRequest = { showLogoutDialog = false },
+            title = { Text("Abmelden?") },
+            text = {
+                Text("Dein Access-Token wird von diesem Gerät entfernt. Du musst ihn beim nächsten Login erneut eingeben.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showLogoutDialog = false
+                        authViewModel.logout()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Abmelden")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showLogoutDialog = false }) {
+                    Text("Abbrechen")
+                }
+            }
+        )
     }
 
     Scaffold(
@@ -54,7 +81,7 @@ fun ProfileScreen(
                     IconButton(onClick = onSettingsClick) {
                         Icon(Icons.Default.Settings, "Einstellungen")
                     }
-                    IconButton(onClick = { authViewModel.logout() }) {
+                    IconButton(onClick = { showLogoutDialog = true }) {
                         Icon(Icons.AutoMirrored.Filled.Logout, "Abmelden")
                     }
                 }

@@ -64,7 +64,9 @@ class MainActivity : ComponentActivity() {
     private val preferences by lazy { PreferencesManager(applicationContext) }
 
     private val permissionRevision = MutableStateFlow(0)
+    private val notificationPermissionRevision = MutableStateFlow(0)
     private var permissionRequestInFlight = false
+    private var notificationPermissionRequestInFlight = false
     private var permissionAskedForStatusId: Int? = null
     private var visibleTrackingStatusId: Int? = null
     private var hasRequestedLocationPermission = false
@@ -76,12 +78,17 @@ class MainActivity : ComponentActivity() {
         permissionRequestInFlight = false
         permissionRevision.value += 1
     }
+    private val notificationPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        notificationPermissionRequestInFlight = false
+        notificationPermissionRevision.value += 1
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        requestNotificationPermission()
         checkAndResumeServices()
         receiveNavigationIntent(intent)
 
@@ -94,6 +101,13 @@ class MainActivity : ComponentActivity() {
                 val scope             = rememberCoroutineScope()
                 val authState         by authViewModel.uiState.collectAsState()
                 val requestedNavigation by navigationRequest.collectAsState()
+                val permissionRevisionState by permissionRevision.collectAsState()
+                val notificationPermissionRevisionState by notificationPermissionRevision.collectAsState()
+                val notificationPermissionRequested by preferences.notificationPermissionRequested.collectAsState(initial = true)
+                val notificationPermissionGranted = remember(permissionRevisionState, notificationPermissionRevisionState) {
+                    hasNotificationPermission()
+                }
+                var showNotificationPermissionDialog by remember { mutableStateOf(false) }
                 val keyboard = LocalSoftwareKeyboardController.current
                 var confirmedStorageSession by remember { mutableStateOf<ConfirmedStorageSession?>(null) }
                 var hasRenderedContent by remember { mutableStateOf(false) }
@@ -132,6 +146,15 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
+                // Ask only after a successful login, never over the setup screen.
+                LaunchedEffect(canInteract, authState.isLoggedIn, notificationPermissionGranted,
+                    notificationPermissionRequested, authState.sessionRevision) {
+                    if (canInteract && authState.isLoggedIn && !notificationPermissionGranted &&
+                        !notificationPermissionRequested) {
+                        showNotificationPermissionDialog = true
+                    }
+                }
+
                 Scaffold(
                     modifier      = Modifier.fillMaxSize(),
                     snackbarHost  = { SnackbarHost(snackbarHostState) },
@@ -163,6 +186,7 @@ class MainActivity : ComponentActivity() {
                                     onStartRideRecognition = { requestRideRecognitionStart() },
                                     onStopRideRecognition = { stopRideRecognition() },
                                     onOpenLiveUpdateSettings = { openLiveUpdateSettings() },
+                                    onOpenNotificationSettings = { openNotificationSettings() },
                                     navigationRequest = requestedNavigation,
                                     onNavigationRequestConsumed = { consumedToken ->
                                         if (navigationRequest.value?.token == consumedToken) navigationRequest.value = null
@@ -175,6 +199,34 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                     }
+                }
+                if (showNotificationPermissionDialog && authState.isLoggedIn) {
+                    AlertDialog(
+                        onDismissRequest = {
+                            showNotificationPermissionDialog = false
+                            markNotificationPermissionRequested()
+                        },
+                        title = { Text("Benachrichtigungen für deine Fahrt") },
+                        text = {
+                            Text("Routely meldet Gleiswechsel, Ausfälle und größere Verspätungen. Ohne Benachrichtigungen siehst du Änderungen nur, wenn die App offen ist.")
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showNotificationPermissionDialog = false
+                                requestNotificationPermission()
+                            }) {
+                                Text("Aktivieren")
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = {
+                                showNotificationPermissionDialog = false
+                                markNotificationPermissionRequested()
+                            }) {
+                                Text("Später")
+                            }
+                        }
+                    )
                 }
                 if (!canInteract || recoveryActionInProgress) {
                     StorageRecoveryDialog(
@@ -204,11 +256,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun hasNotificationPermission(): Boolean =
+        Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
+
     private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
-                ActivityCompat.requestPermissions(this, arrayOf(Manifest.permission.POST_NOTIFICATIONS), 101)
-            }
+        if (hasNotificationPermission() || notificationPermissionRequestInFlight) return
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) return
+        markNotificationPermissionRequested()
+        notificationPermissionRequestInFlight = true
+        notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+    }
+
+    private fun markNotificationPermissionRequested() {
+        lifecycleScope.launch {
+            storageAction { preferences.markNotificationPermissionRequested() }
         }
     }
 
@@ -344,6 +406,12 @@ class MainActivity : ComponentActivity() {
 
     private fun openLiveUpdateSettings() {
         if (!SystemSettingsNavigation.liveUpdates(Build.VERSION.SDK_INT, ::launchSystemSettings)) {
+            showSettingsHelp("Öffne die Android-Einstellungen und wähle Apps → Routely → Benachrichtigungen.")
+        }
+    }
+
+    private fun openNotificationSettings() {
+        if (!SystemSettingsNavigation.notifications(::launchSystemSettings)) {
             showSettingsHelp("Öffne die Android-Einstellungen und wähle Apps → Routely → Benachrichtigungen.")
         }
     }

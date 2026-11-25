@@ -26,6 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.core.app.NotificationManagerCompat
 import de.traewelling.app.ui.components.TraewellingTopAppBar
 import de.traewelling.app.R
 import de.traewelling.app.util.BatteryOptimization
@@ -67,7 +68,8 @@ fun SettingsScreen(
     onRequestGpsPermission: () -> Unit,
     onStartRideRecognition: () -> Unit,
     onStopRideRecognition: () -> Unit,
-    onOpenLiveUpdateSettings: () -> Unit
+    onOpenLiveUpdateSettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val uriHandler = LocalUriHandler.current
@@ -150,6 +152,7 @@ fun SettingsScreen(
                     }
                 }
             }
+            item { NotificationSettingsCard(onOpenNotificationSettings) }
             item {
                 Text("Bahn-Livedaten", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
                 Spacer(Modifier.height(8.dp))
@@ -356,6 +359,65 @@ fun SettingsScreen(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun NotificationSettingsCard(onOpenNotificationSettings: () -> Unit) {
+    val context = LocalContext.current
+    val lifecycleOwner = LocalLifecycleOwner.current
+    var enabled by remember(context) {
+        mutableStateOf(NotificationManagerCompat.from(context).areNotificationsEnabled())
+    }
+
+    DisposableEffect(context, lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                enabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        enabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    Text(
+        "Benachrichtigungen",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.SemiBold
+    )
+    Spacer(Modifier.height(8.dp))
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLow),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.55f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    if (enabled) Icons.Default.Notifications else Icons.Default.NotificationsOff,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    if (enabled) "Benachrichtigungen erlaubt" else "Benachrichtigungen nicht erlaubt",
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+            Text(
+                "Reiseänderungen, Live-Fortschritt und Hinweise erscheinen nur, wenn Android Benachrichtigungen erlaubt.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            OutlinedButton(onClick = onOpenNotificationSettings, modifier = Modifier.fillMaxWidth()) {
+                Text(if (enabled) "Android-Benachrichtigungseinstellungen" else "Benachrichtigungen erlauben")
             }
         }
     }

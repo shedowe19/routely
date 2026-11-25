@@ -19,4 +19,7 @@ internal object SystemSettingsNavigation {
 
     fun permissions(launch: (Page) -> Boolean): Boolean =
         listOf(Page.APP_DETAILS, Page.GENERAL).any(launch)
+
+    fun notifications(launch: (Page) -> Boolean): Boolean =
+        listOf(Page.NOTIFICATIONS, Page.APP_DETAILS, Page.GENERAL).any(launch)
 }

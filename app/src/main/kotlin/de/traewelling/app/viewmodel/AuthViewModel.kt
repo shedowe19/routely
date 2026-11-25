@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import de.traewelling.app.data.repository.AuthRepository
+import de.traewelling.app.util.AuthSession
 import de.traewelling.app.util.PreferencesManager
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
@@ -27,18 +28,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
     private var authJob: Job? = null
+    private var logoutRequested = false
 
     init {
         viewModelScope.launch {
             prefs.authSession.collect { session ->
-                _uiState.update { previous ->
-                    val signedOut = previous.sessionRevision != session.revision && session.accessToken.isNullOrBlank()
-                    previous.copy(hasLoadedSession = true, isLoggedIn = !session.accessToken.isNullOrBlank(),
-                        serverUrl = session.serverUrl, sessionRevision = session.revision,
-                        isLoading = if (signedOut) false else previous.isLoading,
-                        accessToken = if (signedOut) "" else previous.accessToken,
-                        welcomeMessage = if (signedOut) null else previous.welcomeMessage)
-                }
+                _uiState.update { it.afterAuthSession(session, logoutRequested) }
             }
         }
         viewModelScope.launch {
@@ -52,11 +47,12 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun updateServerUrl(url: String) = _uiState.update { it.copy(serverUrl = url) }
-    fun updateAccessToken(token: String) = _uiState.update { it.copy(accessToken = token) }
+    fun updateServerUrl(url: String) = _uiState.update { it.copy(serverUrl = url, error = null) }
+    fun updateAccessToken(token: String) = _uiState.update { it.copy(accessToken = token, error = null) }
 
     fun loginWithToken() {
         if (_uiState.value.isLoading) return
+        logoutRequested = false
         val serverUrl = _uiState.value.serverUrl.trim()
         val token = _uiState.value.accessToken.trim()
         if (token.isBlank()) {
@@ -79,6 +75,7 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun logout() {
         if (_uiState.value.isLoading) return
+        logoutRequested = true
         authJob?.cancel()
         _uiState.update { it.copy(isLoading = true, error = null) }
         authJob = viewModelScope.launch {
@@ -94,4 +91,30 @@ class AuthViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearWelcomeMessage() = _uiState.update { it.copy(welcomeMessage = null) }
     fun clearError() = _uiState.update { it.copy(error = null) }
+}
+
+internal const val SESSION_EXPIRED_MESSAGE =
+    "Deine Sitzung ist abgelaufen. Bitte gib deinen Access-Token erneut ein."
+
+/**
+ * A credential snapshot change is authoritative. An intentional logout stays silent; a token that
+ * disappears without one gets an explanation on the login surface.
+ */
+internal fun AuthUiState.afterAuthSession(session: AuthSession, logoutRequested: Boolean): AuthUiState {
+    val signedOut = sessionRevision != session.revision && session.accessToken.isNullOrBlank()
+    val unexpectedSignOut = signedOut && !logoutRequested && isLoggedIn
+    return copy(
+        hasLoadedSession = true,
+        isLoggedIn = !session.accessToken.isNullOrBlank(),
+        serverUrl = session.serverUrl,
+        sessionRevision = session.revision,
+        isLoading = if (signedOut) false else isLoading,
+        accessToken = if (signedOut) "" else accessToken,
+        welcomeMessage = if (signedOut) null else welcomeMessage,
+        error = when {
+            unexpectedSignOut -> SESSION_EXPIRED_MESSAGE
+            signedOut -> null
+            else -> error
+        }
+    )
 }

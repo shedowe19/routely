@@ -42,4 +42,10 @@ class SystemSettingsNavigationTest {
         assertFalse(SystemSettingsNavigation.permissions { page -> attempts += page; false })
         assertEquals(listOf(Page.APP_DETAILS, Page.GENERAL), attempts)
     }
+
+    @Test fun notificationSettingsFallBackToAppDetails() {
+        val attempts = mutableListOf<Page>()
+        assertTrue(SystemSettingsNavigation.notifications { page -> attempts += page; page == Page.APP_DETAILS })
+        assertEquals(listOf(Page.NOTIFICATIONS, Page.APP_DETAILS), attempts)
+    }
 }

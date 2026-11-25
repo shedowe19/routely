@@ -48,6 +48,7 @@ fun MainNavigation(
     onStartRideRecognition: () -> Unit,
     onStopRideRecognition: () -> Unit,
     onOpenLiveUpdateSettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
     navigationRequest: NavigationRequest? = null,
     onNavigationRequestConsumed: (Long) -> Unit = {}
 ) {
@@ -241,7 +242,8 @@ fun MainNavigation(
                 onRequestGpsPermission = onRequestGpsPermission,
                 onStartRideRecognition = onStartRideRecognition,
                 onStopRideRecognition = onStopRideRecognition,
-                onOpenLiveUpdateSettings = onOpenLiveUpdateSettings
+                onOpenLiveUpdateSettings = onOpenLiveUpdateSettings,
+                onOpenNotificationSettings = onOpenNotificationSettings
             )
         }
     }
