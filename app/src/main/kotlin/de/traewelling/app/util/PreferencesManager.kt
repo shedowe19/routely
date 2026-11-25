@@ -52,6 +52,7 @@ class PreferencesManager private constructor(
         val KEY_PUBLIC_RAIL_REALTIME_ENABLED = booleanPreferencesKey("public_rail_realtime_enabled")
         private val KEY_TRACKING_STATE = AuthSessionPreferences.trackingState
         private val KEY_LOCATION_PERMISSION_REQUESTED = booleanPreferencesKey("location_permission_requested")
+        private val KEY_NOTIFICATION_PERMISSION_REQUESTED = booleanPreferencesKey("notification_permission_requested")
 
         val ANNOUNCEMENT_RADII = setOf(0, 300, 500, 1000, 2000)
 
@@ -137,6 +138,10 @@ class PreferencesManager private constructor(
     }
     val publicRailRealtimeEnabled: Flow<Boolean> = storage.observePreferences().map {
         it[KEY_PUBLIC_RAIL_REALTIME_ENABLED] ?: true
+    }.distinctUntilChanged()
+
+    val notificationPermissionRequested: Flow<Boolean> = storage.observePreferences().map {
+        it[KEY_NOTIFICATION_PERMISSION_REQUESTED] ?: false
     }.distinctUntilChanged()
 
     suspend fun setRideRecognitionEnabled(enabled: Boolean, expectedSession: AuthSession? = null): Boolean {
@@ -251,6 +256,10 @@ class PreferencesManager private constructor(
 
     suspend fun markLocationPermissionRequested() {
         storage.editPreferences { it[KEY_LOCATION_PERMISSION_REQUESTED] = true }
+    }
+
+    suspend fun markNotificationPermissionRequested() {
+        storage.editPreferences { it[KEY_NOTIFICATION_PERMISSION_REQUESTED] = true }
     }
 
     // A superseded service must never overwrite the progress of the current trip.
